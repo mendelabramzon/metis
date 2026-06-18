@@ -32,3 +32,9 @@ class GatewaySettings(BaseServiceSettings):
     # "memory" (in-process) or "postgres" (durable: Postgres + object store + memory index).
     # The Postgres backend reads DB/object-store config from the core settings (METIS_CORE_*).
     backend: str = "memory"
+
+    # Local model runtime (Ollama). Set the endpoint to answer with a local LLM and (on the Postgres
+    # backend) retrieve with local embeddings; unset = extractive answers + stub vectors.
+    model_endpoint: str | None = None  # e.g. http://localhost:11434
+    chat_model: str = "gemma4:e4b"
+    embedding_model: str = "bge-m3"

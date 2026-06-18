@@ -18,7 +18,10 @@ services:
   gateway:
     environment:
       METIS_MODEL_PROFILE: local
-      METIS_LOCAL_MODEL_ENDPOINT: http://model-runtime:11434/v1
+      # Answer with a local LLM + retrieve with local embeddings. Pull the models first:
+      #   docker compose exec model-runtime ollama pull bge-m3
+      #   docker compose exec model-runtime ollama pull gemma4:e4b
+      METIS_GATEWAY_MODEL_ENDPOINT: http://model-runtime:11434
     depends_on:
       model-runtime:
         condition: service_healthy

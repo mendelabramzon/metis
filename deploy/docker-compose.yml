@@ -64,6 +64,7 @@ services:
     environment:
       <<: *app-env
       METIS_GATEWAY_BACKEND: postgres  # use the durable stores (Postgres + MinIO + memory index)
+      METIS_GATEWAY_SKILLS_ROOT: skills  # register the shipped skills (web_search, ...)
     ports:
       - "8000:8000"
     depends_on:

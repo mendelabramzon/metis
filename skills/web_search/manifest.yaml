@@ -1,0 +1,11 @@
+name: web_search
+version: "1.0.0"
+description: Search the web with DuckDuckGo and return the top results (title, url, snippet).
+category: deep_web_search
+permissions:
+  - network
+network: true
+sensitivity_ceiling: internal
+requires_approval: false
+timeout_seconds: 30
+max_output_bytes: 262144

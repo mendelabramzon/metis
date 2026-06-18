@@ -91,6 +91,17 @@ and answers (with citations) through the Stage 8 query engine — so data surviv
 locally without infra by leaving `METIS_GATEWAY_BACKEND=memory` (the default), an in-process engine
 that resets on restart.
 
+**Local models (optional).** Set `METIS_GATEWAY_MODEL_ENDPOINT` (e.g. `http://localhost:11434` for a
+host Ollama) to answer with a local LLM (`METIS_GATEWAY_CHAT_MODEL`, default `gemma4:e4b`) and, on
+the Postgres backend, retrieve with local embeddings (`METIS_GATEWAY_EMBEDDING_MODEL`, default
+`bge-m3`). Both are non-external, so restricted data stays on the node; answer generation falls back
+to extractive if the model is unreachable. Unset = deterministic extractive answers + stub vectors.
+The `local` profile wires this to the `model-runtime` service — pull the models into it first
+(`docker compose exec model-runtime ollama pull bge-m3 && ollama pull gemma4:e4b`).
+
+**Skills / web search.** Point `METIS_GATEWAY_SKILLS_ROOT` at a skills directory (e.g. `skills/`,
+which ships `web_search`) to register skills; run one via `POST /skills/run` (operator scope).
+
 ## Known wiring follow-up
 
 The worker **services** (`ingest-worker`, `maintainer-worker`, `runtime-worker`) currently run their

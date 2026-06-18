@@ -16,11 +16,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from metis_core import CoreSettings, make_engine, make_sessionmaker
 from metis_core.audit import PostgresAuditSink, recent_audit_events
-from metis_core.memory_index import MemoryIndexer, MemoryIndexLookup, stub_router
+from metis_core.llm import ModelCaller
+from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup, stub_router
 from metis_core.objectstore import S3ObjectStore
 from metis_core.stores import (
     PostgresClaimStore,
@@ -30,6 +32,12 @@ from metis_core.stores import (
 )
 from metis_core.wiki.approval import WikiPatchReview, WikiPatchStatus
 from metis_gateway.errors import ConflictError, NotFoundError
+from metis_gateway.models import (
+    FallbackAnswerGenerator,
+    build_embedding_router,
+    build_http_client,
+    build_model_caller,
+)
 from metis_gateway.settings import GatewaySettings
 from metis_gateway.tokens import terms
 from metis_ingestion import (
@@ -49,6 +57,9 @@ from metis_protocol import (
     AuditId,
     Claim,
     ClaimRef,
+    ContextBundle,
+    ContextBundleId,
+    ContextSection,
     Job,
     JobId,
     JobState,
@@ -134,11 +145,14 @@ class InMemoryWorkspace:
     matches. It is the ``Answerer`` the ``AgentLoop`` calls — citations are genuine, not stubbed.
     """
 
-    def __init__(self, workspace_id: WorkspaceId) -> None:
+    def __init__(self, workspace_id: WorkspaceId, *, caller: ModelCaller | None = None) -> None:
         self._workspace_id = workspace_id
         self._docs: dict[str, NormalizedDoc] = {}
         self._claims: list[Claim] = []
         self._by_id: dict[str, Claim] = {}
+        # With a caller wired, answers are LLM-generated over the matched evidence (cited);
+        # otherwise a deterministic extractive answer.
+        self._generator = FallbackAnswerGenerator(caller=caller) if caller is not None else None
 
     async def ingest(
         self, *, filename: str, content: str, sensitivity: Sensitivity
@@ -184,15 +198,30 @@ class InMemoryWorkspace:
                 text="I don't have enough grounded evidence in this workspace to answer that.",
                 sufficient=False,
             )
-        top = matches[:3]
-        text = "Based on the workspace evidence: " + " ".join(claim.text for claim in top)
+        top = matches[:5]
+        if self._generator is not None:  # LLM answer over the matched evidence
+            bundle = ContextBundle(
+                id=new_id(ContextBundleId),
+                query_id=query.id,
+                sections=tuple(
+                    ContextSection(
+                        text=claim.text,
+                        claims=(ClaimRef(claim_id=claim.id),),
+                        source_spans=claim.source_spans,
+                    )
+                    for claim in top
+                ),
+            )
+            return await self._generator.generate(query, bundle, claims=top, sufficient=True)
+        cited = top[:3]  # deterministic extractive answer (no model wired)
+        text = "Based on the workspace evidence: " + " ".join(claim.text for claim in cited)
         return Answer(
             query_id=query.id,
             text=text,
-            claims=tuple(ClaimRef(claim_id=claim.id) for claim in top),
-            source_spans=tuple(ref for claim in top for ref in claim.source_spans),
+            claims=tuple(ClaimRef(claim_id=claim.id) for claim in cited),
+            source_spans=tuple(ref for claim in cited for ref in claim.source_spans),
             sufficient=True,
-            sensitivity=max_sensitivity(*(claim.policy.sensitivity for claim in top)),
+            sensitivity=max_sensitivity(*(claim.policy.sensitivity for claim in cited)),
         )
 
     async def citation_rows(
@@ -410,13 +439,15 @@ class PostgresWorkspace:
         sessionmaker: async_sessionmaker[AsyncSession],
         object_store: S3ObjectStore,
         query_engine: QueryEngine,
+        embedding_router: EmbeddingRouter,
     ) -> None:
         self._workspace_id = workspace_id
         self._artifacts = PostgresMinioArtifactStore(sessionmaker, object_store)
         self._documents = PostgresDocumentStore(sessionmaker)
         self._claims = PostgresClaimStore(sessionmaker)
         self._memory = PostgresMemoryStore(sessionmaker)
-        self._indexer = MemoryIndexer(sessionmaker, stub_router())
+        # Index with the same embedder the query engine retrieves with, so vectors are comparable.
+        self._indexer = MemoryIndexer(sessionmaker, embedding_router)
         self._builder = MemCellBuilder()  # deterministic, evidence-only (no model call)
         self._query = query_engine
 
@@ -513,6 +544,9 @@ class Backend:
     inbox: ApprovalInbox
     object_store: ObjectStore = field(default_factory=InMemoryObjectStore)
     engine: AsyncEngine | None = None  # set for the Postgres backend; disposed at shutdown
+    http_client: httpx.AsyncClient | None = (
+        None  # set when a local model is wired; closed at shutdown
+    )
 
 
 def build_backend(settings: GatewaySettings) -> Backend:
@@ -520,6 +554,15 @@ def build_backend(settings: GatewaySettings) -> Backend:
     workspace_id = WorkspaceId(settings.workspace_id)
     audit = RecordingAuditSink()
     object_store = InMemoryObjectStore()
+
+    client = build_http_client() if settings.model_endpoint else None
+    caller = (
+        build_model_caller(
+            client, endpoint=settings.model_endpoint, model=settings.chat_model, audit_sink=audit
+        )
+        if client is not None and settings.model_endpoint is not None
+        else None
+    )
 
     skills = (
         SkillRegistry.discover(Path(settings.skills_root))
@@ -529,7 +572,7 @@ def build_backend(settings: GatewaySettings) -> Backend:
     skill_runner = SkillRunner(
         skills, audit_sink=audit, object_store=object_store, workspace_id=workspace_id
     )
-    workspace = InMemoryWorkspace(workspace_id)
+    workspace = InMemoryWorkspace(workspace_id, caller=caller)
     agent = AgentLoop(
         answerer=workspace, skill_runner=skill_runner, registry=skills, audit_sink=audit
     )
@@ -548,6 +591,7 @@ def build_backend(settings: GatewaySettings) -> Backend:
         wiki=wiki,
         inbox=inbox,
         object_store=object_store,
+        http_client=client,
     )
 
 
@@ -572,15 +616,32 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
     await object_store.ensure_bucket()
 
     audit = PostgresAuditLog(sessionmaker, workspace_id)
+
+    # Local model wiring (optional): bge-m3 embeddings for semantic retrieval + an LLM answer
+    # generator with an extractive fallback. Without an endpoint: stub vectors + extractive answers.
+    client = build_http_client() if settings.model_endpoint else None
+    if client is not None and settings.model_endpoint is not None:
+        embedding_router: EmbeddingRouter = build_embedding_router(
+            client, endpoint=settings.model_endpoint, model=settings.embedding_model
+        )
+        caller: ModelCaller | None = build_model_caller(
+            client, endpoint=settings.model_endpoint, model=settings.chat_model, audit_sink=audit
+        )
+    else:
+        embedding_router = stub_router()
+        caller = None
+
     query_engine = QueryEngine(
-        retriever=MemoryRetriever(MemoryIndexLookup(sessionmaker, stub_router())),
+        retriever=MemoryRetriever(MemoryIndexLookup(sessionmaker, embedding_router)),
         claim_store=PostgresClaimStore(sessionmaker),
+        generator=FallbackAnswerGenerator(caller=caller) if caller is not None else None,
     )
     workspace = PostgresWorkspace(
         workspace_id=workspace_id,
         sessionmaker=sessionmaker,
         object_store=object_store,
         query_engine=query_engine,
+        embedding_router=embedding_router,
     )
     skills = (
         SkillRegistry.discover(Path(settings.skills_root))
@@ -609,4 +670,5 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         inbox=inbox,
         object_store=object_store,
         engine=engine,
+        http_client=client,
     )
