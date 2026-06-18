@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Metis — operator console</title>
+  <style>
+    :root { color-scheme: light dark; --bd: #8884; }
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 0; }
+    header { padding: .6rem 1rem; border-bottom: 1px solid var(--bd); display: flex; gap: .6rem; align-items: center; }
+    header b { font-size: 1.05rem; }
+    header input { flex: 0 0 22rem; }
+    nav { display: flex; gap: .25rem; padding: .5rem 1rem 0; flex-wrap: wrap; }
+    nav button { border: 1px solid var(--bd); background: transparent; padding: .35rem .7rem; border-radius: 6px 6px 0 0; cursor: pointer; }
+    nav button.on { font-weight: 600; border-bottom-color: transparent; }
+    main { padding: 1rem; }
+    section { display: none; }
+    section.on { display: block; }
+    input, textarea, button { font: inherit; }
+    textarea { width: 100%; box-sizing: border-box; }
+    .row { display: flex; gap: .5rem; margin-bottom: .6rem; }
+    .row > input { flex: 1; }
+    pre { background: #8881; padding: .6rem; border-radius: 6px; overflow: auto; white-space: pre-wrap; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; border-bottom: 1px solid var(--bd); padding: .3rem .5rem; vertical-align: top; }
+    .cite { font-size: .85em; color: #888; }
+    button.act { border: 1px solid var(--bd); background: transparent; border-radius: 5px; padding: .2rem .5rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <b>Metis</b><span>operator console</span>
+    <input id="token" placeholder="Bearer token (operator-dev-token)" />
+  </header>
+  <nav id="tabs"></nav>
+  <main>
+    <section id="chat">
+      <div class="row"><input id="q" placeholder="Ask the workspace…" /><button onclick="ask()">Ask</button></div>
+      <div id="answer"></div>
+    </section>
+    <section id="sources"><button class="act" onclick="load('sources')">Refresh</button><div id="sources-out"></div></section>
+    <section id="approvals"><button class="act" onclick="load('approvals')">Refresh</button><div id="approvals-out"></div></section>
+    <section id="jobs"><button class="act" onclick="load('jobs')">Refresh</button><div id="jobs-out"></div></section>
+    <section id="audit"><button class="act" onclick="load('audit')">Refresh</button><div id="audit-out"></div></section>
+  </main>
+  <script>
+    const TABS = ["chat", "sources", "approvals", "jobs", "audit"];
+    const tok = () => document.getElementById("token").value.trim();
+    const hdr = () => ({ "Authorization": "Bearer " + tok(), "Content-Type": "application/json" });
+    const api = (p, opts = {}) => fetch(p, { headers: hdr(), ...opts }).then(r => r.json());
+
+    function show(tab) {
+      for (const t of TABS) {
+        document.getElementById(t).classList.toggle("on", t === tab);
+        document.querySelector(`[data-tab="${t}"]`).classList.toggle("on", t === tab);
+      }
+      if (tab !== "chat") load(tab);
+    }
+    async function ask() {
+      const text = document.getElementById("q").value;
+      const r = await api("/query", { method: "POST", body: JSON.stringify({ text }) });
+      const cites = (r.citations || []).map(c => `claim ${c.claim_id?.slice(0, 12)}… · span ${(c.source_span_id || "—").slice(0, 12)}`).join("<br>");
+      document.getElementById("answer").innerHTML =
+        `<pre>${r.answer || ""}</pre><div class="cite">${r.sufficient ? cites : "no grounded evidence"}</div>`;
+    }
+    async function approve(kind, id) {
+      await api(`/approvals/${kind}/${id}/approve`, { method: "POST", body: JSON.stringify({ note: "approved via console" }) });
+      load("approvals");
+    }
+    async function retry(id) { await api(`/jobs/${id}/retry`, { method: "POST" }); load("jobs"); }
+
+    function table(rows, cols) {
+      const head = cols.map(c => `<th>${c}</th>`).join("");
+      const body = rows.map(r => "<tr>" + cols.map(c => `<td>${r[c] ?? ""}</td>`).join("") + "</tr>").join("");
+      return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+    async function load(tab) {
+      const out = document.getElementById(tab + "-out");
+      if (tab === "sources") out.innerHTML = table(await api("/sources"), ["name", "connector", "sensitivity", "auth_method"]);
+      if (tab === "audit") out.innerHTML = table(await api("/audit"), ["occurred_at", "action", "actor", "target_kind"]);
+      if (tab === "jobs") {
+        const jobs = await api("/jobs");
+        out.innerHTML = jobs.map(j => `<div>${j.kind} — <b>${j.state}</b> (attempts ${j.attempts}) ${j.error ? "· " + j.error : ""} ${j.state === "failed" ? `<button class="act" onclick="retry('${j.id}')">retry</button>` : ""}</div>`).join("") || "<i>no jobs</i>";
+      }
+      if (tab === "approvals") {
+        const items = await api("/approvals");
+        out.innerHTML = items.map(i => `<div>[${i.kind}] ${i.summary} — ${i.status} <button class="act" onclick="approve('${i.kind}','${i.id}')">approve</button></div>`).join("") || "<i>inbox empty</i>";
+      }
+    }
+    document.getElementById("tabs").innerHTML = TABS.map(t => `<button data-tab="${t}" onclick="show('${t}')">${t}</button>`).join("");
+    show("chat");
+  </script>
+</body>
+</html>

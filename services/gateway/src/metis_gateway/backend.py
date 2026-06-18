@@ -1,0 +1,405 @@
+"""The backend the gateway orchestrates: real engine components over in-memory stores.
+
+The gateway holds no business logic — it wires the *real* Stage 9 ``SkillRunner`` and Stage 10
+``AgentLoop`` and a workspace that ingests with the *real* Stage 3 ``BaselineExtractor`` (so claims
+and citations are genuine), backed by in-memory stores. The durable Postgres/MinIO wiring is a
+deployment concern (Stage 15); swapping it in means replacing this container, not touching a router.
+That keeps every router a thin HTTP projection and lets the whole suite run with no external infra.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+
+from metis_core.wiki.approval import WikiPatchReview, WikiPatchStatus
+from metis_gateway.errors import ConflictError, NotFoundError
+from metis_gateway.settings import GatewaySettings
+from metis_gateway.tokens import terms
+from metis_ingestion import (
+    BaselineExtractor,
+    build_normalized_doc,
+    build_raw_artifact,
+    get_format,
+    mime,
+    parse_document,
+)
+from metis_ingestion.connectors import ConnectorRegistry
+from metis_protocol import (
+    AgentKind,
+    Attribution,
+    AuditEvent,
+    AuditId,
+    Claim,
+    ClaimRef,
+    Job,
+    JobId,
+    JobState,
+    NormalizedDoc,
+    PolicyState,
+    QueryRequest,
+    Sensitivity,
+    SourceId,
+    WorkspaceId,
+    is_at_least,
+    max_sensitivity,
+    new_id,
+)
+from metis_runtime.agent import AgentLoop
+from metis_runtime.query import Answer
+from metis_runtime.skills import ApprovalQueue, SkillRegistry, SkillRunner
+
+
+class InMemoryObjectStore:
+    """An in-process ``ObjectStore`` for skill artifact capture (no MinIO in tests/dev)."""
+
+    def __init__(self) -> None:
+        self._objects: dict[str, bytes] = {}
+
+    async def put_bytes(self, key: str, data: bytes) -> str:
+        self._objects[key] = data
+        return key
+
+    async def get_bytes(self, key: str) -> bytes | None:
+        return self._objects.get(key)
+
+    async def exists(self, key: str) -> bool:
+        return key in self._objects
+
+    async def delete(self, key: str) -> None:
+        self._objects.pop(key, None)
+
+
+class RecordingAuditSink:
+    """An in-process ``AuditSink`` that keeps events so the audit API can surface them."""
+
+    def __init__(self) -> None:
+        self.events: list[AuditEvent] = []
+
+    async def emit(self, event: AuditEvent) -> None:
+        self.events.append(event)
+
+    def recent(self, *, action: str | None = None, limit: int = 100) -> list[AuditEvent]:
+        chosen = [e for e in self.events if action is None or e.action == action]
+        return list(reversed(chosen))[:limit]
+
+
+class InMemoryWorkspace:
+    """Ingests text into real claims/spans and answers by grounded lexical retrieval.
+
+    Ingestion runs the deterministic Stage 3 extractor, so every claim cites a real source span;
+    answering filters claims by the requester's sensitivity ceiling and grounds the answer in the
+    matches. It is the ``Answerer`` the ``AgentLoop`` calls — citations are genuine, not stubbed.
+    """
+
+    def __init__(self, workspace_id: WorkspaceId) -> None:
+        self._workspace_id = workspace_id
+        self._docs: dict[str, NormalizedDoc] = {}
+        self._claims: list[Claim] = []
+        self._by_id: dict[str, Claim] = {}
+
+    def ingest(self, *, filename: str, content: str, sensitivity: Sensitivity) -> tuple[str, int]:
+        data = content.encode("utf-8")
+        media = mime.detect(filename, data[:512])
+        fmt = get_format(media.media_type)
+        if fmt is None:
+            raise ConflictError(f"unsupported media type {media.media_type!r}")
+        policy = PolicyState(
+            sensitivity=sensitivity,
+            allow_external_models=not is_at_least(sensitivity, Sensitivity.RESTRICTED),
+        )
+        raw = build_raw_artifact(
+            data,
+            workspace_id=self._workspace_id,
+            filename=filename,
+            media_info=media,
+            policy=policy,
+            connector="gateway",
+        )
+        doc = build_normalized_doc(raw, data, policy=policy)
+        parsed, segments = parse_document(doc, fmt.segmentation)
+        result = BaselineExtractor().extract(doc, parsed.id, segments)
+
+        self._docs[str(doc.id)] = doc
+        for claim in result.batch.claims:
+            self._claims.append(claim)
+            self._by_id[str(claim.id)] = claim
+        return str(doc.id), len(result.batch.claims)
+
+    async def answer(self, query: QueryRequest) -> Answer:
+        wanted = terms(query.text)
+        matches = [
+            claim
+            for claim in self._claims
+            if is_at_least(query.max_sensitivity, claim.policy.sensitivity)
+            and (not wanted or wanted & terms(claim.text))
+        ]
+        if not matches:
+            return Answer(
+                query_id=query.id,
+                text="I don't have enough grounded evidence in this workspace to answer that.",
+                sufficient=False,
+            )
+        top = matches[:3]
+        text = "Based on the workspace evidence: " + " ".join(claim.text for claim in top)
+        return Answer(
+            query_id=query.id,
+            text=text,
+            claims=tuple(ClaimRef(claim_id=claim.id) for claim in top),
+            source_spans=tuple(ref for claim in top for ref in claim.source_spans),
+            sufficient=True,
+            sensitivity=max_sensitivity(*(claim.policy.sensitivity for claim in top)),
+        )
+
+    def citation_rows(
+        self, claim_refs: Sequence[ClaimRef]
+    ) -> list[tuple[str, str | None, str | None]]:
+        """Resolve claim refs back to (claim_id, source_span_id, artifact_id) for the API."""
+        rows: list[tuple[str, str | None, str | None]] = []
+        for ref in claim_refs:
+            claim = self._by_id.get(str(ref.claim_id))
+            span = claim.source_spans[0] if claim and claim.source_spans else None
+            rows.append(
+                (
+                    str(ref.claim_id),
+                    str(span.source_span_id) if span else None,
+                    str(span.artifact_id) if span else None,
+                )
+            )
+        return rows
+
+
+@dataclass(frozen=True)
+class SourceConfig:
+    id: str
+    name: str
+    connector: str
+    sensitivity: Sensitivity
+    auth_method: str
+
+
+class SourceRegistry:
+    """Configured sources, validated against the Stage 11 connector registry."""
+
+    def __init__(self, connectors: ConnectorRegistry) -> None:
+        self._connectors = connectors
+        self._sources: dict[str, SourceConfig] = {}
+
+    def register(self, *, name: str, connector: str, sensitivity: Sensitivity) -> SourceConfig:
+        spec = self._connectors.get(connector)
+        if spec is None:
+            raise ConflictError(f"unknown connector {connector!r}")
+        config = SourceConfig(
+            id=new_id(SourceId),
+            name=name,
+            connector=connector,
+            sensitivity=sensitivity,
+            auth_method=spec.auth.method.value,
+        )
+        self._sources[config.id] = config
+        return config
+
+    def list(self) -> list[SourceConfig]:
+        return list(self._sources.values())
+
+    def get(self, source_id: str) -> SourceConfig:
+        config = self._sources.get(source_id)
+        if config is None:
+            raise NotFoundError(f"no source {source_id!r}")
+        return config
+
+
+class WikiInbox:
+    """In-memory wiki patch reviews (the Stage 7 state machine; durable store is later)."""
+
+    def __init__(self) -> None:
+        self._reviews: dict[str, WikiPatchReview] = {}
+
+    def propose(self, review: WikiPatchReview) -> None:
+        self._reviews[str(review.patch.id)] = review
+
+    def pending(self) -> list[WikiPatchReview]:
+        return [r for r in self._reviews.values() if r.status is WikiPatchStatus.PROPOSED]
+
+    def approve(self, patch_id: str, *, note: str) -> WikiPatchReview:
+        review = self._reviews.get(patch_id)
+        if review is None:
+            raise NotFoundError(f"no wiki patch {patch_id!r}")
+        approved = review.approve(note=note)
+        self._reviews[patch_id] = approved
+        return approved
+
+
+class InMemoryJobQueue:
+    """A ``JobQueue`` plus the inspect/retry surface the ops API needs (durable queue is later)."""
+
+    def __init__(self) -> None:
+        self._jobs: dict[str, Job] = {}
+        self._errors: dict[str, str] = {}
+
+    async def enqueue(self, job: Job) -> JobId:
+        self._jobs[str(job.id)] = job
+        return job.id
+
+    async def lease(self, kinds: Sequence[str], limit: int) -> Sequence[Job]:
+        leased = [j for j in self._jobs.values() if j.kind in kinds and j.state is JobState.PENDING]
+        return leased[:limit]
+
+    async def complete(self, job_id: JobId) -> None:
+        self._set_state(str(job_id), JobState.SUCCEEDED)
+
+    async def fail(self, job_id: JobId, error: str, *, retry: bool) -> None:
+        self._errors[str(job_id)] = error
+        self._set_state(str(job_id), JobState.RETRYING if retry else JobState.FAILED)
+
+    def list(self) -> list[Job]:
+        return list(self._jobs.values())
+
+    def get(self, job_id: str) -> Job:
+        job = self._jobs.get(job_id)
+        if job is None:
+            raise NotFoundError(f"no job {job_id!r}")
+        return job
+
+    def error_for(self, job_id: str) -> str | None:
+        return self._errors.get(job_id)
+
+    def retry(self, job_id: str) -> Job:
+        job = self.get(job_id)
+        if job.state not in (JobState.FAILED, JobState.RETRYING):
+            raise ConflictError(f"job {job_id!r} is {job.state.value}, not retryable")
+        self._errors.pop(job_id, None)
+        revived = job.model_copy(update={"state": JobState.PENDING, "attempts": job.attempts + 1})
+        self._jobs[job_id] = revived
+        return revived
+
+    def _set_state(self, job_id: str, state: JobState) -> None:
+        job = self.get(job_id)
+        self._jobs[job_id] = job.model_copy(update={"state": state})
+
+
+@dataclass(frozen=True)
+class InboxItem:
+    kind: str  # "action" | "wiki_patch"
+    id: str
+    summary: str
+    status: str
+
+
+def _patch_summary(review: WikiPatchReview) -> str:
+    patch = review.patch
+    return patch.title or patch.rationale or str(patch.id)
+
+
+class ApprovalInbox:
+    """One queue over two approval sources: agent/skill actions and wiki patches.
+
+    Reviewers see a single list; approving dispatches to the right state machine and *always* emits
+    an ``approval.granted`` audit event, so a human decision is explicit and on the record.
+    """
+
+    def __init__(
+        self,
+        approvals: ApprovalQueue,
+        wiki: WikiInbox,
+        audit: RecordingAuditSink,
+        workspace_id: WorkspaceId,
+    ) -> None:
+        self._approvals = approvals
+        self._wiki = wiki
+        self._audit = audit
+        self._workspace_id = workspace_id
+
+    def pending(self) -> list[InboxItem]:
+        items = [
+            InboxItem("action", r.key, f"{r.skill_name}@{r.skill_version}", r.status.value)
+            for r in self._approvals.pending()
+        ]
+        items += [
+            InboxItem("wiki_patch", str(r.patch.id), _patch_summary(r), r.status.value)
+            for r in self._wiki.pending()
+        ]
+        return items
+
+    async def approve(self, *, kind: str, item_id: str, note: str) -> InboxItem:
+        if kind == "action":
+            keys = {r.key for r in self._approvals.pending()}
+            if item_id not in keys:
+                raise NotFoundError(f"no pending action {item_id!r}")
+            self._approvals.approve(item_id)
+            await self._record("SkillAction", item_id, note)
+            return InboxItem("action", item_id, item_id, "approved")
+        if kind == "wiki_patch":
+            review = self._wiki.approve(item_id, note=note)
+            await self._record("WikiPatch", item_id, note)
+            return InboxItem("wiki_patch", item_id, _patch_summary(review), review.status.value)
+        raise NotFoundError(f"unknown approval kind {kind!r}")
+
+    async def _record(self, target_kind: str, target_id: str, note: str) -> None:
+        await self._audit.emit(
+            AuditEvent(
+                id=new_id(AuditId),
+                workspace_id=self._workspace_id,
+                occurred_at=datetime.now(UTC),
+                actor=Attribution(agent_kind=AgentKind.HUMAN, agent="operator"),
+                action="approval.granted",
+                target_id=target_id,
+                target_kind=target_kind,
+                payload={"note": note} if note else None,
+            )
+        )
+
+
+@dataclass
+class Backend:
+    """Everything the routers depend on, wired once at app assembly."""
+
+    workspace_id: WorkspaceId
+    workspace: InMemoryWorkspace
+    agent: AgentLoop
+    skills: SkillRegistry
+    skill_runner: SkillRunner
+    jobs: InMemoryJobQueue
+    audit: RecordingAuditSink
+    sources: SourceRegistry
+    wiki: WikiInbox
+    inbox: ApprovalInbox
+    object_store: InMemoryObjectStore = field(default_factory=InMemoryObjectStore)
+
+
+def build_backend(settings: GatewaySettings) -> Backend:
+    """Assemble the in-memory backend from settings (the swap point for durable wiring)."""
+    workspace_id = WorkspaceId(settings.workspace_id)
+    audit = RecordingAuditSink()
+    object_store = InMemoryObjectStore()
+
+    skills = (
+        SkillRegistry.discover(Path(settings.skills_root))
+        if settings.skills_root
+        else SkillRegistry()
+    )
+    skill_runner = SkillRunner(
+        skills, audit_sink=audit, object_store=object_store, workspace_id=workspace_id
+    )
+    workspace = InMemoryWorkspace(workspace_id)
+    agent = AgentLoop(
+        answerer=workspace, skill_runner=skill_runner, registry=skills, audit_sink=audit
+    )
+    wiki = WikiInbox()
+    inbox = ApprovalInbox(skill_runner.approvals, wiki, audit, workspace_id)
+
+    return Backend(
+        workspace_id=workspace_id,
+        workspace=workspace,
+        agent=agent,
+        skills=skills,
+        skill_runner=skill_runner,
+        jobs=InMemoryJobQueue(),
+        audit=audit,
+        sources=SourceRegistry(ConnectorRegistry.with_defaults()),
+        wiki=wiki,
+        inbox=inbox,
+        object_store=object_store,
+    )

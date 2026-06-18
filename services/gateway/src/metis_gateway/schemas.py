@@ -1,0 +1,144 @@
+"""Request/response models for the HTTP boundary.
+
+These are thin DTOs: the gateway speaks protocol objects internally and projects just what a client
+needs onto stable JSON shapes (citations as flat ids, an inbox item that unifies actions and
+patches, a job view that exposes retry state). Protocol enums are reused directly so the wire vocab
+matches the engine's.
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel, Field, JsonValue
+
+from metis_protocol import JobState, Sensitivity, SkillOutcome
+
+# --- sources + ingestion -----------------------------------------------------------------------
+
+
+class SourceCreate(BaseModel):
+    name: str
+    connector: str
+    sensitivity: Sensitivity = Sensitivity.INTERNAL
+
+
+class SourceView(BaseModel):
+    id: str
+    name: str
+    connector: str
+    sensitivity: Sensitivity
+    auth_method: str
+
+
+class IngestRequest(BaseModel):
+    filename: str
+    content: str
+    sensitivity: Sensitivity | None = None  # defaults to the source's sensitivity
+
+
+class IngestResponse(BaseModel):
+    doc_id: str
+    artifacts: int
+    claims: int
+
+
+# --- query / chat ------------------------------------------------------------------------------
+
+
+class QueryRequestBody(BaseModel):
+    text: str
+    top_k: int | None = None
+
+
+class Citation(BaseModel):
+    claim_id: str
+    source_span_id: str | None = None
+    artifact_id: str | None = None
+
+
+class QueryResponse(BaseModel):
+    run_id: str
+    status: str
+    answer: str
+    sufficient: bool
+    citations: list[Citation] = Field(default_factory=list)
+    contradictions: list[str] = Field(default_factory=list)
+    filebacks: int = 0
+    pending_approvals: list[str] = Field(default_factory=list)
+
+
+# --- skills ------------------------------------------------------------------------------------
+
+
+class SkillView(BaseModel):
+    name: str
+    version: str
+    description: str
+    category: str
+    requires_approval: bool
+
+
+class SkillRunRequest(BaseModel):
+    name: str
+    version: str
+    arguments: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class SkillRunResponse(BaseModel):
+    outcome: SkillOutcome
+    output: JsonValue = None
+    error: str | None = None
+    approval_required: bool = False
+    artifacts: int = 0
+
+
+# --- approvals (unified inbox: actions + wiki patches) -----------------------------------------
+
+
+class InboxItemView(BaseModel):
+    kind: str  # "action" | "wiki_patch"
+    id: str
+    summary: str
+    status: str
+
+
+class ApproveRequest(BaseModel):
+    note: str = ""
+
+
+# --- jobs / ops --------------------------------------------------------------------------------
+
+
+class JobView(BaseModel):
+    id: str
+    kind: str
+    state: JobState
+    attempts: int
+    error: str | None = None
+
+
+# --- audit -------------------------------------------------------------------------------------
+
+
+class AuditView(BaseModel):
+    id: str
+    action: str
+    actor: str
+    target_id: str | None = None
+    target_kind: str | None = None
+    sensitivity: str | None = None
+    occurred_at: str
+
+
+# --- wiki --------------------------------------------------------------------------------------
+
+
+class WikiPageView(BaseModel):
+    id: str
+    title: str
+    slug: str
+
+
+class WikiPatchView(BaseModel):
+    id: str
+    summary: str
+    status: str

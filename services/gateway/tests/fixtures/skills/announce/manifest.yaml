@@ -1,0 +1,11 @@
+name: announce
+version: "1.0.0"
+description: Post an announcement (an outbound action requiring approval).
+category: connector_action
+permissions:
+  - outbound_action
+network: true
+sensitivity_ceiling: internal
+requires_approval: true
+timeout_seconds: 10
+max_output_bytes: 65536

@@ -59,6 +59,8 @@ testpaths = ["tests", "packages", "services", "eval"]
 # across packages without __init__.py shims or sys.path collisions.
 addopts = "-q --strict-markers --strict-config --import-mode=importlib"
 asyncio_mode = "auto"
+# Starlette's TestClient warns that it still rides on httpx; transitional upstream noise.
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
 # Extend (not replace) pytest's default ignores: ".*" keeps .venv/.hypothesis/.git
 # skipped; "src" keeps package source out of collection (it holds no tests).
 norecursedirs = [".*", "src", "build", "dist", "*.egg", "*.egg-info", "node_modules"]

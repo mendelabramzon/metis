@@ -4,6 +4,11 @@ version = "0.0.0"
 description = "Metis API gateway service"
 requires-python = ">=3.12"
 dependencies = [
+    "metis-protocol",
+    "metis-core",
+    "metis-ingestion",
+    "metis-runtime",
+    "fastapi>=0.115",
     "pydantic-settings>=2.4",
 ]
 
