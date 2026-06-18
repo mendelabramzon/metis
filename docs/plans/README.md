@@ -13,7 +13,7 @@ implementation steps, tests/fixtures, acceptance criteria, and risks.
 | 3 | [Local-first ingestion pipeline](stage-03-ingestion.md) | Implemented |
 | 4 | [Model router and extraction quality loop](stage-04-model-router.md) | Implemented |
 | 5 | [Memory core](stage-05-memory-core.md) | Implemented |
-| 6 | [Maintainer worker](stage-06-maintainer.md) | Planned |
+| 6 | [Maintainer worker](stage-06-maintainer.md) | Implemented |
 | 7 | [Wiki compiler and human-facing knowledge](stage-07-wiki-compiler.md) | Planned |
 | 8 | [Retrieval and query runtime](stage-08-retrieval-runtime.md) | Planned |
 | 9 | [Skill runtime](stage-09-skill-runtime.md) | Planned |

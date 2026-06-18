@@ -1237,11 +1237,19 @@ name = "metis-maintainer-worker"
 version = "0.0.0"
 source = { editable = "services/maintainer-worker" }
 dependencies = [
+    { name = "metis-core" },
+    { name = "metis-maintainer" },
+    { name = "metis-protocol" },
     { name = "pydantic-settings" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic-settings", specifier = ">=2.4" }]
+requires-dist = [
+    { name = "metis-core", editable = "packages/metis-core" },
+    { name = "metis-maintainer", editable = "packages/metis-maintainer" },
+    { name = "metis-protocol", editable = "packages/metis-protocol" },
+    { name = "pydantic-settings", specifier = ">=2.4" },
+]
 
 [[package]]
 name = "metis-protocol"

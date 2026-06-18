@@ -13,14 +13,24 @@ from metis_protocol.artifacts import NormalizedDoc, ParsedDoc, RawArtifact, Segm
 from metis_protocol.claims import Claim, ClaimWriteResult, ExtractionBatch
 from metis_protocol.ids import (
     ClaimId,
+    ContradictionId,
     DocId,
+    ForesightId,
     MemCellId,
     MemSceneId,
     ParsedDocId,
+    ProfileId,
     SegmentId,
     WikiPageId,
 )
-from metis_protocol.memory import MemCell, MemoryPatch, MemScene
+from metis_protocol.memory import (
+    Contradiction,
+    Foresight,
+    MemCell,
+    MemoryPatch,
+    MemScene,
+    Profile,
+)
 from metis_protocol.query import ClaimFilter, MemoryScope
 from metis_protocol.refs import ArtifactRef
 from metis_protocol.wiki import WikiPage, WikiPatch
@@ -70,6 +80,20 @@ class MemoryStore(Protocol):
     async def apply_patch(self, patch: MemoryPatch) -> None: ...
 
     async def query_cells(self, scope: MemoryScope) -> Sequence[MemCell]: ...
+
+    # Maintainer outputs (Stage 6). Scenes/profiles/foresights are recomputable
+    # projections (upserted on rebuild); contradictions are append-only findings.
+    async def write_profile(self, profile: Profile) -> ProfileId: ...
+
+    async def get_profile(self, profile_id: ProfileId) -> Profile | None: ...
+
+    async def write_contradiction(self, contradiction: Contradiction) -> ContradictionId: ...
+
+    async def query_contradictions(self, scope: MemoryScope) -> Sequence[Contradiction]: ...
+
+    async def write_foresight(self, foresight: Foresight) -> ForesightId: ...
+
+    async def query_foresights(self, scope: MemoryScope) -> Sequence[Foresight]: ...
 
 
 @runtime_checkable

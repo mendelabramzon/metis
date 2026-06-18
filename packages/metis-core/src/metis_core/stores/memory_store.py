@@ -15,9 +15,27 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from metis_core.audit.sink import emit_store_audit
 from metis_core.db.session import unit_of_work
-from metis_core.mappers import mem_cell_to_row, mem_scene_to_row, memory_patch_to_row, to_model
-from metis_core.models import MemCellRow, MemSceneRow
+from metis_core.mappers import (
+    contradiction_to_row,
+    foresight_to_row,
+    mem_cell_to_row,
+    mem_scene_to_row,
+    memory_patch_to_row,
+    profile_to_row,
+    to_model,
+)
+from metis_core.models import (
+    ContradictionRow,
+    ForesightRow,
+    MemCellRow,
+    MemSceneRow,
+    ProfileRow,
+)
 from metis_protocol import (
+    Contradiction,
+    ContradictionId,
+    Foresight,
+    ForesightId,
     MemCell,
     MemCellId,
     MemoryOp,
@@ -25,6 +43,8 @@ from metis_protocol import (
     MemoryScope,
     MemScene,
     MemSceneId,
+    Profile,
+    ProfileId,
 )
 
 
@@ -54,9 +74,17 @@ class PostgresMemoryStore:
         return to_model(row, MemCell)
 
     async def write_scene(self, scene: MemScene) -> MemSceneId:
+        # Upsert: a scene is a recomputable projection, so a refresh updates the body
+        # in place. The embedding column is left untouched (re-indexed separately), so a
+        # content change does not silently wipe the vector.
         async with unit_of_work(self._sessionmaker) as session:
-            if await session.get(MemSceneRow, str(scene.id)) is None:
+            existing = await session.get(MemSceneRow, str(scene.id))
+            if existing is None:
                 session.add(mem_scene_to_row(scene))
+            else:
+                existing.body = scene.model_dump(mode="json")
+                existing.topic = scene.topic
+                existing.sensitivity = scene.policy.sensitivity.value
             await emit_store_audit(
                 session,
                 workspace_id=str(scene.provenance.workspace_id),
@@ -116,3 +144,81 @@ class PostgresMemoryStore:
         async with unit_of_work(self._sessionmaker) as session:
             rows = (await session.scalars(stmt)).all()
         return [to_model(row, MemCell) for row in rows]
+
+    async def write_profile(self, profile: Profile) -> ProfileId:
+        # Upsert: a profile is the current-state projection for a (scope, label); a refresh
+        # replaces it. session.merge keys on the (stable) id.
+        async with unit_of_work(self._sessionmaker) as session:
+            await session.merge(profile_to_row(profile))
+            await emit_store_audit(
+                session,
+                workspace_id=str(profile.provenance.workspace_id),
+                action="store.write.profile",
+                target_id=str(profile.id),
+                target_kind="Profile",
+                sensitivity=profile.policy.sensitivity.value,
+            )
+        return profile.id
+
+    async def get_profile(self, profile_id: ProfileId) -> Profile | None:
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(ProfileRow, str(profile_id))
+        if row is None or row.tombstoned_at is not None:
+            return None
+        return to_model(row, Profile)
+
+    async def write_contradiction(self, contradiction: Contradiction) -> ContradictionId:
+        # Append-only finding: re-detecting the same contradiction (stable id) is a no-op.
+        async with unit_of_work(self._sessionmaker) as session:
+            if await session.get(ContradictionRow, str(contradiction.id)) is None:
+                session.add(contradiction_to_row(contradiction))
+            await emit_store_audit(
+                session,
+                workspace_id=str(contradiction.provenance.workspace_id),
+                action="store.write.contradiction",
+                target_id=str(contradiction.id),
+                target_kind="Contradiction",
+                sensitivity=contradiction.policy.sensitivity.value,
+            )
+        return contradiction.id
+
+    async def query_contradictions(self, scope: MemoryScope) -> Sequence[Contradiction]:
+        stmt = (
+            select(ContradictionRow)
+            .where(
+                ContradictionRow.workspace_id == str(scope.workspace_id),
+                ContradictionRow.tombstoned_at.is_(None),
+            )
+            .order_by(ContradictionRow.created_at.asc())
+        )
+        async with unit_of_work(self._sessionmaker) as session:
+            rows = (await session.scalars(stmt)).all()
+        return [to_model(row, Contradiction) for row in rows]
+
+    async def write_foresight(self, foresight: Foresight) -> ForesightId:
+        # Upsert: rebuilding foresights re-evaluates status (e.g. ACTIVE -> EXPIRED) for a
+        # stable id, so a refresh updates in place rather than forking.
+        async with unit_of_work(self._sessionmaker) as session:
+            await session.merge(foresight_to_row(foresight))
+            await emit_store_audit(
+                session,
+                workspace_id=str(foresight.provenance.workspace_id),
+                action="store.write.foresight",
+                target_id=str(foresight.id),
+                target_kind="Foresight",
+                sensitivity=foresight.policy.sensitivity.value,
+            )
+        return foresight.id
+
+    async def query_foresights(self, scope: MemoryScope) -> Sequence[Foresight]:
+        stmt = (
+            select(ForesightRow)
+            .where(
+                ForesightRow.workspace_id == str(scope.workspace_id),
+                ForesightRow.tombstoned_at.is_(None),
+            )
+            .order_by(ForesightRow.valid_from.asc())
+        )
+        async with unit_of_work(self._sessionmaker) as session:
+            rows = (await session.scalars(stmt)).all()
+        return [to_model(row, Foresight) for row in rows]

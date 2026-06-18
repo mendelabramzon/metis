@@ -40,8 +40,12 @@ class PostgresJobQueue:
         self._sessionmaker = sessionmaker
 
     async def enqueue(self, job: Job) -> JobId:
+        # Idempotent by id: enqueuing a job whose id already exists is a no-op, so a
+        # scheduler can derive a deterministic id per unit of work and enqueue freely
+        # without forking duplicate jobs (Stage 6 relies on this).
         async with unit_of_work(self._sessionmaker) as session:
-            session.add(job_to_row(job))
+            if await session.get(JobRow, str(job.id)) is None:
+                session.add(job_to_row(job))
         return job.id
 
     async def lease(self, kinds: Sequence[str], limit: int) -> Sequence[Job]:

@@ -4,6 +4,9 @@ version = "0.0.0"
 description = "Metis maintainer worker service"
 requires-python = ">=3.12"
 dependencies = [
+    "metis-protocol",
+    "metis-core",
+    "metis-maintainer",
     "pydantic-settings>=2.4",
 ]
 

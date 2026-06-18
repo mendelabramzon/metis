@@ -27,6 +27,7 @@ from metis_core.dev.testing import (
     run_upgrade,
     truncate_all,
 )
+from metis_maintainer import MaintainerDeps, build_deps
 
 
 @pytest.fixture(scope="session")
@@ -58,3 +59,8 @@ async def engine(db_url: str) -> AsyncIterator[AsyncEngine]:
 @pytest.fixture
 def sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     return make_sessionmaker(engine)
+
+
+@pytest.fixture
+def deps(sessionmaker: async_sessionmaker[AsyncSession]) -> MaintainerDeps:
+    return build_deps(sessionmaker)  # caller=None -> deterministic, evidence-only builders

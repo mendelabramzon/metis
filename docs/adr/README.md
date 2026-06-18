@@ -31,3 +31,4 @@ are recorded in the Stage 0 plan's decision table rather than as standalone ADRs
 | [0012](0012-ingestion-parsers-and-deterministic-extraction.md) | Ingestion parsers and deterministic baseline extraction | Accepted |
 | [0013](0013-model-router-placement-and-providers.md) | Model router placement, providers, and policy-bound routing | Accepted |
 | [0014](0014-memory-core-consolidation-and-embeddings.md) | Memory core: consolidation placement, embedding lock-in, and hybrid lookup | Accepted |
+| [0015](0015-maintainer-scheduling-and-memory-substrate.md) | Maintainer scheduling, idempotency, and the memory-store extension | Accepted |

@@ -4,11 +4,13 @@ A workspace memory/context engine: evidence-first ingestion, structured memory,
 background maintenance, a compiled wiki projection, retrieval/chat, and
 skill-based actions.
 
-**Stages 0–5 are implemented**: the monorepo skeleton and machine-enforced package
+**Stages 0–6 are implemented**: the monorepo skeleton and machine-enforced package
 boundaries (Stage 0), the `metis-protocol` contracts (Stage 1), the `metis-core` durable
 substrate (Stage 2), local-first ingestion into cited evidence (Stage 3), the policy-bound
-model router (Stage 4), and the memory core — maintainer-time consolidation, versioned
-embeddings, and hybrid memory retrieval (Stage 5). See
+model router (Stage 4), the memory core — maintainer-time consolidation, versioned
+embeddings, and hybrid memory retrieval (Stage 5), and the maintainer worker — scheduled,
+idempotent background jobs for contradictions, revision, refresh, foresight, and wiki-patch
+proposal (Stage 6). See
 [`docs/plans/high-level-implementation-plan.md`](docs/plans/high-level-implementation-plan.md)
 for the staged roadmap and [`docs/`](docs/README.md) for the documentation index.
 

@@ -18,3 +18,4 @@ class MaintainerWorkerSettings(BaseSettings):
     service_name: str = "maintainer-worker"
     poll_interval_seconds: float = 30.0
     log_level: str = "INFO"
+    database_url: str = "postgresql+asyncpg://metis:metis@localhost:5432/metis"

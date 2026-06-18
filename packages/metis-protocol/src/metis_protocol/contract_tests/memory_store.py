@@ -5,7 +5,15 @@ from __future__ import annotations
 import pytest
 
 from metis_protocol.enums import MemoryOp
-from metis_protocol.examples import WS, mem_cell, mem_scene, memory_patch
+from metis_protocol.examples import (
+    WS,
+    contradiction,
+    foresight,
+    mem_cell,
+    mem_scene,
+    memory_patch,
+    profile,
+)
 from metis_protocol.interfaces import MemoryStore
 from metis_protocol.query import MemoryScope
 
@@ -39,3 +47,29 @@ class MemoryStoreContract:
         await memory_store.write_mem_cell(cell)
         cells = await memory_store.query_cells(MemoryScope(workspace_id=WS))
         assert cell in cells
+
+    async def test_write_then_get_profile(self, memory_store: MemoryStore) -> None:
+        prof = profile()
+        assert await memory_store.write_profile(prof) == prof.id
+        assert await memory_store.get_profile(prof.id) == prof
+
+    async def test_profile_write_is_upsert(self, memory_store: MemoryStore) -> None:
+        prof = profile()
+        await memory_store.write_profile(prof)
+        revised = prof.model_copy(update={"label": "Acme (revised)"})
+        await memory_store.write_profile(revised)  # same id -> replaces, not forks
+        stored = await memory_store.get_profile(prof.id)
+        assert stored is not None
+        assert stored.label == "Acme (revised)"
+
+    async def test_write_contradiction_then_query(self, memory_store: MemoryStore) -> None:
+        ctr = contradiction()
+        assert await memory_store.write_contradiction(ctr) == ctr.id
+        found = await memory_store.query_contradictions(MemoryScope(workspace_id=WS))
+        assert ctr in found
+
+    async def test_write_foresight_then_query(self, memory_store: MemoryStore) -> None:
+        fst = foresight()
+        assert await memory_store.write_foresight(fst) == fst.id
+        found = await memory_store.query_foresights(MemoryScope(workspace_id=WS))
+        assert fst in found

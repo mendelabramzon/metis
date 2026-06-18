@@ -17,12 +17,22 @@ from metis_protocol.enums import MemoryOp
 from metis_protocol.ids import (
     ArtifactId,
     ClaimId,
+    ContradictionId,
     EntityId,
     EventId,
+    ForesightId,
     MemCellId,
     MemSceneId,
+    ProfileId,
 )
-from metis_protocol.memory import MemCell, MemoryPatch, MemScene
+from metis_protocol.memory import (
+    Contradiction,
+    Foresight,
+    MemCell,
+    MemoryPatch,
+    MemScene,
+    Profile,
+)
 from metis_protocol.query import ClaimFilter, MemoryScope
 from metis_protocol.refs import ArtifactRef
 
@@ -97,6 +107,9 @@ class InMemoryMemoryStore:
         self._cells: dict[MemCellId, MemCell] = {}
         self._scenes: dict[MemSceneId, MemScene] = {}
         self._patches: list[MemoryPatch] = []
+        self._profiles: dict[ProfileId, Profile] = {}
+        self._contradictions: dict[ContradictionId, Contradiction] = {}
+        self._foresights: dict[ForesightId, Foresight] = {}
 
     async def write_mem_cell(self, cell: MemCell) -> MemCellId:
         self._cells[cell.id] = cell
@@ -124,6 +137,33 @@ class InMemoryMemoryStore:
         if scope.until is not None:
             cells = [c for c in cells if c.occurred_at is None or c.occurred_at <= scope.until]
         return cells
+
+    async def write_profile(self, profile: Profile) -> ProfileId:
+        self._profiles[profile.id] = profile  # upsert
+        return profile.id
+
+    async def get_profile(self, profile_id: ProfileId) -> Profile | None:
+        return self._profiles.get(profile_id)
+
+    async def write_contradiction(self, contradiction: Contradiction) -> ContradictionId:
+        self._contradictions.setdefault(contradiction.id, contradiction)  # insert-if-absent
+        return contradiction.id
+
+    async def query_contradictions(self, scope: MemoryScope) -> Sequence[Contradiction]:
+        return [
+            c
+            for c in self._contradictions.values()
+            if c.provenance.workspace_id == scope.workspace_id
+        ]
+
+    async def write_foresight(self, foresight: Foresight) -> ForesightId:
+        self._foresights[foresight.id] = foresight  # upsert
+        return foresight.id
+
+    async def query_foresights(self, scope: MemoryScope) -> Sequence[Foresight]:
+        return [
+            f for f in self._foresights.values() if f.provenance.workspace_id == scope.workspace_id
+        ]
 
 
 if TYPE_CHECKING:
