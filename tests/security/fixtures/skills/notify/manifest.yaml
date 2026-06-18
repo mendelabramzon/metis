@@ -1,0 +1,11 @@
+name: notify
+version: "1.0.0"
+description: Send an outbound notification (an action requiring approval).
+category: other
+permissions:
+  - outbound_action
+network: false
+sensitivity_ceiling: internal
+requires_approval: true
+timeout_seconds: 10
+max_output_bytes: 65536

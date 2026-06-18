@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
     "anthropic>=0.40",
+    "cryptography>=43",
 ]
 
 [build-system]
