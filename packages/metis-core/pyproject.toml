@@ -12,6 +12,7 @@ dependencies = [
     "pgvector>=0.3",
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
+    "anthropic>=0.40",
 ]
 
 [build-system]
