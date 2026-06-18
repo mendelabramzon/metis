@@ -31,6 +31,9 @@ class SkillRegistry:
 
     @classmethod
     def discover(cls, root: Path) -> SkillRegistry:
+        # Resolve to absolute: a skill's main.py must be addressable from the sandbox's scratch cwd,
+        # so a relative root (e.g. from an env var) would otherwise break execution, not loading.
+        root = root.resolve()
         registry = cls()
         if root.is_dir():
             for child in sorted(root.iterdir()):
