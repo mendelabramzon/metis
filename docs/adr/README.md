@@ -35,3 +35,4 @@ are recorded in the Stage 0 plan's decision table rather than as standalone ADRs
 | [0016](0016-wiki-compiler-and-git-projection.md) | Wiki compiler: git projection, deterministic structure, and the WiCER loop | Accepted |
 | [0017](0017-retrieval-and-query-runtime.md) | Retrieval and query runtime | Accepted |
 | [0018](0018-skill-runtime-and-sandboxing.md) | Skill runtime: package format, sandbox trust tiers, and the security contract | Accepted |
+| [0019](0019-runtime-agent-integration-and-taint-boundary.md) | Runtime-agent integration: the loop, the taint boundary, and approval-gated actions | Accepted |

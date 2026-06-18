@@ -27,15 +27,18 @@ from metis_protocol import (
     AuditEvent,
     BatchId,
     Claim,
+    ClaimRef,
     ContextBundle,
     ContextBundleId,
     ExtractionBatch,
     MemCell,
     QueryId,
+    QueryRequest,
     new_id,
 )
 from metis_protocol.examples import PDOC, PROV, WS
-from metis_runtime.query import MemoryRetriever, QueryEngine
+from metis_runtime.agent import AgentLoop
+from metis_runtime.query import Answer, MemoryRetriever, QueryEngine
 from metis_runtime.skills import SkillRegistry, SkillRunner
 
 _SKILLS_FIXTURES = Path(__file__).parent / "fixtures" / "skills"
@@ -168,3 +171,52 @@ def skill_runner(
         workspace_id=WS,
         secrets={"METIS_TEST_SECRET": "s3cr3t"},
     )
+
+
+class FakeAnswerer:
+    """A stand-in ``Answerer`` so agent-loop tests need no Postgres-backed retrieval.
+
+    It returns a fixed grounded (or insufficient) answer regardless of retrieval, letting the
+    Stage 10 tests exercise the loop's control flow — classify, plan, act, approve, file back —
+    deterministically and without Docker.
+    """
+
+    def __init__(
+        self,
+        *,
+        text: str = "No tools needed.",
+        sufficient: bool = True,
+        claims: tuple[ClaimRef, ...] = (),
+    ) -> None:
+        self._text = text
+        self._sufficient = sufficient
+        self._claims = claims
+
+    async def answer(self, query: QueryRequest) -> Answer:
+        return Answer(
+            query_id=query.id, text=self._text, claims=self._claims, sufficient=self._sufficient
+        )
+
+
+@pytest.fixture
+def make_loop(
+    skill_runner: SkillRunner,
+    skill_registry: SkillRegistry,
+    audit_sink: RecordingAuditSink,
+) -> Callable[..., AgentLoop]:
+    """Build an ``AgentLoop`` wired to the real (Docker-free) skill runner and a fake answerer."""
+
+    def _make(
+        *,
+        text: str = "No tools needed.",
+        sufficient: bool = True,
+        claims: tuple[ClaimRef, ...] = (),
+    ) -> AgentLoop:
+        return AgentLoop(
+            answerer=FakeAnswerer(text=text, sufficient=sufficient, claims=claims),
+            skill_runner=skill_runner,
+            registry=skill_registry,
+            audit_sink=audit_sink,
+        )
+
+    return _make
