@@ -34,3 +34,4 @@ are recorded in the Stage 0 plan's decision table rather than as standalone ADRs
 | [0015](0015-maintainer-scheduling-and-memory-substrate.md) | Maintainer scheduling, idempotency, and the memory-store extension | Accepted |
 | [0016](0016-wiki-compiler-and-git-projection.md) | Wiki compiler: git projection, deterministic structure, and the WiCER loop | Accepted |
 | [0017](0017-retrieval-and-query-runtime.md) | Retrieval and query runtime | Accepted |
+| [0018](0018-skill-runtime-and-sandboxing.md) | Skill runtime: package format, sandbox trust tiers, and the security contract | Accepted |

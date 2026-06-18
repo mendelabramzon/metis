@@ -1,0 +1,10 @@
+name: crasher
+version: "1.0.0"
+description: Always raises (for failure-observability tests).
+category: other
+permissions: []
+network: false
+sensitivity_ceiling: internal
+requires_approval: false
+timeout_seconds: 10
+max_output_bytes: 65536

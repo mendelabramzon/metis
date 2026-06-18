@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "saw_secret": { "type": "boolean" },
+    "connectors": { "type": "array" },
+    "network": { "type": "boolean" },
+    "cwd_outside_scratch": { "type": "boolean" }
+  },
+  "required": ["saw_secret", "connectors", "network"]
+}

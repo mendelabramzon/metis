@@ -7,6 +7,7 @@ import os
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Sequence
+from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -22,9 +23,52 @@ from metis_core.dev.testing import (
 )
 from metis_core.memory_index import MemoryIndexer, MemoryIndexLookup, stub_router
 from metis_core.stores import PostgresClaimStore, PostgresMemoryStore
-from metis_protocol import BatchId, Claim, ExtractionBatch, MemCell, new_id
+from metis_protocol import (
+    AuditEvent,
+    BatchId,
+    Claim,
+    ContextBundle,
+    ContextBundleId,
+    ExtractionBatch,
+    MemCell,
+    QueryId,
+    new_id,
+)
 from metis_protocol.examples import PDOC, PROV, WS
 from metis_runtime.query import MemoryRetriever, QueryEngine
+from metis_runtime.skills import SkillRegistry, SkillRunner
+
+_SKILLS_FIXTURES = Path(__file__).parent / "fixtures" / "skills"
+
+
+class MemoryObjectStore:
+    """An in-process ObjectStore (the protocol) for skill artifact capture in tests."""
+
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+
+    async def put_bytes(self, key: str, data: bytes) -> str:
+        self.objects[key] = data
+        return key
+
+    async def get_bytes(self, key: str) -> bytes | None:
+        return self.objects.get(key)
+
+    async def exists(self, key: str) -> bool:
+        return key in self.objects
+
+    async def delete(self, key: str) -> None:
+        self.objects.pop(key, None)
+
+
+class RecordingAuditSink:
+    """An in-process AuditSink (the protocol) that records emitted events for assertions."""
+
+    def __init__(self) -> None:
+        self.events: list[AuditEvent] = []
+
+    async def emit(self, event: AuditEvent) -> None:
+        self.events.append(event)
 
 
 @pytest.fixture(scope="session")
@@ -89,3 +133,38 @@ def seed(
         await indexer.index_mem_cell(cell)
 
     return _seed
+
+
+@pytest.fixture
+def bundle() -> ContextBundle:
+    return ContextBundle(id=new_id(ContextBundleId), query_id=new_id(QueryId), sections=())
+
+
+@pytest.fixture
+def skill_registry() -> SkillRegistry:
+    return SkillRegistry.discover(_SKILLS_FIXTURES)
+
+
+@pytest.fixture
+def object_store() -> MemoryObjectStore:
+    return MemoryObjectStore()
+
+
+@pytest.fixture
+def audit_sink() -> RecordingAuditSink:
+    return RecordingAuditSink()
+
+
+@pytest.fixture
+def skill_runner(
+    skill_registry: SkillRegistry,
+    object_store: MemoryObjectStore,
+    audit_sink: RecordingAuditSink,
+) -> SkillRunner:
+    return SkillRunner(
+        skill_registry,
+        audit_sink=audit_sink,
+        object_store=object_store,
+        workspace_id=WS,
+        secrets={"METIS_TEST_SECRET": "s3cr3t"},
+    )

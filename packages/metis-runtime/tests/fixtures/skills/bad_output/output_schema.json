@@ -1,0 +1,5 @@
+{
+  "type": "object",
+  "properties": { "result": { "type": "integer" } },
+  "required": ["result"]
+}

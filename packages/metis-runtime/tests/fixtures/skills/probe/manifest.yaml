@@ -1,0 +1,11 @@
+name: probe
+version: "1.0.0"
+description: Report what capabilities the sandbox exposes (for isolation tests).
+category: other
+permissions: []
+network: false
+allowed_connectors: []
+sensitivity_ceiling: internal
+requires_approval: false
+timeout_seconds: 10
+max_output_bytes: 65536

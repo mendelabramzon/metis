@@ -1,0 +1,12 @@
+name: text_stats
+version: "1.0.0"
+description: Count words, characters, and lines in a block of text.
+category: data_cleanup
+entrypoint: "main:run"
+permissions: []
+network: false
+allowed_connectors: []
+sensitivity_ceiling: internal
+requires_approval: false
+timeout_seconds: 10
+max_output_bytes: 65536

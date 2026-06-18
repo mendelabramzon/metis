@@ -16,7 +16,7 @@ implementation steps, tests/fixtures, acceptance criteria, and risks.
 | 6 | [Maintainer worker](stage-06-maintainer.md) | Implemented |
 | 7 | [Wiki compiler and human-facing knowledge](stage-07-wiki-compiler.md) | Implemented |
 | 8 | [Retrieval and query runtime](stage-08-retrieval-runtime.md) | Implemented |
-| 9 | [Skill runtime](stage-09-skill-runtime.md) | Planned |
+| 9 | [Skill runtime](stage-09-skill-runtime.md) | Implemented |
 | 10 | [Runtime-agent integration](stage-10-agent-integration.md) | Planned |
 | 11 | [External connectors](stage-11-connectors.md) | Planned |
 | 12 | [API, UI, and ops surfaces](stage-12-api-ui-ops.md) | Planned |

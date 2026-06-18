@@ -13,7 +13,10 @@ idempotent background jobs for contradictions, revision, refresh, foresight, and
 proposal (Stage 6), the wiki compiler — a git-backed, claim-cited markdown projection with
 the WiCER compile→evaluate→refine loop and an approval/commit flow (Stage 7), and the query
 runtime — sensitivity-bounded hybrid retrieval, context packing, sufficiency-gated answering
-with citation verification, and contradiction surfacing (Stage 8). See
+with citation verification, and contradiction surfacing (Stage 8), and the skill runtime —
+a Python skill-package format run under a manifest security contract: a subprocess sandbox,
+deny-by-default permissions, approval-by-default for outbound actions, and audited artifact
+capture (Stage 9). See
 [`docs/plans/high-level-implementation-plan.md`](docs/plans/high-level-implementation-plan.md)
 for the staged roadmap and [`docs/`](docs/README.md) for the documentation index.
 

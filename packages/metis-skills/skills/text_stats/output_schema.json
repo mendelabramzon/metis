@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "words": { "type": "integer" },
+    "characters": { "type": "integer" },
+    "lines": { "type": "integer" }
+  },
+  "required": ["words", "characters", "lines"],
+  "additionalProperties": false
+}
