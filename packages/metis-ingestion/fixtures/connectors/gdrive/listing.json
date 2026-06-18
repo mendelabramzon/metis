@@ -1,0 +1,28 @@
+[
+  {
+    "id": "file-roadmap",
+    "name": "Roadmap",
+    "media_type": "text/markdown",
+    "content_key": "content/roadmap.md",
+    "modified_time": "2026-06-01T09:00:00Z",
+    "permissions": [
+      {
+        "type": "domain",
+        "role": "reader"
+      }
+    ]
+  },
+  {
+    "id": "file-comp",
+    "name": "Compensation",
+    "media_type": "text/markdown",
+    "content_key": "content/comp.md",
+    "modified_time": "2026-06-02T09:00:00Z",
+    "permissions": [
+      {
+        "type": "user",
+        "role": "reader"
+      }
+    ]
+  }
+]

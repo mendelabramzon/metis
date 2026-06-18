@@ -36,3 +36,4 @@ are recorded in the Stage 0 plan's decision table rather than as standalone ADRs
 | [0017](0017-retrieval-and-query-runtime.md) | Retrieval and query runtime | Accepted |
 | [0018](0018-skill-runtime-and-sandboxing.md) | Skill runtime: package format, sandbox trust tiers, and the security contract | Accepted |
 | [0019](0019-runtime-agent-integration-and-taint-boundary.md) | Runtime-agent integration: the loop, the taint boundary, and approval-gated actions | Accepted |
+| [0020](0020-external-connectors-and-replayable-ingestion.md) | External connectors: uniform contract, recorded-transport replay, and ACL→sensitivity | Accepted |

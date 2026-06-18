@@ -17,14 +17,19 @@ def build_raw_artifact(
     filename: str,
     media_info: MediaInfo,
     policy: PolicyState,
+    connector: str = "local_folder",
     trace_id: str | None = None,
 ) -> RawArtifact:
-    """Build a ``RawArtifact``; ``storage_ref`` is the content-addressed object key."""
+    """Build a ``RawArtifact``; ``storage_ref`` is the content-addressed object key.
+
+    ``connector`` names the producing connector in provenance (the PROV agent), so an artifact
+    is traceable to the source that fetched it regardless of which connector that was.
+    """
     content_hash = hashlib.sha256(data).hexdigest()
     return RawArtifact(
         id=stable_id(ArtifactId, f"{workspace_id}:{content_hash}"),
         provenance=make_provenance(
-            workspace_id, agent_kind=AgentKind.CONNECTOR, agent="local_folder", trace_id=trace_id
+            workspace_id, agent_kind=AgentKind.CONNECTOR, agent=connector, trace_id=trace_id
         ),
         policy=policy,
         created_at=now_utc(),

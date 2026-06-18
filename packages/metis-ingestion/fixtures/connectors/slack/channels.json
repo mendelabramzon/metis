@@ -1,0 +1,29 @@
+[
+  {
+    "name": "general",
+    "is_private": false,
+    "messages": [
+      {
+        "user": "ada",
+        "ts": "1717228800.000100",
+        "text": "Welcome to the team!"
+      },
+      {
+        "user": "grace",
+        "ts": "1717232400.000200",
+        "text": "Glad to be here."
+      }
+    ]
+  },
+  {
+    "name": "founders",
+    "is_private": true,
+    "messages": [
+      {
+        "user": "ada",
+        "ts": "1717236000.000300",
+        "text": "Board update: revenue up 30%."
+      }
+    ]
+  }
+]

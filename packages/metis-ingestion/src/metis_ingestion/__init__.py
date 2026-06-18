@@ -8,7 +8,20 @@ memory cells or wiki pages.
 from __future__ import annotations
 
 from metis_ingestion import mime
-from metis_ingestion.connectors import LocalFolderConnector
+from metis_ingestion.connectors import (
+    CalendarConnector,
+    ConnectorRegistry,
+    ConnectorScheduler,
+    GoogleDriveConnector,
+    ImapConnector,
+    InMemorySecretResolver,
+    LocalFolderConnector,
+    RateLimiter,
+    RecordedTransport,
+    SlackConnector,
+    WebClipConnector,
+    with_retries,
+)
 from metis_ingestion.extract import BaselineExtractor, ExtractionResult
 from metis_ingestion.failures import (
     ExtractError,
@@ -27,16 +40,26 @@ __version__ = "0.0.0"
 
 __all__ = [
     "BaselineExtractor",
+    "CalendarConnector",
+    "ConnectorRegistry",
+    "ConnectorScheduler",
     "ExtractError",
     "ExtractionResult",
+    "GoogleDriveConnector",
+    "ImapConnector",
+    "InMemorySecretResolver",
     "IngestResult",
     "IngestionError",
     "IngestionPipeline",
     "LocalFolderConnector",
     "ParseError",
+    "RateLimiter",
+    "RecordedTransport",
     "Segmentation",
+    "SlackConnector",
     "StepFailure",
     "UnsupportedMediaType",
+    "WebClipConnector",
     "__version__",
     "build_normalized_doc",
     "build_raw_artifact",
@@ -44,4 +67,5 @@ __all__ = [
     "mime",
     "parse_document",
     "supported_media_types",
+    "with_retries",
 ]

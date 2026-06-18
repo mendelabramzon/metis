@@ -40,11 +40,18 @@ from metis_ingestion import IngestionPipeline, LocalFolderConnector
 from metis_protocol import PolicyState, WorkspaceId
 
 WORKSPACE = WorkspaceId(f"ws_{'a' * 32}")
+CONNECTORS_ROOT = Path(__file__).parent.parent / "fixtures" / "connectors"
 
 
 @pytest.fixture
 def workspace() -> WorkspaceId:
     return WORKSPACE
+
+
+@pytest.fixture
+def connectors_root() -> Path:
+    """Root of the recorded per-connector fixtures (the credential-free replay corpus)."""
+    return CONNECTORS_ROOT
 
 
 def _make_pdf(lines: list[str]) -> bytes:

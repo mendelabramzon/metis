@@ -17,7 +17,7 @@ from metis_core.stores import (
     PostgresDocumentStore,
     PostgresMinioArtifactStore,
 )
-from metis_ingestion.connectors import LocalFolderConnector
+from metis_ingestion.connectors.base import FetchingConnector
 from metis_ingestion.extract import BaselineExtractor
 from metis_ingestion.failures import StepFailure, UnsupportedMediaType, record_failure
 from metis_ingestion.normalize import build_normalized_doc
@@ -38,7 +38,7 @@ class IngestionPipeline:
     def __init__(
         self,
         *,
-        connector: LocalFolderConnector,
+        connector: FetchingConnector,
         artifact_store: PostgresMinioArtifactStore,
         document_store: PostgresDocumentStore,
         claim_store: PostgresClaimStore,
