@@ -1,0 +1,475 @@
+{
+  "$defs": {
+    "AgentKind": {
+      "description": "What kind of agent produced an artifact (PROV ``Agent``).",
+      "enum": [
+        "connector",
+        "parser",
+        "extractor",
+        "model",
+        "skill",
+        "maintainer",
+        "human",
+        "system"
+      ],
+      "title": "AgentKind",
+      "type": "string"
+    },
+    "Attribution": {
+      "additionalProperties": false,
+      "description": "Who/what produced an artifact (PROV ``Agent`` + attribution).",
+      "properties": {
+        "agent": {
+          "title": "Agent",
+          "type": "string"
+        },
+        "agent_kind": {
+          "$ref": "#/$defs/AgentKind"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        }
+      },
+      "required": [
+        "agent_kind",
+        "agent"
+      ],
+      "title": "Attribution",
+      "type": "object"
+    },
+    "Derivation": {
+      "additionalProperties": false,
+      "description": "How an artifact was produced (PROV ``Activity`` + derivation).",
+      "properties": {
+        "code_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code Version"
+        },
+        "inputs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "model_run": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelRun"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation"
+      ],
+      "title": "Derivation",
+      "type": "object"
+    },
+    "ModelRun": {
+      "additionalProperties": false,
+      "description": "Metadata for a single LLM call.",
+      "properties": {
+        "audit_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audit Hash"
+        },
+        "cache_hit": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Hit"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Tokens"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "model_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Version"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Tokens"
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Version"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0",
+          "pattern": "^\\d+\\.\\d+$",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "task_class": {
+          "$ref": "#/$defs/ModelTaskClass"
+        }
+      },
+      "required": [
+        "id",
+        "task_class",
+        "provider",
+        "model",
+        "sensitivity",
+        "started_at"
+      ],
+      "title": "ModelRun",
+      "type": "object"
+    },
+    "ModelTaskClass": {
+      "enum": [
+        "parse_assist",
+        "segment",
+        "extract_claims",
+        "extract_entities",
+        "extract_events",
+        "summarize_episode",
+        "consolidate_memory",
+        "detect_contradiction",
+        "build_foresight",
+        "wiki_compile",
+        "query_rewrite",
+        "query_answer",
+        "query_verify",
+        "skill_plan",
+        "skill_execute"
+      ],
+      "title": "ModelTaskClass",
+      "type": "string"
+    },
+    "PolicyState": {
+      "additionalProperties": false,
+      "description": "Policy attributes carried by every artifact and propagated to derivations.",
+      "properties": {
+        "allow_external_models": {
+          "default": true,
+          "title": "Allow External Models",
+          "type": "boolean"
+        },
+        "legal_hold": {
+          "default": false,
+          "title": "Legal Hold",
+          "type": "boolean"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity",
+          "default": "internal"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "title": "PolicyState",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "The provenance envelope embedded on every artifact.",
+      "properties": {
+        "attribution": {
+          "$ref": "#/$defs/Attribution"
+        },
+        "derivation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Derivation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "received_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Received At"
+        },
+        "trace_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trace Id"
+        },
+        "workspace_id": {
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "attribution"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "SegmentKind": {
+      "enum": [
+        "paragraph",
+        "heading",
+        "table",
+        "list",
+        "code",
+        "other"
+      ],
+      "title": "SegmentKind",
+      "type": "string"
+    },
+    "Sensitivity": {
+      "description": "Data sensitivity, ordered least to most restrictive (see ``SENSITIVITY_ORDER``).",
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A typed, ordered unit of a parsed doc (paragraph, table, heading, ...).",
+  "properties": {
+    "char_end": {
+      "minimum": 0,
+      "title": "Char End",
+      "type": "integer"
+    },
+    "char_start": {
+      "minimum": 0,
+      "title": "Char Start",
+      "type": "integer"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/SegmentKind",
+      "default": "paragraph"
+    },
+    "order": {
+      "minimum": 0,
+      "title": "Order",
+      "type": "integer"
+    },
+    "page": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Page"
+    },
+    "parsed_doc_id": {
+      "title": "Parsed Doc Id",
+      "type": "string"
+    },
+    "policy": {
+      "$ref": "#/$defs/PolicyState"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    },
+    "tombstoned_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tombstoned At"
+    }
+  },
+  "required": [
+    "id",
+    "provenance",
+    "policy",
+    "created_at",
+    "parsed_doc_id",
+    "doc_id",
+    "order",
+    "text",
+    "char_start",
+    "char_end"
+  ],
+  "title": "Segment",
+  "type": "object"
+}

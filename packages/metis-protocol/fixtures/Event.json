@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "id": "evt_00000000000000000000000000000001",
+  "provenance": {
+    "workspace_id": "ws_00000000000000000000000000000001",
+    "attribution": {
+      "agent_kind": "extractor",
+      "agent": "baseline-extractor",
+      "role": null
+    },
+    "derivation": {
+      "operation": "extract_claims",
+      "inputs": [
+        "art_00000000000000000000000000000001",
+        "pdoc_00000000000000000000000000000001"
+      ],
+      "model_run": {
+        "schema_version": "1.0",
+        "id": "run_00000000000000000000000000000001",
+        "task_class": "extract_claims",
+        "provider": "local",
+        "model": "demo-1",
+        "model_version": null,
+        "prompt_version": "extract_claims@1",
+        "sensitivity": "internal",
+        "input_tokens": 128,
+        "output_tokens": 64,
+        "cost_usd": null,
+        "latency_ms": null,
+        "cache_hit": null,
+        "audit_hash": null,
+        "started_at": "2026-01-01T12:00:00Z",
+        "finished_at": "2026-01-01T12:00:00Z"
+      },
+      "code_version": null
+    },
+    "trace_id": "trace-1",
+    "received_at": "2026-01-01T12:00:00Z"
+  },
+  "policy": {
+    "sensitivity": "internal",
+    "tags": [],
+    "allow_external_models": true,
+    "legal_hold": false
+  },
+  "created_at": "2026-01-01T12:00:00Z",
+  "tombstoned_at": null,
+  "summary": "Ada joined Acme as CTO.",
+  "occurred_at": "2026-01-01T12:00:00Z",
+  "participants": [
+    {
+      "entity_id": "ent_00000000000000000000000000000001"
+    }
+  ],
+  "source_spans": [
+    {
+      "source_span_id": "span_00000000000000000000000000000001",
+      "artifact_id": "art_00000000000000000000000000000001",
+      "doc_id": "doc_00000000000000000000000000000001"
+    }
+  ]
+}

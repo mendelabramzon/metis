@@ -1,0 +1,18 @@
+[project]
+name = "metis-maintainer-worker"
+version = "0.0.0"
+description = "Metis maintainer worker service"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic-settings>=2.4",
+]
+
+[project.scripts]
+metis-maintainer-worker = "metis_maintainer_worker.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/metis_maintainer_worker"]

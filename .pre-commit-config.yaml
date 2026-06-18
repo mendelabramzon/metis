@@ -1,0 +1,36 @@
+# Optional local guardrails mirroring `make check`. Install with:
+#   uvx pre-commit install
+# CI is the authoritative gate; these hooks just shorten the feedback loop. All
+# hooks run through `uv run` so they use the exact workspace toolchain versions
+# (no separate pinned tool versions to drift out of sync).
+minimum_pre_commit_version: "3.5.0"
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff (lint + autofix)
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: ruff-format
+        name: ruff (format)
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        require_serial: true
+
+      - id: mypy
+        name: mypy (strict)
+        entry: uv run mypy packages/metis-protocol/src packages/metis-core/src packages/metis-ingestion/src packages/metis-maintainer/src packages/metis-runtime/src packages/metis-skills/src services/gateway/src services/ingest-worker/src services/maintainer-worker/src services/runtime-worker/src
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: import-linter
+        name: import-linter (package boundaries)
+        entry: uv run lint-imports --config .importlinter
+        language: system
+        types: [python]
+        pass_filenames: false

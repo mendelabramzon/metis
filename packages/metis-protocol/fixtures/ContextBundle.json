@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "id": "ctx_00000000000000000000000000000001",
+  "query_id": "qry_00000000000000000000000000000001",
+  "sections": [
+    {
+      "heading": "CTO",
+      "text": "Ada is the CTO of Acme.",
+      "claims": [
+        {
+          "claim_id": "clm_00000000000000000000000000000001"
+        }
+      ],
+      "source_spans": []
+    }
+  ],
+  "token_estimate": 64,
+  "sufficiency": 0.8
+}

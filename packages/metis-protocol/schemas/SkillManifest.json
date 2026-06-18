@@ -1,0 +1,138 @@
+{
+  "$defs": {
+    "ModelTier": {
+      "description": "Quality/cost tier a task may be routed to.",
+      "enum": [
+        "local",
+        "standard",
+        "frontier"
+      ],
+      "title": "ModelTier",
+      "type": "string"
+    },
+    "PermissionScope": {
+      "description": "Capabilities a skill (or other actor) can be granted; enforced outside prompts.",
+      "enum": [
+        "network",
+        "filesystem_read",
+        "filesystem_write",
+        "connector",
+        "secrets",
+        "outbound_action",
+        "model_call",
+        "subprocess"
+      ],
+      "title": "PermissionScope",
+      "type": "string"
+    },
+    "Sensitivity": {
+      "description": "Data sensitivity, ordered least to most restrictive (see ``SENSITIVITY_ORDER``).",
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Declares a skill and the policy envelope it runs under. Natural key: name+version.",
+  "properties": {
+    "allowed_connectors": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Connectors",
+      "type": "array"
+    },
+    "allowed_model_tiers": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ModelTier"
+      },
+      "title": "Allowed Model Tiers",
+      "type": "array"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "entrypoint": {
+      "default": "main:run",
+      "title": "Entrypoint",
+      "type": "string"
+    },
+    "max_output_bytes": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Output Bytes"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "network": {
+      "default": false,
+      "title": "Network",
+      "type": "boolean"
+    },
+    "permissions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PermissionScope"
+      },
+      "title": "Permissions",
+      "type": "array"
+    },
+    "requires_approval": {
+      "default": true,
+      "title": "Requires Approval",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sensitivity_ceiling": {
+      "$ref": "#/$defs/Sensitivity",
+      "default": "internal"
+    },
+    "timeout_seconds": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timeout Seconds"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "version"
+  ],
+  "title": "SkillManifest",
+  "type": "object"
+}

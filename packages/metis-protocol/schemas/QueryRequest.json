@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "Sensitivity": {
+      "description": "Data sensitivity, ordered least to most restrictive (see ``SENSITIVITY_ORDER``).",
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A user question plus the policy ceiling the requester is allowed to see.",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "max_sensitivity": {
+      "$ref": "#/$defs/Sensitivity",
+      "default": "restricted"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    },
+    "top_k": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Top K"
+    },
+    "workspace_id": {
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "workspace_id",
+    "text"
+  ],
+  "title": "QueryRequest",
+  "type": "object"
+}

@@ -1,0 +1,759 @@
+{
+  "$defs": {
+    "AgentKind": {
+      "description": "What kind of agent produced an artifact (PROV ``Agent``).",
+      "enum": [
+        "connector",
+        "parser",
+        "extractor",
+        "model",
+        "skill",
+        "maintainer",
+        "human",
+        "system"
+      ],
+      "title": "AgentKind",
+      "type": "string"
+    },
+    "Attribution": {
+      "additionalProperties": false,
+      "description": "Who/what produced an artifact (PROV ``Agent`` + attribution).",
+      "properties": {
+        "agent": {
+          "title": "Agent",
+          "type": "string"
+        },
+        "agent_kind": {
+          "$ref": "#/$defs/AgentKind"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        }
+      },
+      "required": [
+        "agent_kind",
+        "agent"
+      ],
+      "title": "Attribution",
+      "type": "object"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "description": "An atomic assertion. Every claim cites evidence: ``source_spans`` is non-empty.",
+      "properties": {
+        "confidence": {
+          "default": 1.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "negated": {
+          "default": false,
+          "title": "Negated",
+          "type": "boolean"
+        },
+        "object_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntityRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "policy": {
+          "$ref": "#/$defs/PolicyState"
+        },
+        "predicate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Predicate"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "schema_version": {
+          "default": "1.0",
+          "pattern": "^\\d+\\.\\d+$",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_spans": {
+          "items": {
+            "$ref": "#/$defs/SourceSpanRef"
+          },
+          "minItems": 1,
+          "title": "Source Spans",
+          "type": "array"
+        },
+        "subject_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntityRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "tombstoned_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tombstoned At"
+        }
+      },
+      "required": [
+        "id",
+        "provenance",
+        "policy",
+        "created_at",
+        "text",
+        "source_spans"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "Derivation": {
+      "additionalProperties": false,
+      "description": "How an artifact was produced (PROV ``Activity`` + derivation).",
+      "properties": {
+        "code_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code Version"
+        },
+        "inputs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "model_run": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ModelRun"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation"
+      ],
+      "title": "Derivation",
+      "type": "object"
+    },
+    "Entity": {
+      "additionalProperties": false,
+      "description": "A person, organization, project, etc., aggregated across evidence.",
+      "properties": {
+        "aliases": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/EntityKind"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "policy": {
+          "$ref": "#/$defs/PolicyState"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "schema_version": {
+          "default": "1.0",
+          "pattern": "^\\d+\\.\\d+$",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_spans": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SourceSpanRef"
+          },
+          "title": "Source Spans",
+          "type": "array"
+        },
+        "tombstoned_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tombstoned At"
+        }
+      },
+      "required": [
+        "id",
+        "provenance",
+        "policy",
+        "created_at",
+        "kind",
+        "name"
+      ],
+      "title": "Entity",
+      "type": "object"
+    },
+    "EntityKind": {
+      "enum": [
+        "person",
+        "organization",
+        "project",
+        "location",
+        "product",
+        "concept",
+        "document",
+        "other"
+      ],
+      "title": "EntityKind",
+      "type": "string"
+    },
+    "EntityRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity_id": {
+          "title": "Entity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity_id"
+      ],
+      "title": "EntityRef",
+      "type": "object"
+    },
+    "Event": {
+      "additionalProperties": false,
+      "description": "A dated occurrence extracted from evidence.",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "participants": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EntityRef"
+          },
+          "title": "Participants",
+          "type": "array"
+        },
+        "policy": {
+          "$ref": "#/$defs/PolicyState"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "schema_version": {
+          "default": "1.0",
+          "pattern": "^\\d+\\.\\d+$",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_spans": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SourceSpanRef"
+          },
+          "title": "Source Spans",
+          "type": "array"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "tombstoned_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tombstoned At"
+        }
+      },
+      "required": [
+        "id",
+        "provenance",
+        "policy",
+        "created_at",
+        "summary"
+      ],
+      "title": "Event",
+      "type": "object"
+    },
+    "ModelRun": {
+      "additionalProperties": false,
+      "description": "Metadata for a single LLM call.",
+      "properties": {
+        "audit_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audit Hash"
+        },
+        "cache_hit": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Hit"
+        },
+        "cost_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cost Usd"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Tokens"
+        },
+        "latency_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latency Ms"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "model_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Version"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Tokens"
+        },
+        "prompt_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Version"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1.0",
+          "pattern": "^\\d+\\.\\d+$",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "task_class": {
+          "$ref": "#/$defs/ModelTaskClass"
+        }
+      },
+      "required": [
+        "id",
+        "task_class",
+        "provider",
+        "model",
+        "sensitivity",
+        "started_at"
+      ],
+      "title": "ModelRun",
+      "type": "object"
+    },
+    "ModelTaskClass": {
+      "enum": [
+        "parse_assist",
+        "segment",
+        "extract_claims",
+        "extract_entities",
+        "extract_events",
+        "summarize_episode",
+        "consolidate_memory",
+        "detect_contradiction",
+        "build_foresight",
+        "wiki_compile",
+        "query_rewrite",
+        "query_answer",
+        "query_verify",
+        "skill_plan",
+        "skill_execute"
+      ],
+      "title": "ModelTaskClass",
+      "type": "string"
+    },
+    "PolicyState": {
+      "additionalProperties": false,
+      "description": "Policy attributes carried by every artifact and propagated to derivations.",
+      "properties": {
+        "allow_external_models": {
+          "default": true,
+          "title": "Allow External Models",
+          "type": "boolean"
+        },
+        "legal_hold": {
+          "default": false,
+          "title": "Legal Hold",
+          "type": "boolean"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity",
+          "default": "internal"
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "title": "PolicyState",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "The provenance envelope embedded on every artifact.",
+      "properties": {
+        "attribution": {
+          "$ref": "#/$defs/Attribution"
+        },
+        "derivation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Derivation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "received_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Received At"
+        },
+        "trace_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trace Id"
+        },
+        "workspace_id": {
+          "title": "Workspace Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "attribution"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Sensitivity": {
+      "description": "Data sensitivity, ordered least to most restrictive (see ``SENSITIVITY_ORDER``).",
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    },
+    "SourceSpanRef": {
+      "additionalProperties": false,
+      "description": "Evidence pointer. Carries the owning artifact (and doc) for direct resolution.",
+      "properties": {
+        "artifact_id": {
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "doc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Id"
+        },
+        "source_span_id": {
+          "title": "Source Span Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_span_id",
+        "artifact_id"
+      ],
+      "title": "SourceSpanRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "The output of extracting one parsed doc: the unit a ``ClaimStore`` writes.",
+  "properties": {
+    "claims": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Claim"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "entities": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Entity"
+      },
+      "title": "Entities",
+      "type": "array"
+    },
+    "events": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Event"
+      },
+      "title": "Events",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "parsed_doc_id": {
+      "title": "Parsed Doc Id",
+      "type": "string"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "workspace_id": {
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "workspace_id",
+    "parsed_doc_id",
+    "provenance"
+  ],
+  "title": "ExtractionBatch",
+  "type": "object"
+}

@@ -1,0 +1,44 @@
+{
+  "$defs": {
+    "JsonValue": {}
+  },
+  "additionalProperties": false,
+  "description": "The arguments and context handed to a skill run.",
+  "properties": {
+    "arguments": {
+      "$ref": "#/$defs/JsonValue"
+    },
+    "context_bundle_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Bundle Id"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "skill_name": {
+      "title": "Skill Name",
+      "type": "string"
+    },
+    "skill_version": {
+      "title": "Skill Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "skill_name",
+    "skill_version"
+  ],
+  "title": "SkillInput",
+  "type": "object"
+}

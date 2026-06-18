@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "name": "deep_web_search",
+  "version": "1.0.0",
+  "description": "Search the web and summarize.",
+  "entrypoint": "main:run",
+  "permissions": [],
+  "network": true,
+  "allowed_connectors": [],
+  "allowed_model_tiers": [],
+  "sensitivity_ceiling": "internal",
+  "requires_approval": true,
+  "timeout_seconds": 120.0,
+  "max_output_bytes": null
+}

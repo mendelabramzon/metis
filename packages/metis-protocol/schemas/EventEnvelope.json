@@ -1,0 +1,79 @@
+{
+  "$defs": {
+    "EventName": {
+      "enum": [
+        "artifact.ingested",
+        "document.normalized",
+        "document.parsed",
+        "claims.extracted",
+        "memcell.created",
+        "memscene.updated",
+        "profile.updated",
+        "foresight.created",
+        "contradiction.detected",
+        "memory.patched",
+        "wiki.patch_proposed",
+        "wiki.page_committed",
+        "skill.executed",
+        "audit.recorded"
+      ],
+      "title": "EventName",
+      "type": "string"
+    },
+    "JsonValue": {}
+  },
+  "additionalProperties": false,
+  "description": "A versioned, transport-agnostic event wrapper.",
+  "properties": {
+    "envelope_id": {
+      "title": "Envelope Id",
+      "type": "string"
+    },
+    "event_name": {
+      "$ref": "#/$defs/EventName"
+    },
+    "event_version": {
+      "title": "Event Version",
+      "type": "integer"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/JsonValue"
+    },
+    "payload_schema_version": {
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Payload Schema Version",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "trace_id": {
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "envelope_id",
+    "event_name",
+    "event_version",
+    "occurred_at",
+    "workspace_id",
+    "trace_id",
+    "payload_schema_version",
+    "payload"
+  ],
+  "title": "EventEnvelope",
+  "type": "object"
+}

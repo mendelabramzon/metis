@@ -1,0 +1,58 @@
+# Metis monorepo root.
+#
+# This is a uv *workspace* root, not an installable package. It aggregates the
+# six libraries under packages/ and the four services under services/, pins the
+# shared dev toolchain, and centralizes tool configuration (pytest, importlinter
+# config lives in .importlinter, ruff in ruff.toml, mypy in mypy.ini).
+[project]
+name = "metis"
+version = "0.0.0"
+description = "Metis workspace memory/context engine (monorepo root)"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+# The root orchestrates the workspace; it is never built or published itself.
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*", "services/*"]
+
+# Cross-package dependencies resolve from the workspace rather than PyPI.
+# Declared once at the root and inherited by every member.
+[tool.uv.sources]
+metis-protocol = { workspace = true }
+metis-core = { workspace = true }
+metis-ingestion = { workspace = true }
+metis-maintainer = { workspace = true }
+metis-runtime = { workspace = true }
+metis-skills = { workspace = true }
+
+# Shared dev toolchain (ADRs 0002, 0003, 0004, 0005). Installed into the
+# workspace environment by `uv sync`; default groups install automatically.
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=5",
+    "hypothesis>=6",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "import-linter>=2.1",
+    # Present so the pydantic mypy plugin and service settings always resolve
+    # when typechecking, regardless of which members are synced.
+    "pydantic>=2.7",
+    "pydantic-settings>=2.4",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+# Collect the root architecture tests plus every package/service test suite.
+testpaths = ["tests", "packages", "services"]
+# importlib mode lets same-named test files (test_smoke.py, test_boot.py) coexist
+# across packages without __init__.py shims or sys.path collisions.
+addopts = "-q --strict-markers --strict-config --import-mode=importlib"
+asyncio_mode = "auto"
+# Extend (not replace) pytest's default ignores: ".*" keeps .venv/.hypothesis/.git
+# skipped; "src" keeps package source out of collection (it holds no tests).
+norecursedirs = [".*", "src", "build", "dist", "*.egg", "*.egg-info", "node_modules"]

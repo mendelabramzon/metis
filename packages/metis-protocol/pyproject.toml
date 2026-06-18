@@ -1,0 +1,22 @@
+[project]
+name = "metis-protocol"
+version = "0.0.0"
+description = "Metis shared contracts: schemas, events, interfaces, policy vocabulary"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+# The reusable contract-test suites under metis_protocol.contract_tests import pytest.
+contract-tests = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/metis_protocol"]

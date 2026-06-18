@@ -1,0 +1,134 @@
+{
+  "$defs": {
+    "ClaimRef": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id"
+      ],
+      "title": "ClaimRef",
+      "type": "object"
+    },
+    "MemCellRef": {
+      "additionalProperties": false,
+      "properties": {
+        "mem_cell_id": {
+          "title": "Mem Cell Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mem_cell_id"
+      ],
+      "title": "MemCellRef",
+      "type": "object"
+    },
+    "SourceSpanRef": {
+      "additionalProperties": false,
+      "description": "Evidence pointer. Carries the owning artifact (and doc) for direct resolution.",
+      "properties": {
+        "artifact_id": {
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "doc_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doc Id"
+        },
+        "source_span_id": {
+          "title": "Source Span Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_span_id",
+        "artifact_id"
+      ],
+      "title": "SourceSpanRef",
+      "type": "object"
+    },
+    "WikiPageRef": {
+      "additionalProperties": false,
+      "properties": {
+        "wiki_page_id": {
+          "title": "Wiki Page Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "wiki_page_id"
+      ],
+      "title": "WikiPageRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "What retrieval found for a query, as typed references (resolved later).",
+  "properties": {
+    "claims": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ClaimRef"
+      },
+      "title": "Claims",
+      "type": "array"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "mem_cells": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MemCellRef"
+      },
+      "title": "Mem Cells",
+      "type": "array"
+    },
+    "query_id": {
+      "title": "Query Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_spans": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SourceSpanRef"
+      },
+      "title": "Source Spans",
+      "type": "array"
+    },
+    "wiki_pages": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/WikiPageRef"
+      },
+      "title": "Wiki Pages",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "query_id"
+  ],
+  "title": "EvidenceSet",
+  "type": "object"
+}

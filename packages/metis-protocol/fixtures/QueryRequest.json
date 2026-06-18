@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "id": "qry_00000000000000000000000000000001",
+  "workspace_id": "ws_00000000000000000000000000000001",
+  "text": "Who is the CTO of Acme?",
+  "max_sensitivity": "confidential",
+  "top_k": 10
+}

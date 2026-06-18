@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "envelope_id": "evl_00000000000000000000000000000001",
+  "event_name": "claims.extracted",
+  "event_version": 1,
+  "occurred_at": "2026-01-01T12:00:00Z",
+  "workspace_id": "ws_00000000000000000000000000000001",
+  "trace_id": "trace-1",
+  "payload_schema_version": "1.0",
+  "payload": {
+    "note": "example payload"
+  }
+}

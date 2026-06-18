@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Environments / uv
+.venv/
+.uv/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Local env files (templates are tracked)
+.env
+.env.*
+!.env.example
+
+# Transient boundary-enforcement probe (see tests/architecture); never commit it
+**/_boundary_violation_probe.py
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,57 @@
+# Executable encoding of the dependency DAG from docs/package-decomposition.md
+# and docs/architecture/package-boundaries.md (ADR 0003). Run with `make boundaries`.
+#
+# Allowed edges:
+#   core        -> protocol
+#   ingestion   -> protocol, core, (controlled) skills
+#   maintainer  -> protocol, core
+#   runtime     -> protocol, core, skills
+#   skills      -> protocol
+[importlinter]
+root_packages =
+    metis_protocol
+    metis_core
+    metis_ingestion
+    metis_maintainer
+    metis_runtime
+    metis_skills
+
+[importlinter:contract:protocol-independence]
+name = metis-protocol must not import any other metis package
+type = forbidden
+source_modules =
+    metis_protocol
+forbidden_modules =
+    metis_core
+    metis_ingestion
+    metis_maintainer
+    metis_runtime
+    metis_skills
+
+[importlinter:contract:core-spine]
+name = Dependency spine: protocol < core < {ingestion | maintainer | runtime}
+type = layers
+layers =
+    metis_ingestion | metis_maintainer | metis_runtime
+    metis_core
+    metis_protocol
+
+[importlinter:contract:skills-isolation]
+name = metis-skills may import only metis-protocol
+type = forbidden
+source_modules =
+    metis_skills
+forbidden_modules =
+    metis_core
+    metis_ingestion
+    metis_maintainer
+    metis_runtime
+
+[importlinter:contract:skills-consumers]
+name = Only metis-runtime (and controlled metis-ingestion) may import metis-skills
+type = forbidden
+source_modules =
+    metis_core
+    metis_maintainer
+forbidden_modules =
+    metis_skills
