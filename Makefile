@@ -1,5 +1,5 @@
 # Metis developer commands. `make check` is the single gate run locally and in CI.
-.PHONY: install format lint typecheck test boundaries check clean help
+.PHONY: install format lint typecheck test boundaries check eval clean help
 
 help:
 	@echo "Targets:"
@@ -10,6 +10,7 @@ help:
 	@echo "  test        pytest from the repo root"
 	@echo "  boundaries  enforce import-linter dependency contracts"
 	@echo "  check       boundaries + lint + typecheck + test"
+	@echo "  eval        replay the small golden workspace (Stage 13 regression gate)"
 
 install:
 	uv sync --all-packages
@@ -30,6 +31,9 @@ test:
 
 boundaries:
 	uv run lint-imports --config .importlinter
+
+eval:
+	uv run python -m metis_eval.ci.small_golden
 
 check: boundaries lint typecheck test
 

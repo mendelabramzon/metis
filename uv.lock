@@ -1215,16 +1215,20 @@ source = { editable = "eval" }
 dependencies = [
     { name = "httpx" },
     { name = "metis-core" },
+    { name = "metis-ingestion" },
     { name = "metis-maintainer" },
     { name = "metis-protocol" },
+    { name = "metis-runtime" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "metis-core", editable = "packages/metis-core" },
+    { name = "metis-ingestion", editable = "packages/metis-ingestion" },
     { name = "metis-maintainer", editable = "packages/metis-maintainer" },
     { name = "metis-protocol", editable = "packages/metis-protocol" },
+    { name = "metis-runtime", editable = "packages/metis-runtime" },
 ]
 
 [[package]]

@@ -4,7 +4,7 @@ A workspace memory/context engine: evidence-first ingestion, structured memory,
 background maintenance, a compiled wiki projection, retrieval/chat, and
 skill-based actions.
 
-**Stages 0–12 are implemented**: the monorepo skeleton and machine-enforced package
+**Stages 0–13 are implemented**: the monorepo skeleton and machine-enforced package
 boundaries (Stage 0), the `metis-protocol` contracts (Stage 1), the `metis-core` durable
 substrate (Stage 2), local-first ingestion into cited evidence (Stage 3), the policy-bound
 model router (Stage 4), the memory core — maintainer-time consolidation, versioned
@@ -26,7 +26,10 @@ ACL→sensitivity mapping) that emits the same `RawArtifact`/`NormalizedDoc` con
 recorded fixtures with no live credentials (Stage 11), and the API gateway — a thin FastAPI layer
 over the packages with scoped auth, source/ingest/query/wiki/skill/jobs/audit routers, one unified
 approval inbox, and a minimal operator console, exercising a real ingest→query→cited-answer loop
-(Stage 12). See
+(Stage 12), and the evaluation harness — a deterministic, Docker-free golden-workspace benchmark
+across parse/claim/span/retrieval/groundedness/contradiction/wiki-loss/skill-safety/policy
+dimensions, with regression thresholds, baseline-delta reports, and an LLM-judge calibrated against
+deterministic checks (`make eval`) (Stage 13). See
 [`docs/plans/high-level-implementation-plan.md`](docs/plans/high-level-implementation-plan.md)
 for the staged roadmap and [`docs/`](docs/README.md) for the documentation index.
 
