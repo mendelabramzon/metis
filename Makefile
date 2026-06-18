@@ -24,7 +24,7 @@ lint:
 	uv run ruff format --check .
 
 typecheck:
-	uv run mypy packages/*/src services/*/src eval/src
+	uv run mypy packages/*/src services/*/src eval/src deploy/src
 
 test:
 	uv run pytest

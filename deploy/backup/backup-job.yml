@@ -1,0 +1,25 @@
+# Scheduled backup (profile-gated one-shot). Run from host cron:
+#   docker compose -f docker-compose.yml -f backup/backup-job.yml --profile backup run --rm backup
+# Backs up the DB (pg_dump) and the wiki tree; object-store blobs are covered by snapshotting the
+# `miniodata` volume (see runbook) or the programmatic metis_deploy.run_backup. Consistency: take
+# the snapshot during a quiet window; the DB dump is the canonical truth tier (Stage 14 / ADR 0023).
+name: metis
+
+services:
+  backup:
+    profiles: ["backup"]
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-metis}
+    entrypoint: ["/bin/sh", "/app/deploy/backup/run-backup.sh"]
+    volumes:
+      - ./backup/run-backup.sh:/app/deploy/backup/run-backup.sh:ro
+      - wiki:/app/wiki:ro
+      - backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  backups:
+  wiki:

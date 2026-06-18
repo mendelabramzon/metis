@@ -1,0 +1,35 @@
+# OpenTelemetry collector: receive OTLP from the gateway + workers, export metrics/traces.
+# Metric names + labels are cataloged in src/metis_deploy/observability.py.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+  # Bound cardinality: drop high-cardinality per-artifact/per-claim labels before export.
+  attributes/bound:
+    actions:
+      - { key: artifact_id, action: delete }
+      - { key: claim_id, action: delete }
+
+exporters:
+  debug:
+    verbosity: normal
+  # Scrape target for the dashboards (ingestion lag, model spend, policy denials, job failures).
+  prometheus:
+    endpoint: 0.0.0.0:9464
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [attributes/bound, batch]
+      exporters: [prometheus, debug]

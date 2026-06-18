@@ -1,0 +1,22 @@
+# Cloud model profile: a hosted provider for non-restricted data. Restricted data STILL routes
+# to a local provider (the Stage 4 router blocks external providers for restricted sensitivity),
+# so this profile does not weaken the data-residency guarantee. The API key comes from the
+# environment / the Stage 14 secret store — never a committed file.
+#   docker compose -f docker-compose.yml -f compose/profiles.cloud.yml up
+name: metis
+
+services:
+  gateway:
+    environment:
+      METIS_MODEL_PROFILE: cloud
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY for the cloud profile}
+
+  runtime-worker:
+    environment:
+      METIS_MODEL_PROFILE: cloud
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY for the cloud profile}
+
+  maintainer-worker:
+    environment:
+      METIS_MODEL_PROFILE: cloud
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set ANTHROPIC_API_KEY for the cloud profile}

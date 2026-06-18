@@ -4,7 +4,7 @@ A workspace memory/context engine: evidence-first ingestion, structured memory,
 background maintenance, a compiled wiki projection, retrieval/chat, and
 skill-based actions.
 
-**Stages 0–14 are implemented**: the monorepo skeleton and machine-enforced package
+**All stages (0–15) are implemented.** The monorepo skeleton and machine-enforced package
 boundaries (Stage 0), the `metis-protocol` contracts (Stage 1), the `metis-core` durable
 substrate (Stage 2), local-first ingestion into cited evidence (Stage 3), the policy-bound
 model router (Stage 4), the memory core — maintainer-time consolidation, versioned
@@ -33,7 +33,10 @@ deterministic checks (`make eval`) (Stage 13), and the security/privacy hardenin
 encryption and encrypted connector credentials, restricted-data provider blocking, layered
 prompt-injection defense and a single taint chokepoint, trust-tiered sandbox isolation profiles,
 right-to-erasure across the truth hierarchy, audit hash-chain verification, backup/restore, and
-webhook signature verification (Stage 14). See
+webhook signature verification (Stage 14), and deployment/operational readiness — a single-node
+Docker Compose stack with local/cloud/GPU model profiles, migrations-on-deploy, real-dependency
+health checks, scheduled backup/restore, an OpenTelemetry observability surface (model spend, policy
+denials, ingestion lag, job failures), and an operator runbook (Stage 15). See
 [`docs/plans/high-level-implementation-plan.md`](docs/plans/high-level-implementation-plan.md)
 for the staged roadmap and [`docs/`](docs/README.md) for the documentation index.
 
@@ -76,8 +79,10 @@ services/
   maintainer-worker/ background maintenance jobs (metis-maintainer-worker)
   runtime-worker/    retrieval/agent jobs (metis-runtime-worker)
 eval/                evaluation harness: golden fixtures + quality comparisons (metis-eval)
+deploy/              single-node Compose stack, model profiles, health/backup, runbook (metis-deploy)
 docs/                plans, ADRs, architecture, references
 tests/architecture/  import-boundary enforcement (positive + negative)
+tests/security/      Stage 14 security acceptance tests
 ```
 
 ## Package boundaries

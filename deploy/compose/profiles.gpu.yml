@@ -1,0 +1,40 @@
+# GPU-optional profile: a local vLLM runtime with a GPU reservation. Still non-external, so
+# all data stays on the node. Requires the NVIDIA container runtime.
+#   docker compose -f docker-compose.yml -f compose/profiles.gpu.yml up
+name: metis
+
+services:
+  model-runtime:
+    image: vllm/vllm-openai:latest
+    command: ["--model", "${METIS_GPU_MODEL:-meta-llama/Llama-3.1-8B-Instruct}"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  gateway:
+    environment:
+      METIS_MODEL_PROFILE: gpu
+      METIS_LOCAL_MODEL_ENDPOINT: http://model-runtime:8000/v1
+    depends_on:
+      model-runtime:
+        condition: service_healthy
+
+  runtime-worker:
+    environment:
+      METIS_MODEL_PROFILE: gpu
+      METIS_LOCAL_MODEL_ENDPOINT: http://model-runtime:8000/v1
+
+  maintainer-worker:
+    environment:
+      METIS_MODEL_PROFILE: gpu
+      METIS_LOCAL_MODEL_ENDPOINT: http://model-runtime:8000/v1

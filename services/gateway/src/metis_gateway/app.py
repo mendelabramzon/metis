@@ -49,7 +49,7 @@ def create_app(settings: GatewaySettings | None = None) -> FastAPI:
 
 
 def run(*, dry_run: bool = False, settings: GatewaySettings | None = None) -> GatewaySettings:
-    """Build settings + the app and return the settings; serving itself is Stage 15."""
+    """Build settings + the app, then serve it with uvicorn (``--dry-run`` wires and stops)."""
     settings = settings if settings is not None else GatewaySettings()
     logging.basicConfig(level=settings.log_level)
     app = create_app(settings)
@@ -61,8 +61,11 @@ def run(*, dry_run: bool = False, settings: GatewaySettings | None = None) -> Ga
     )
     if dry_run:
         logger.info("dry run complete; not serving")
-    else:
-        logger.info("app assembled; ASGI serving is wired in Stage 15 (deployment)")
+        return settings
+
+    import uvicorn  # deferred so the app/test import path doesn't require the server
+
+    uvicorn.run(app, host=settings.host, port=settings.port, log_level=settings.log_level.lower())
     return settings
 
 

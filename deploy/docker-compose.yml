@@ -1,0 +1,145 @@
+# Metis single-node stack (Stage 15). Bring up with a model profile overlay, e.g.:
+#   docker compose -f docker-compose.yml -f compose/profiles.local.yml up
+# Migrations run once (the `migrate` service) before any app service starts.
+name: metis
+
+# Shared app configuration. Real secrets come from the environment / Stage 14 secret store,
+# never from a committed file — see env/.env.example for the documented surface.
+x-app-env: &app-env
+  METIS_CORE_DATABASE_URL: postgresql+asyncpg://metis:${POSTGRES_PASSWORD:-metis}@postgres:5432/metis
+  METIS_CORE_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
+  METIS_CORE_OBJECT_STORE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  METIS_CORE_OBJECT_STORE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  METIS_MODEL_PROFILE: ${METIS_MODEL_PROFILE:-local}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: metis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-metis}
+      POSTGRES_DB: metis
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metis -d metis"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  # One-shot migration step: runs Alembic to head, then exits. App services wait for it
+  # to complete so migrations never race across workers (single init step).
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/images/gateway.Dockerfile
+    entrypoint: ["/bin/sh", "/app/deploy/migrate/entrypoint.sh"]
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/images/gateway.Dockerfile
+    environment: *app-env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
+  ingest-worker:
+    build:
+      context: ..
+      dockerfile: deploy/images/ingest-worker.Dockerfile
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import metis_ingest_worker"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  maintainer-worker:
+    build:
+      context: ..
+      dockerfile: deploy/images/maintainer-worker.Dockerfile
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import metis_maintainer_worker"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  runtime-worker:
+    build:
+      context: ..
+      dockerfile: deploy/images/runtime-worker.Dockerfile
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import metis_runtime_worker"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel/otel-collector.yml"]
+    volumes:
+      - ./observability/otel-collector.yml:/etc/otel/otel-collector.yml:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  miniodata:

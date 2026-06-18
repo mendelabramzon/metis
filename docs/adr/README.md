@@ -40,3 +40,4 @@ are recorded in the Stage 0 plan's decision table rather than as standalone ADRs
 | [0021](0021-api-gateway-and-operator-surfaces.md) | API/UI/ops gateway: thin HTTP layer, scoped auth, and one approval inbox | Accepted |
 | [0022](0022-evaluation-harness-and-golden-benchmark.md) | Evaluation harness: deterministic golden benchmark, thresholds, and judge calibration | Accepted |
 | [0023](0023-security-privacy-hardening.md) | Security/privacy hardening: secrets, taint, sandbox tiers, deletion, backup, audit integrity | Accepted |
+| [0024](0024-deployment-and-operational-readiness.md) | Deployment: single-node Compose stack, model profiles, health checks, backup/restore | Accepted |
