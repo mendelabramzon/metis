@@ -40,3 +40,4 @@ class CoreSettings(BaseServiceSettings):
     object_store_region: str = "us-east-1"
     object_store_access_key: str = "minioadmin"
     object_store_secret_key: str = "minioadmin"
+    wiki_repo_path: str = "./wiki"  # git-backed wiki projection (Stage 7)
