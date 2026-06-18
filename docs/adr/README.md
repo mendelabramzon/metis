@@ -33,3 +33,4 @@ are recorded in the Stage 0 plan's decision table rather than as standalone ADRs
 | [0014](0014-memory-core-consolidation-and-embeddings.md) | Memory core: consolidation placement, embedding lock-in, and hybrid lookup | Accepted |
 | [0015](0015-maintainer-scheduling-and-memory-substrate.md) | Maintainer scheduling, idempotency, and the memory-store extension | Accepted |
 | [0016](0016-wiki-compiler-and-git-projection.md) | Wiki compiler: git projection, deterministic structure, and the WiCER loop | Accepted |
+| [0017](0017-retrieval-and-query-runtime.md) | Retrieval and query runtime | Accepted |

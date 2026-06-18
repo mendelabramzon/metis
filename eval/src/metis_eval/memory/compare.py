@@ -67,7 +67,7 @@ async def run_memory_eval(
     ks: tuple[int, ...] = (1, 2, 3),
 ) -> dict[int, EvalReport]:
     corpus = corpus if corpus is not None else golden_workspace()
-    await _load(sessionmaker, router, corpus, caller=caller)
+    await load_corpus(sessionmaker, router, corpus, caller=caller)
     lookup = MemoryIndexLookup(sessionmaker, router)
 
     reports: dict[int, EvalReport] = {}
@@ -100,13 +100,15 @@ async def run_memory_eval(
     return reports
 
 
-async def _load(
+async def load_corpus(
     sessionmaker: async_sessionmaker[AsyncSession],
     router: EmbeddingRouter,
     corpus: Corpus,
     *,
-    caller: ModelCaller | None,
+    caller: ModelCaller | None = None,
 ) -> None:
+    """Load a golden corpus into the substrate: evidence rows, consolidated+indexed cells, and
+    indexed segments. Shared by the memory and retrieval evals."""
     # Evidence rows first, parents before children (FKs are non-deferrable).
     async with unit_of_work(sessionmaker) as session:
         session.add_all([raw_artifact_to_row(raw) for raw in corpus.raw_artifacts])

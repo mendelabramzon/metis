@@ -10,8 +10,10 @@ substrate (Stage 2), local-first ingestion into cited evidence (Stage 3), the po
 model router (Stage 4), the memory core — maintainer-time consolidation, versioned
 embeddings, and hybrid memory retrieval (Stage 5), the maintainer worker — scheduled,
 idempotent background jobs for contradictions, revision, refresh, foresight, and wiki-patch
-proposal (Stage 6), and the wiki compiler — a git-backed, claim-cited markdown projection with
-the WiCER compile→evaluate→refine loop and an approval/commit flow (Stage 7). See
+proposal (Stage 6), the wiki compiler — a git-backed, claim-cited markdown projection with
+the WiCER compile→evaluate→refine loop and an approval/commit flow (Stage 7), and the query
+runtime — sensitivity-bounded hybrid retrieval, context packing, sufficiency-gated answering
+with citation verification, and contradiction surfacing (Stage 8). See
 [`docs/plans/high-level-implementation-plan.md`](docs/plans/high-level-implementation-plan.md)
 for the staged roadmap and [`docs/`](docs/README.md) for the documentation index.
 

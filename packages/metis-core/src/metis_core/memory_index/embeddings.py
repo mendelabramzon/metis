@@ -40,6 +40,57 @@ DEFAULT_EMBEDDING_MODEL: Final = "bge-m3"
 DEFAULT_EMBEDDING_VERSION: Final = "bge-m3@1"
 
 _TOKEN = re.compile(r"[a-z0-9]+")
+# Dropped from the stub's bag-of-words so similarity tracks content words, not function words —
+# otherwise unrelated texts collide on "is/the/of" and retrieval looks falsely relevant. A real
+# embedding model handles this semantically; the stub approximates it by ignoring stopwords.
+_STOPWORDS = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "do",
+        "does",
+        "did",
+        "for",
+        "from",
+        "had",
+        "has",
+        "have",
+        "how",
+        "in",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "that",
+        "the",
+        "this",
+        "to",
+        "was",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "will",
+        "with",
+        "you",
+        "your",
+        "we",
+        "they",
+        "he",
+        "she",
+    ]
+)
 
 
 @runtime_checkable
@@ -106,6 +157,8 @@ class StubEmbedder:
     def _embed_one(self, text: str) -> list[float]:
         vector = [0.0] * self._dim
         for token in _TOKEN.findall(text.lower()):
+            if token in _STOPWORDS:
+                continue  # similarity should track content words, not function words
             digest = hashlib.sha1(token.encode("utf-8")).digest()
             index = int.from_bytes(digest[:4], "big") % self._dim
             sign = 1.0 if digest[4] & 1 else -1.0
