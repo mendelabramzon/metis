@@ -43,6 +43,12 @@ dev = [
     # when typechecking, regardless of which members are synced.
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
+    # metis-core tests run the protocol contract suites against real engines.
+    "testcontainers[postgres,minio]>=4.8",
+    # Type stubs so the boto3-backed object store typechecks under mypy --strict.
+    "boto3-stubs[s3]>=1.34",
+    # Sync driver used only by the testcontainers Postgres readiness check.
+    "psycopg2-binary>=2.9",
 ]
 
 [tool.pytest.ini_options]

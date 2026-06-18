@@ -2,6 +2,9 @@
 target-version = "py312"
 line-length = 100
 
+# Alembic migration scripts use generated boilerplate; don't lint them.
+extend-exclude = ["**/migrations/versions", "**/migrations/env.py"]
+
 # First-party source roots, for import sorting and resolution.
 src = [
     "packages/metis-protocol/src",
@@ -30,6 +33,10 @@ select = [
     "PT",   # flake8-pytest-style
     "RUF",  # ruff-specific
 ]
+
+[lint.per-file-ignores]
+# conftest may set environment variables before importing test infrastructure.
+"**/conftest.py" = ["E402"]
 
 [lint.isort]
 known-first-party = [

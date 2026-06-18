@@ -9,7 +9,7 @@ implementation steps, tests/fixtures, acceptance criteria, and risks.
 |---|---|---|
 | 0 | [Repository and architecture guardrails](stage-00-repo-guardrails.md) | Implemented |
 | 1 | [`metis-protocol`](stage-01-protocol.md) | Implemented |
-| 2 | [`metis-core`](stage-02-core.md) | Planned |
+| 2 | [`metis-core`](stage-02-core.md) | Implemented |
 | 3 | [Local-first ingestion pipeline](stage-03-ingestion.md) | Planned |
 | 4 | [Model router and extraction quality loop](stage-04-model-router.md) | Planned |
 | 5 | [Memory core](stage-05-memory-core.md) | Planned |
