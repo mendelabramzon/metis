@@ -4,9 +4,11 @@ A workspace memory/context engine: evidence-first ingestion, structured memory,
 background maintenance, a compiled wiki projection, retrieval/chat, and
 skill-based actions.
 
-This repository is at **Stage 0**: the monorepo skeleton, shared tooling, and
-machine-enforced package boundaries. No domain logic exists yet — packages ship
-empty except for a version marker. See
+**Stages 0–5 are implemented**: the monorepo skeleton and machine-enforced package
+boundaries (Stage 0), the `metis-protocol` contracts (Stage 1), the `metis-core` durable
+substrate (Stage 2), local-first ingestion into cited evidence (Stage 3), the policy-bound
+model router (Stage 4), and the memory core — maintainer-time consolidation, versioned
+embeddings, and hybrid memory retrieval (Stage 5). See
 [`docs/plans/high-level-implementation-plan.md`](docs/plans/high-level-implementation-plan.md)
 for the staged roadmap and [`docs/`](docs/README.md) for the documentation index.
 
@@ -48,6 +50,7 @@ services/
   ingest-worker/     ingestion jobs (metis-ingest-worker)
   maintainer-worker/ background maintenance jobs (metis-maintainer-worker)
   runtime-worker/    retrieval/agent jobs (metis-runtime-worker)
+eval/                evaluation harness: golden fixtures + quality comparisons (metis-eval)
 docs/                plans, ADRs, architecture, references
 tests/architecture/  import-boundary enforcement (positive + negative)
 ```

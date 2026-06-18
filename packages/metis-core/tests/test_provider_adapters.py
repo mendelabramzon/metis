@@ -2,10 +2,17 @@
 
 import json
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
-from metis_core.llm import AnthropicProvider, ModelRefusalError, schema_for
+from metis_core.llm import (
+    AnthropicProvider,
+    ModelError,
+    ModelRefusalError,
+    OpenAICompatProvider,
+    schema_for,
+)
 from metis_protocol import (
     ExtractionBatch,
     ModelMessage,
@@ -104,3 +111,78 @@ async def test_frontier_task_uses_opus() -> None:
     )
     await provider.generate(request)
     assert client.messages.calls[0]["model"] == "claude-opus-4-8"
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
+
+
+class _FakeHTTPClient:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+        self.posted: list[dict[str, Any]] = []
+
+    async def post(self, url: str, json: dict[str, Any]) -> _FakeResponse:
+        self.posted.append(json)
+        return _FakeResponse(self._payload)
+
+
+_OK_JSON = {
+    "choices": [{"message": {"content": '{"x": 1}'}, "finish_reason": "stop"}],
+    "usage": {"prompt_tokens": 3, "completion_tokens": 4},
+}
+
+
+def _openai_request() -> ModelRequest:
+    return ModelRequest(
+        task_class=ModelTaskClass.EXTRACT_CLAIMS,
+        messages=(ModelMessage(role="user", content="doc"),),
+        sensitivity=Sensitivity.INTERNAL,
+        response_schema=schema_for(ExtractionBatch),
+    )
+
+
+async def test_openai_compat_error_body_raises_model_error() -> None:
+    # A local runtime (e.g. Ollama) error object must surface cleanly, not as a KeyError.
+    client = _FakeHTTPClient({"error": {"message": "failed to load model vocabulary"}})
+    provider = OpenAICompatProvider(client, name="ollama", model="m", is_external=False)
+    with pytest.raises(ModelError, match="failed to load model vocabulary"):
+        await provider.generate(_openai_request())
+
+
+async def test_openai_compat_non_json_content_does_not_crash() -> None:
+    # Non-JSON content is left for the repair loop, not parsed eagerly into a crash.
+    payload = {
+        "choices": [{"message": {"content": "not json at all"}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 4},
+    }
+    provider = OpenAICompatProvider(
+        _FakeHTTPClient(payload), name="ollama", model="m", is_external=False
+    )
+    response = await provider.generate(_openai_request())
+    assert response.structured is None
+    assert response.text == "not json at all"
+
+
+async def test_local_provider_uses_json_object_mode_with_schema_in_prompt() -> None:
+    # Local default: looser json_object mode (no grammar load), schema given in-prompt.
+    client = _FakeHTTPClient(_OK_JSON)
+    provider = OpenAICompatProvider(client, name="ollama", model="m", is_external=False)
+    await provider.generate(_openai_request())
+    sent = client.posted[0]
+    assert sent["response_format"] == {"type": "json_object"}
+    assert any("JSON Schema" in message["content"] for message in sent["messages"])
+
+
+async def test_external_provider_uses_strict_json_schema_mode() -> None:
+    # External default: precise grammar-constrained json_schema decoding, no prompt injection.
+    client = _FakeHTTPClient(_OK_JSON)
+    provider = OpenAICompatProvider(client, name="vllm", model="m", is_external=True)
+    await provider.generate(_openai_request())
+    sent = client.posted[0]
+    assert sent["response_format"]["type"] == "json_schema"
+    assert all("JSON Schema" not in message["content"] for message in sent["messages"])

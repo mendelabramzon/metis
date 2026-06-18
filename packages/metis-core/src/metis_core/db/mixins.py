@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Mapped, mapped_column
 
-from metis_core.db.types import Body, Id, TZDateTime
+from metis_core.db.types import Body, Embedding, Id, TZDateTime
 
 
 class IdMixin:
@@ -50,3 +50,16 @@ class ArtifactRow(
     BodyMixin,
 ):
     """Common columns shared by every stored artifact table."""
+
+
+class EmbeddedArtifactRow(ArtifactRow):
+    """An artifact table that also carries a versioned retrieval embedding.
+
+    The vector is filled in by ``metis_core.memory_index`` *after* the row is written
+    (it's a derived index detail, not protocol truth), and ``embedding_version`` records
+    the model that produced it, so a model change is a re-index rather than a silent
+    dimension/semantics mismatch (ADR 0014).
+    """
+
+    embedding: Mapped[Embedding] = mapped_column()
+    embedding_version: Mapped[str | None] = mapped_column(nullable=True, index=True)

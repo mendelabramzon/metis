@@ -16,7 +16,7 @@ dependencies = []
 package = false
 
 [tool.uv.workspace]
-members = ["packages/*", "services/*"]
+members = ["packages/*", "services/*", "eval"]
 
 # Cross-package dependencies resolve from the workspace rather than PyPI.
 # Declared once at the root and inherited by every member.
@@ -53,8 +53,8 @@ dev = [
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-# Collect the root architecture tests plus every package/service test suite.
-testpaths = ["tests", "packages", "services"]
+# Collect the root architecture tests plus every package/service/eval test suite.
+testpaths = ["tests", "packages", "services", "eval"]
 # importlib mode lets same-named test files (test_smoke.py, test_boot.py) coexist
 # across packages without __init__.py shims or sys.path collisions.
 addopts = "-q --strict-markers --strict-config --import-mode=importlib"

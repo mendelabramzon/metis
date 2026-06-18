@@ -11,8 +11,14 @@ from sqlalchemy import ForeignKey, Index, Integer, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from metis_core.db.base import Base
-from metis_core.db.mixins import ArtifactRow, BodyMixin, IdMixin, VersionMixin, WorkspaceMixin
-from metis_core.db.types import Embedding
+from metis_core.db.mixins import (
+    ArtifactRow,
+    BodyMixin,
+    EmbeddedArtifactRow,
+    IdMixin,
+    VersionMixin,
+    WorkspaceMixin,
+)
 
 
 class RawArtifactRow(Base, ArtifactRow):
@@ -39,7 +45,7 @@ class ParsedDocRow(Base, ArtifactRow):
     doc_id: Mapped[str] = mapped_column(ForeignKey("normalized_docs.id"), index=True)
 
 
-class SegmentRow(Base, ArtifactRow):
+class SegmentRow(Base, EmbeddedArtifactRow):
     __tablename__ = "segments"
     __table_args__ = (
         Index(
@@ -52,8 +58,8 @@ class SegmentRow(Base, ArtifactRow):
     parsed_doc_id: Mapped[str] = mapped_column(ForeignKey("parsed_docs.id"), index=True)
     doc_id: Mapped[str] = mapped_column(ForeignKey("normalized_docs.id"), index=True)
     order: Mapped[int] = mapped_column(Integer)
-    # Reserved for retrieval (Stage 8); dimensionless until an embedding model is fixed.
-    embedding: Mapped[Embedding] = mapped_column()
+    # Chunk embedding for naive-RAG retrieval (dim fixed in Stage 5, ADR 0014) inherited
+    # from EmbeddedArtifactRow.
 
 
 class SourceSpanRow(Base, IdMixin, WorkspaceMixin, VersionMixin, BodyMixin):

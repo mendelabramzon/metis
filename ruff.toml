@@ -17,6 +17,7 @@ src = [
     "services/ingest-worker/src",
     "services/maintainer-worker/src",
     "services/runtime-worker/src",
+    "eval/src",
     "tests",
 ]
 
@@ -50,6 +51,7 @@ known-first-party = [
     "metis_ingest_worker",
     "metis_maintainer_worker",
     "metis_runtime_worker",
+    "metis_eval",
 ]
 
 [format]

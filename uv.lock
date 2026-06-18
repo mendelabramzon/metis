@@ -11,6 +11,7 @@ resolution-markers = [
 members = [
     "metis",
     "metis-core",
+    "metis-eval",
     "metis-gateway",
     "metis-ingest-worker",
     "metis-ingestion",
@@ -1144,6 +1145,25 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.30" },
+]
+
+[[package]]
+name = "metis-eval"
+version = "0.0.0"
+source = { editable = "eval" }
+dependencies = [
+    { name = "httpx" },
+    { name = "metis-core" },
+    { name = "metis-maintainer" },
+    { name = "metis-protocol" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "metis-core", editable = "packages/metis-core" },
+    { name = "metis-maintainer", editable = "packages/metis-maintainer" },
+    { name = "metis-protocol", editable = "packages/metis-protocol" },
 ]
 
 [[package]]

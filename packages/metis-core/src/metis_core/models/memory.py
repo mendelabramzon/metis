@@ -12,11 +12,11 @@ from sqlalchemy import Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from metis_core.db.base import Base
-from metis_core.db.mixins import ArtifactRow
-from metis_core.db.types import Embedding, TZDateTime
+from metis_core.db.mixins import ArtifactRow, EmbeddedArtifactRow
+from metis_core.db.types import TZDateTime
 
 
-class MemCellRow(Base, ArtifactRow):
+class MemCellRow(Base, EmbeddedArtifactRow):
     __tablename__ = "mem_cells"
 
     scene_id: Mapped[str | None] = mapped_column(nullable=True, index=True)
@@ -24,13 +24,14 @@ class MemCellRow(Base, ArtifactRow):
     superseded: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     retracted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     occurred_at: Mapped[TZDateTime | None] = mapped_column(nullable=True)
-    embedding: Mapped[Embedding] = mapped_column()
+    # embedding / embedding_version inherited from EmbeddedArtifactRow.
 
 
-class MemSceneRow(Base, ArtifactRow):
+class MemSceneRow(Base, EmbeddedArtifactRow):
     __tablename__ = "mem_scenes"
 
     topic: Mapped[str | None] = mapped_column(nullable=True)
+    # Scene-summary embedding (RAPTOR-style rollup retrieval) inherited from the mixin.
 
 
 class ProfileRow(Base, ArtifactRow):

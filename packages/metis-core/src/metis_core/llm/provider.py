@@ -20,7 +20,7 @@ from typing import Any
 from pydantic import JsonValue
 
 from metis_core._util import now_utc
-from metis_core.llm.errors import ModelRefusalError
+from metis_core.llm.errors import ModelError, ModelRefusalError
 from metis_core.llm.pricing import cost_usd
 from metis_core.llm.routing_config import DEFAULT_TIER_MODELS, task_tier
 from metis_protocol import (
@@ -205,6 +205,14 @@ class OpenAICompatProvider:
 
     Local endpoints set ``is_external=False`` so they may serve restricted data; the
     HTTP ``client`` (an ``httpx.AsyncClient``-like) is injected.
+
+    Structured output has two modes. ``json_schema`` constrains decoding to a grammar
+    compiled from the schema — precise, but it needs the runtime to load extra vocabulary,
+    which can fail on a memory-tight single node (observed with Ollama). ``json_object`` asks
+    only for a JSON object and supplies the schema *in the prompt*; the caller's pydantic
+    validate-and-repair loop still guarantees a conforming object. Because the grammar load is
+    the fragile part locally, ``json_object`` is the default for local providers and
+    ``json_schema`` for external ones (override with ``json_object_mode``).
     """
 
     def __init__(
@@ -216,6 +224,7 @@ class OpenAICompatProvider:
         is_external: bool,
         tiers: tuple[ModelTier, ...] = (ModelTier.LOCAL,),
         base_url: str = "",
+        json_object_mode: bool | None = None,
     ) -> None:
         self._client = client
         self._name = name
@@ -223,6 +232,8 @@ class OpenAICompatProvider:
         self._is_external = is_external
         self._tiers = frozenset(tiers)
         self._base_url = base_url.rstrip("/")
+        # Default: looser json_object mode for local runtimes, strict json_schema for external.
+        self._json_object_mode = (not is_external) if json_object_mode is None else json_object_mode
 
     @property
     def name(self) -> str:
@@ -238,20 +249,37 @@ class OpenAICompatProvider:
         return self._is_external is False or not is_at_least(sensitivity, Sensitivity.RESTRICTED)
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
-        payload: dict[str, Any] = {
-            "model": self._model,
-            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
-            "max_tokens": request.max_tokens or 4096,
-        }
+        messages = [{"role": m.role, "content": m.content} for m in request.messages]
+        payload: dict[str, Any] = {"model": self._model, "max_tokens": request.max_tokens or 4096}
         if request.response_schema is not None:
-            payload["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {"name": "output", "schema": request.response_schema},
-            }
+            if self._json_object_mode:
+                # Loose JSON mode: the model only needs to emit a JSON object, so no grammar
+                # vocabulary is loaded. The schema goes in-prompt so the model knows the shape.
+                payload["response_format"] = {"type": "json_object"}
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "Respond with ONLY a JSON object conforming to this JSON "
+                        "Schema:\n" + json.dumps(request.response_schema),
+                    }
+                )
+            else:
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {"name": "output", "schema": request.response_schema},
+                }
+        payload["messages"] = messages
         started = now_utc()
         response = await self._client.post(f"{self._base_url}/chat/completions", json=payload)
         finished = now_utc()
         data = response.json()
+
+        # A local runtime (e.g. Ollama) returns an error object instead of choices on
+        # failure — surface it as a clean ModelError, not a KeyError deep in parsing.
+        if not isinstance(data, dict) or "choices" not in data:
+            error = data.get("error") if isinstance(data, dict) else None
+            detail = error.get("message") if isinstance(error, dict) else (error or data)
+            raise ModelError(f"{self._name} returned no choices: {detail}")
 
         choice = data["choices"][0]
         text = choice["message"]["content"] or ""
@@ -259,8 +287,13 @@ class OpenAICompatProvider:
             raise ModelRefusalError(f"{self._model} refused (content filter)")
         usage = data.get("usage", {})
         structured: JsonValue | None = None
-        if request.response_schema is not None and text:
-            structured = json.loads(text)
+        if request.response_schema is not None and text.strip():
+            # Don't crash on non-JSON content; leave it for the structured-output repair
+            # loop, which re-parses the text and retries on failure.
+            try:
+                structured = json.loads(text)
+            except json.JSONDecodeError:
+                structured = None
 
         run = _run(
             request,

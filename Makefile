@@ -23,7 +23,7 @@ lint:
 	uv run ruff format --check .
 
 typecheck:
-	uv run mypy packages/*/src services/*/src
+	uv run mypy packages/*/src services/*/src eval/src
 
 test:
 	uv run pytest

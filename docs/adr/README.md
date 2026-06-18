@@ -30,3 +30,4 @@ are recorded in the Stage 0 plan's decision table rather than as standalone ADRs
 | [0011](0011-core-persistence-and-audit-chaining.md) | Core persistence model and audit chaining | Accepted |
 | [0012](0012-ingestion-parsers-and-deterministic-extraction.md) | Ingestion parsers and deterministic baseline extraction | Accepted |
 | [0013](0013-model-router-placement-and-providers.md) | Model router placement, providers, and policy-bound routing | Accepted |
+| [0014](0014-memory-core-consolidation-and-embeddings.md) | Memory core: consolidation placement, embedding lock-in, and hybrid lookup | Accepted |
