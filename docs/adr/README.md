@@ -28,3 +28,4 @@ are recorded in the Stage 0 plan's decision table rather than as standalone ADRs
 | [0009](0009-service-entrypoint-convention.md) | Service entrypoint convention | Accepted |
 | [0010](0010-protocol-schema-versioning-and-interface-placement.md) | Protocol schema versioning and interface placement | Accepted |
 | [0011](0011-core-persistence-and-audit-chaining.md) | Core persistence model and audit chaining | Accepted |
+| [0012](0012-ingestion-parsers-and-deterministic-extraction.md) | Ingestion parsers and deterministic baseline extraction | Accepted |

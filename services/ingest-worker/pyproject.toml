@@ -5,6 +5,8 @@ description = "Metis ingestion worker service"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic-settings>=2.4",
+    "metis-core",
+    "metis-ingestion",
 ]
 
 [project.scripts]

@@ -44,7 +44,8 @@ class PostgresDocumentStore:
 
     async def put_normalized(self, doc: NormalizedDoc) -> DocId:
         async with unit_of_work(self._sessionmaker) as session:
-            session.add(normalized_doc_to_row(doc))
+            if await session.get(NormalizedDocRow, str(doc.id)) is None:
+                session.add(normalized_doc_to_row(doc))
             await emit_store_audit(
                 session,
                 workspace_id=str(doc.provenance.workspace_id),
@@ -64,7 +65,8 @@ class PostgresDocumentStore:
 
     async def put_parsed(self, doc: ParsedDoc) -> ParsedDocId:
         async with unit_of_work(self._sessionmaker) as session:
-            session.add(parsed_doc_to_row(doc))
+            if await session.get(ParsedDocRow, str(doc.id)) is None:
+                session.add(parsed_doc_to_row(doc))
             await emit_store_audit(
                 session,
                 workspace_id=str(doc.provenance.workspace_id),
@@ -87,7 +89,8 @@ class PostgresDocumentStore:
             return []
         async with unit_of_work(self._sessionmaker) as session:
             for segment in segments:
-                session.add(segment_to_row(segment))
+                if await session.get(SegmentRow, str(segment.id)) is None:
+                    session.add(segment_to_row(segment))
             await emit_store_audit(
                 session,
                 workspace_id=str(segments[0].provenance.workspace_id),
@@ -111,7 +114,8 @@ class PostgresDocumentStore:
     ) -> Sequence[SourceSpanId]:
         async with unit_of_work(self._sessionmaker) as session:
             for span in spans:
-                session.add(source_span_to_row(span, workspace_id=workspace_id))
+                if await session.get(SourceSpanRow, str(span.id)) is None:
+                    session.add(source_span_to_row(span, workspace_id=workspace_id))
         return [span.id for span in spans]
 
     async def get_source_span(self, source_span_id: SourceSpanId) -> SourceSpan | None:

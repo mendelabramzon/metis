@@ -18,3 +18,7 @@ class IngestWorkerSettings(BaseSettings):
     service_name: str = "ingest-worker"
     poll_interval_seconds: float = 5.0
     log_level: str = "INFO"
+    # Folder to ingest and the workspace it belongs to. Database and object-store
+    # configuration come from metis-core's CoreSettings (METIS_CORE_* env).
+    ingest_root: str = "."
+    workspace_id: str = ""
