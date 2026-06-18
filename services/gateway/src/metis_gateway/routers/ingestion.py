@@ -16,7 +16,7 @@ async def ingest(
 ) -> IngestResponse:
     source = backend.sources.get(source_id)  # 404 if unknown
     sensitivity = body.sensitivity if body.sensitivity is not None else source.sensitivity
-    doc_id, claims = backend.workspace.ingest(
+    doc_id, claims = await backend.workspace.ingest(
         filename=body.filename, content=body.content, sensitivity=sensitivity
     )
     return IngestResponse(doc_id=doc_id, artifacts=1, claims=claims)

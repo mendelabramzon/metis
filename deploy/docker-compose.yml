@@ -61,7 +61,9 @@ services:
     build:
       context: ..
       dockerfile: deploy/images/gateway.Dockerfile
-    environment: *app-env
+    environment:
+      <<: *app-env
+      METIS_GATEWAY_BACKEND: postgres  # use the durable stores (Postgres + MinIO + memory index)
     ports:
       - "8000:8000"
     depends_on:

@@ -83,6 +83,14 @@ tar -C ./wiki -xzf wiki.tar.gz
   **every** profile, so switching to `cloud` never weakens data residency. Confirm denials on the
   policy-denials panel.
 
+## Gateway backend
+
+The gateway runs the **Postgres** backend in the stack (`METIS_GATEWAY_BACKEND=postgres`): ingest
+persists raw/normalized/parsed/claims to Postgres + MinIO, consolidates into an indexed memory cell,
+and answers (with citations) through the Stage 8 query engine — so data survives a restart. Run it
+locally without infra by leaving `METIS_GATEWAY_BACKEND=memory` (the default), an in-process engine
+that resets on restart.
+
 ## Known wiring follow-up
 
 The worker **services** (`ingest-worker`, `maintainer-worker`, `runtime-worker`) currently run their

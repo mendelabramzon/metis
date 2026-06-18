@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import argparse
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-from metis_gateway.backend import build_backend
+from metis_gateway.backend import build_backend, build_postgres_backend
 from metis_gateway.errors import install_error_handlers
 from metis_gateway.routers import ALL_ROUTERS
 from metis_gateway.settings import GatewaySettings
@@ -26,12 +28,28 @@ logger = logging.getLogger("metis_gateway")
 _WEB = Path(__file__).parent / "web"
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Build the selected backend at startup (Postgres needs async I/O), dispose it at shutdown."""
+    settings: GatewaySettings = app.state.settings
+    if settings.backend == "postgres":
+        backend = await build_postgres_backend(settings)
+    else:
+        backend = build_backend(settings)
+    app.state.backend = backend
+    logger.info("metis-gateway backend ready (%s)", settings.backend)
+    try:
+        yield
+    finally:
+        if backend.engine is not None:
+            await backend.engine.dispose()
+
+
 def create_app(settings: GatewaySettings | None = None) -> FastAPI:
-    """Build the FastAPI app: backend wiring, routers, error handlers, health, and the debug UI."""
+    """Assemble the app: routers, error handlers, health, the debug UI, and the backend lifespan."""
     settings = settings if settings is not None else GatewaySettings()
-    app = FastAPI(title="Metis Gateway", version="0.0.0")
+    app = FastAPI(title="Metis Gateway", version="0.0.0", lifespan=_lifespan)
     app.state.settings = settings
-    app.state.backend = build_backend(settings)
 
     install_error_handlers(app)
     for router in ALL_ROUTERS:

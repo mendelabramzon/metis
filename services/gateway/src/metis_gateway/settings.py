@@ -28,3 +28,7 @@ class GatewaySettings(BaseServiceSettings):
     operator_token: str = "operator-dev-token"  # full scope (approvals, jobs, audit)
     user_token: str = "user-dev-token"  # query/read scope
     skills_root: str | None = None  # directory of skill packages to register, if any
+
+    # "memory" (in-process) or "postgres" (durable: Postgres + object store + memory index).
+    # The Postgres backend reads DB/object-store config from the core settings (METIS_CORE_*).
+    backend: str = "memory"

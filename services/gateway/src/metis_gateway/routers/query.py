@@ -30,7 +30,9 @@ async def query(body: QueryRequestBody, backend: BackendDep, principal: UserDep)
     if answer is not None:
         citations = [
             Citation(claim_id=claim_id, source_span_id=span_id, artifact_id=artifact_id)
-            for claim_id, span_id, artifact_id in backend.workspace.citation_rows(answer.claims)
+            for claim_id, span_id, artifact_id in await backend.workspace.citation_rows(
+                answer.claims
+            )
         ]
     return QueryResponse(
         run_id=str(run.run_id),

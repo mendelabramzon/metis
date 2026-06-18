@@ -1,10 +1,11 @@
-"""The backend the gateway orchestrates: real engine components over in-memory stores.
+"""The backend the gateway orchestrates: the real engine over in-memory **or** Postgres stores.
 
 The gateway holds no business logic — it wires the *real* Stage 9 ``SkillRunner`` and Stage 10
 ``AgentLoop`` and a workspace that ingests with the *real* Stage 3 ``BaselineExtractor`` (so claims
-and citations are genuine), backed by in-memory stores. The durable Postgres/MinIO wiring is a
-deployment concern (Stage 15); swapping it in means replacing this container, not touching a router.
-That keeps every router a thin HTTP projection and lets the whole suite run with no external infra.
+and citations are genuine). Two backends sit behind the same ``Workspace``/``AuditLog`` seams:
+``build_backend`` (in-memory, no infra) and ``build_postgres_backend`` (durable — Postgres stores +
+object store + the memory index, answering through the Stage 8 ``QueryEngine``). Selecting one is a
+settings change, never a router change, so every router stays a thin HTTP projection.
 """
 
 from __future__ import annotations
@@ -13,7 +14,20 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+from metis_core import CoreSettings, make_engine, make_sessionmaker
+from metis_core.audit import PostgresAuditSink, recent_audit_events
+from metis_core.memory_index import MemoryIndexer, MemoryIndexLookup, stub_router
+from metis_core.objectstore import S3ObjectStore
+from metis_core.stores import (
+    PostgresClaimStore,
+    PostgresDocumentStore,
+    PostgresMemoryStore,
+    PostgresMinioArtifactStore,
+)
 from metis_core.wiki.approval import WikiPatchReview, WikiPatchStatus
 from metis_gateway.errors import ConflictError, NotFoundError
 from metis_gateway.settings import GatewaySettings
@@ -27,6 +41,7 @@ from metis_ingestion import (
     parse_document,
 )
 from metis_ingestion.connectors import ConnectorRegistry
+from metis_maintainer.memory import MemCellBuilder
 from metis_protocol import (
     AgentKind,
     Attribution,
@@ -38,6 +53,7 @@ from metis_protocol import (
     JobId,
     JobState,
     NormalizedDoc,
+    ObjectStore,
     PolicyState,
     QueryRequest,
     Sensitivity,
@@ -48,8 +64,32 @@ from metis_protocol import (
     new_id,
 )
 from metis_runtime.agent import AgentLoop
-from metis_runtime.query import Answer
+from metis_runtime.query import Answer, MemoryRetriever, QueryEngine
 from metis_runtime.skills import ApprovalQueue, SkillRegistry, SkillRunner
+
+
+@runtime_checkable
+class Workspace(Protocol):
+    """The ingest/answer/cite surface the routers use — in-memory or Postgres-backed."""
+
+    async def ingest(
+        self, *, filename: str, content: str, sensitivity: Sensitivity
+    ) -> tuple[str, int]: ...
+
+    async def answer(self, query: QueryRequest) -> Answer: ...  # the AgentLoop's Answerer
+
+    async def citation_rows(
+        self, claim_refs: Sequence[ClaimRef]
+    ) -> list[tuple[str, str | None, str | None]]: ...
+
+
+@runtime_checkable
+class AuditLog(Protocol):
+    """Append + read over the audit log (the read side backs the audit API)."""
+
+    async def emit(self, event: AuditEvent) -> None: ...
+
+    async def recent(self, *, action: str | None = None, limit: int = 100) -> list[AuditEvent]: ...
 
 
 class InMemoryObjectStore:
@@ -81,7 +121,7 @@ class RecordingAuditSink:
     async def emit(self, event: AuditEvent) -> None:
         self.events.append(event)
 
-    def recent(self, *, action: str | None = None, limit: int = 100) -> list[AuditEvent]:
+    async def recent(self, *, action: str | None = None, limit: int = 100) -> list[AuditEvent]:
         chosen = [e for e in self.events if action is None or e.action == action]
         return list(reversed(chosen))[:limit]
 
@@ -100,7 +140,9 @@ class InMemoryWorkspace:
         self._claims: list[Claim] = []
         self._by_id: dict[str, Claim] = {}
 
-    def ingest(self, *, filename: str, content: str, sensitivity: Sensitivity) -> tuple[str, int]:
+    async def ingest(
+        self, *, filename: str, content: str, sensitivity: Sensitivity
+    ) -> tuple[str, int]:
         data = content.encode("utf-8")
         media = mime.detect(filename, data[:512])
         fmt = get_format(media.media_type)
@@ -153,7 +195,7 @@ class InMemoryWorkspace:
             sensitivity=max_sensitivity(*(claim.policy.sensitivity for claim in top)),
         )
 
-    def citation_rows(
+    async def citation_rows(
         self, claim_refs: Sequence[ClaimRef]
     ) -> list[tuple[str, str | None, str | None]]:
         """Resolve claim refs back to (claim_id, source_span_id, artifact_id) for the API."""
@@ -304,7 +346,7 @@ class ApprovalInbox:
         self,
         approvals: ApprovalQueue,
         wiki: WikiInbox,
-        audit: RecordingAuditSink,
+        audit: AuditLog,
         workspace_id: WorkspaceId,
     ) -> None:
         self._approvals = approvals
@@ -352,21 +394,125 @@ class ApprovalInbox:
         )
 
 
+class PostgresWorkspace:
+    """Durable workspace: ingests into Postgres + the memory index, answers via the Stage 8 engine.
+
+    Ingestion persists raw/normalized/parsed/segments/claims to the real stores, then consolidates
+    the claims into an indexed ``MemCell`` so the ``QueryEngine``'s hybrid memory retrieval can find
+    it. Answering and citation resolution go through the real engine + claim store, so the data
+    survives a restart — unlike the in-memory workspace.
+    """
+
+    def __init__(
+        self,
+        *,
+        workspace_id: WorkspaceId,
+        sessionmaker: async_sessionmaker[AsyncSession],
+        object_store: S3ObjectStore,
+        query_engine: QueryEngine,
+    ) -> None:
+        self._workspace_id = workspace_id
+        self._artifacts = PostgresMinioArtifactStore(sessionmaker, object_store)
+        self._documents = PostgresDocumentStore(sessionmaker)
+        self._claims = PostgresClaimStore(sessionmaker)
+        self._memory = PostgresMemoryStore(sessionmaker)
+        self._indexer = MemoryIndexer(sessionmaker, stub_router())
+        self._builder = MemCellBuilder()  # deterministic, evidence-only (no model call)
+        self._query = query_engine
+
+    async def ingest(
+        self, *, filename: str, content: str, sensitivity: Sensitivity
+    ) -> tuple[str, int]:
+        data = content.encode("utf-8")
+        media = mime.detect(filename, data[:512])
+        fmt = get_format(media.media_type)
+        if fmt is None:
+            raise ConflictError(f"unsupported media type {media.media_type!r}")
+        policy = PolicyState(
+            sensitivity=sensitivity,
+            allow_external_models=not is_at_least(sensitivity, Sensitivity.RESTRICTED),
+        )
+        raw = build_raw_artifact(
+            data,
+            workspace_id=self._workspace_id,
+            filename=filename,
+            media_info=media,
+            policy=policy,
+            connector="gateway",
+        )
+        await self._artifacts.put_blob(data)
+        await self._artifacts.put(raw)
+        doc = build_normalized_doc(raw, data, policy=policy)
+        await self._documents.put_normalized(doc)
+        parsed, segments = parse_document(doc, fmt.segmentation)
+        await self._documents.put_parsed(parsed)
+        await self._documents.put_segments(segments)
+        result = BaselineExtractor().extract(doc, parsed.id, segments)
+        await self._documents.put_source_spans(str(self._workspace_id), result.source_spans)
+        await self._claims.write(result.batch)
+        if result.batch.claims:  # consolidate -> index so retrieval can find it
+            cell = await self._builder.build(
+                workspace_id=self._workspace_id, claims=result.batch.claims
+            )
+            await self._memory.write_mem_cell(cell)
+            await self._indexer.index_mem_cell(cell)
+        return str(doc.id), len(result.batch.claims)
+
+    async def answer(self, query: QueryRequest) -> Answer:
+        return await self._query.answer(query)
+
+    async def citation_rows(
+        self, claim_refs: Sequence[ClaimRef]
+    ) -> list[tuple[str, str | None, str | None]]:
+        rows: list[tuple[str, str | None, str | None]] = []
+        for ref in claim_refs:
+            claim = await self._claims.get(ref.claim_id)
+            span = claim.source_spans[0] if claim and claim.source_spans else None
+            rows.append(
+                (
+                    str(ref.claim_id),
+                    str(span.source_span_id) if span else None,
+                    str(span.artifact_id) if span else None,
+                )
+            )
+        return rows
+
+
+class PostgresAuditLog:
+    """Durable audit: appends via the hash-chained sink, reads via ``recent_audit_events``."""
+
+    def __init__(
+        self, sessionmaker: async_sessionmaker[AsyncSession], workspace_id: WorkspaceId
+    ) -> None:
+        self._sink = PostgresAuditSink(sessionmaker)
+        self._sessionmaker = sessionmaker
+        self._workspace_id = workspace_id
+
+    async def emit(self, event: AuditEvent) -> None:
+        await self._sink.emit(event)
+
+    async def recent(self, *, action: str | None = None, limit: int = 100) -> list[AuditEvent]:
+        return await recent_audit_events(
+            self._sessionmaker, workspace_id=str(self._workspace_id), action=action, limit=limit
+        )
+
+
 @dataclass
 class Backend:
-    """Everything the routers depend on, wired once at app assembly."""
+    """Everything the routers depend on, wired once at app assembly (memory or Postgres)."""
 
     workspace_id: WorkspaceId
-    workspace: InMemoryWorkspace
+    workspace: Workspace
     agent: AgentLoop
     skills: SkillRegistry
     skill_runner: SkillRunner
     jobs: InMemoryJobQueue
-    audit: RecordingAuditSink
+    audit: AuditLog
     sources: SourceRegistry
     wiki: WikiInbox
     inbox: ApprovalInbox
-    object_store: InMemoryObjectStore = field(default_factory=InMemoryObjectStore)
+    object_store: ObjectStore = field(default_factory=InMemoryObjectStore)
+    engine: AsyncEngine | None = None  # set for the Postgres backend; disposed at shutdown
 
 
 def build_backend(settings: GatewaySettings) -> Backend:
@@ -402,4 +548,65 @@ def build_backend(settings: GatewaySettings) -> Backend:
         wiki=wiki,
         inbox=inbox,
         object_store=object_store,
+    )
+
+
+async def build_postgres_backend(settings: GatewaySettings) -> Backend:
+    """Assemble the durable backend: Postgres stores + object store + memory index + query engine.
+
+    DB/object-store config comes from the core settings (``METIS_CORE_*``); the engine is returned
+    on the ``Backend`` so the app can dispose it at shutdown.
+    """
+    core = CoreSettings()
+    workspace_id = WorkspaceId(settings.workspace_id)
+
+    engine = make_engine(core.database_url)
+    sessionmaker = make_sessionmaker(engine)
+    object_store = S3ObjectStore(
+        bucket=core.object_store_bucket,
+        endpoint_url=core.object_store_endpoint_url,
+        region=core.object_store_region,
+        access_key=core.object_store_access_key,
+        secret_key=core.object_store_secret_key,
+    )
+    await object_store.ensure_bucket()
+
+    audit = PostgresAuditLog(sessionmaker, workspace_id)
+    query_engine = QueryEngine(
+        retriever=MemoryRetriever(MemoryIndexLookup(sessionmaker, stub_router())),
+        claim_store=PostgresClaimStore(sessionmaker),
+    )
+    workspace = PostgresWorkspace(
+        workspace_id=workspace_id,
+        sessionmaker=sessionmaker,
+        object_store=object_store,
+        query_engine=query_engine,
+    )
+    skills = (
+        SkillRegistry.discover(Path(settings.skills_root))
+        if settings.skills_root
+        else SkillRegistry()
+    )
+    skill_runner = SkillRunner(
+        skills, audit_sink=audit, object_store=object_store, workspace_id=workspace_id
+    )
+    agent = AgentLoop(
+        answerer=workspace, skill_runner=skill_runner, registry=skills, audit_sink=audit
+    )
+    wiki = WikiInbox()
+    inbox = ApprovalInbox(skill_runner.approvals, wiki, audit, workspace_id)
+
+    return Backend(
+        workspace_id=workspace_id,
+        workspace=workspace,
+        agent=agent,
+        skills=skills,
+        skill_runner=skill_runner,
+        jobs=InMemoryJobQueue(),  # jobs originate in the workers (their loops are a follow-up)
+        audit=audit,
+        sources=SourceRegistry(ConnectorRegistry.with_defaults()),
+        wiki=wiki,
+        inbox=inbox,
+        object_store=object_store,
+        engine=engine,
     )

@@ -30,4 +30,4 @@ async def list_audit(
     action: str | None = None,
     limit: int = 100,
 ) -> list[AuditView]:
-    return [_view(event) for event in backend.audit.recent(action=action, limit=limit)]
+    return [_view(event) for event in await backend.audit.recent(action=action, limit=limit)]
