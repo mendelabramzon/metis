@@ -35,6 +35,7 @@ from metis_ingestion.connectors.base import (
     with_retries,
 )
 from metis_ingestion.connectors.calendar import CalendarConnector
+from metis_ingestion.connectors.drive_transport import DriveConfig, DriveTransport
 from metis_ingestion.connectors.gdrive import GoogleDriveConnector
 from metis_ingestion.connectors.imap import ImapConnector
 from metis_ingestion.connectors.imap_transport import ImapConfig, ImapTransport
@@ -74,6 +75,8 @@ __all__ = [
     "ConnectorRegistry",
     "ConnectorScheduler",
     "ConnectorSpec",
+    "DriveConfig",
+    "DriveTransport",
     "FetchingConnector",
     "GoogleDriveConnector",
     "ImapConfig",
