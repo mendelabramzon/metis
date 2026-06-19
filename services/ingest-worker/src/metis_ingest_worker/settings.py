@@ -36,3 +36,10 @@ class IngestWorkerSettings(BaseSettings):
     imap_username: str = ""
     imap_password: str = ""
     imap_mailbox: str = "INBOX"
+    # Google Drive source (connector == "gdrive"): the folder to sync, plus the OAuth token endpoint
+    # and client id. The refresh token and client secret are resolved from the encrypted credential
+    # store (keyed by cred_store_key); per-source folder selection is a later slice.
+    gdrive_folder_id: str = ""
+    google_token_url: str = "https://oauth2.googleapis.com/token"
+    google_client_id: str = ""
+    cred_store_key: str = ""  # Fernet key for the encrypted credential store (tokens at rest)

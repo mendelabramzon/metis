@@ -28,6 +28,7 @@ from metis_ingestion.connectors import (
     SlackConnector,
     TokenProvider,
     WebClipConnector,
+    build_google_drive_connector,
     with_retries,
 )
 from metis_ingestion.extract import BaselineExtractor, ExtractionResult
@@ -82,6 +83,7 @@ __all__ = [
     "UnsupportedMediaType",
     "WebClipConnector",
     "__version__",
+    "build_google_drive_connector",
     "build_normalized_doc",
     "build_raw_artifact",
     "get_format",

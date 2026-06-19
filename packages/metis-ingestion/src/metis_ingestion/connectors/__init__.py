@@ -37,6 +37,7 @@ from metis_ingestion.connectors.base import (
 from metis_ingestion.connectors.calendar import CalendarConnector
 from metis_ingestion.connectors.drive_transport import DriveConfig, DriveTransport
 from metis_ingestion.connectors.gdrive import GoogleDriveConnector
+from metis_ingestion.connectors.google import build_google_drive_connector
 from metis_ingestion.connectors.imap import ImapConnector
 from metis_ingestion.connectors.imap_transport import ImapConfig, ImapTransport
 from metis_ingestion.connectors.local_folder import LocalFolderConnector
@@ -100,6 +101,7 @@ __all__ = [
     "WebClipConnector",
     "WebhookVerificationError",
     "basic_auth",
+    "build_google_drive_connector",
     "build_poll_job",
     "build_webhook_job",
     "no_auth",

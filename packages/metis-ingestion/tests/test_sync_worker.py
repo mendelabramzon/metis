@@ -4,7 +4,7 @@ job for an unknown source is failed for retry rather than lost."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 
 from metis_ingestion import ConnectorSyncWorker, IngestResult
@@ -96,13 +96,20 @@ class _FakePipeline:
         return self._result
 
 
+def _factory(pipeline: _FakePipeline) -> Callable[[SourceConfig], Awaitable[_FakePipeline]]:
+    async def build(_source: SourceConfig) -> _FakePipeline:
+        return pipeline
+
+    return build
+
+
 async def test_a_queued_poll_job_runs_the_source_sync_and_is_acked() -> None:
     source = _source()
     pipeline = _FakePipeline(IngestResult(artifacts=2, claims=3, failures=(), next_cursor="uid-7"))
     store = _FakeSourceStore({str(source.id): source})
     job = _poll_job(str(source.id), source.workspace_id)
     queue = _FakeQueue([job])
-    worker = ConnectorSyncWorker(queue, sources=store, pipeline_factory=lambda _s: pipeline)
+    worker = ConnectorSyncWorker(queue, sources=store, pipeline_factory=_factory(pipeline))
 
     handled = await worker.run_once()
 
@@ -117,7 +124,7 @@ async def test_a_job_for_an_unknown_source_is_failed_for_retry() -> None:
     store = _FakeSourceStore({})  # the source was deleted/never registered
     job = _poll_job("src_" + "0" * 32, new_id(WorkspaceId))
     queue = _FakeQueue([job])
-    worker = ConnectorSyncWorker(queue, sources=store, pipeline_factory=lambda _s: pipeline)
+    worker = ConnectorSyncWorker(queue, sources=store, pipeline_factory=_factory(pipeline))
 
     handled = await worker.run_once()
 

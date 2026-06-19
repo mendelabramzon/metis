@@ -9,7 +9,7 @@ retries without losing the job; the durable cursor means the retry resumes where
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from metis_core.jobs import Worker
 from metis_ingestion.connectors.scheduling import POLL_JOB_KIND
@@ -21,8 +21,10 @@ class ConnectorSyncWorker(Worker):
     """Runs queued ``ingest.poll`` jobs: resolve the source, sync it durably, then ack/retry.
 
     ``pipeline_factory`` builds the ingestion pipeline for a resolved source (its connector over the
-    core stores); the worker resumes that source's durable cursor and records a connector run, so a
-    queued sync produces exactly the same evidence and history as a direct poll.
+    core stores); it is *async* so a connector that must resolve a credential first — an OAuth token
+    for Google Drive — can do so before the sync's synchronous transport reads. The worker resumes
+    that source's durable cursor and records a connector run, so a queued sync produces exactly the
+    same evidence and history as a direct poll.
     """
 
     def __init__(
@@ -30,7 +32,7 @@ class ConnectorSyncWorker(Worker):
         queue: JobQueue,
         *,
         sources: SourceStore,
-        pipeline_factory: Callable[[SourceConfig], Pipeline],
+        pipeline_factory: Callable[[SourceConfig], Awaitable[Pipeline]],
         batch_size: int = 10,
     ) -> None:
         super().__init__(queue, [POLL_JOB_KIND], batch_size=batch_size)
@@ -39,9 +41,8 @@ class ConnectorSyncWorker(Worker):
 
     async def handle(self, job: Job) -> None:
         source = await self._resolve(job)
-        poller = await DurableIngestPoller.resume(
-            self._pipeline_factory(source), source=source, store=self._sources
-        )
+        pipeline = await self._pipeline_factory(source)
+        poller = await DurableIngestPoller.resume(pipeline, source=source, store=self._sources)
         await poller.poll_once()
 
     async def _resolve(self, job: Job) -> SourceConfig:

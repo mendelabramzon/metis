@@ -14,11 +14,14 @@ import argparse
 import asyncio
 import logging
 
+import httpx
+
 from metis_core.audit import PostgresAuditSink
 from metis_core.config import CoreSettings
 from metis_core.db.engine import make_engine, make_sessionmaker
 from metis_core.jobs import PostgresJobQueue
 from metis_core.objectstore import S3ObjectStore
+from metis_core.security import Cryptobox
 from metis_core.stores import (
     PostgresClaimStore,
     PostgresDocumentStore,
@@ -34,9 +37,13 @@ from metis_ingestion import (
     IngestionPipeline,
     IngestPoller,
     LocalFolderConnector,
+    OAuth2Client,
+    OAuthTokens,
+    build_google_drive_connector,
 )
 from metis_ingestion.connectors import FetchingConnector
 from metis_ingestion.poller import Pipeline
+from metis_ingestion.security.cred_store import EncryptedCredentialStore
 from metis_protocol import SourceConfig, SourceId, WorkspaceId
 
 from .settings import IngestWorkerSettings
@@ -135,9 +142,48 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
     claim_store = PostgresClaimStore(sessionmaker)
     audit_sink = PostgresAuditSink(sessionmaker)
 
-    def pipeline_factory(source: SourceConfig) -> Pipeline:
+    # OAuth + Drive use their own HTTP clients (async for the token endpoint, sync for the Drive API
+    # snapshot); credentials come from the encrypted store, keyed by cred_store_key.
+    token_http = httpx.AsyncClient(timeout=httpx.Timeout(60.0))
+    drive_http = httpx.Client(timeout=httpx.Timeout(120.0))
+    credentials = (
+        EncryptedCredentialStore(Cryptobox(settings.cred_store_key))
+        if settings.cred_store_key
+        else None
+    )
+
+    async def connector_for(source: SourceConfig) -> FetchingConnector:
+        if source.connector != "gdrive":
+            return build_connector(settings, source.workspace_id, connector=source.connector)
+        if credentials is None:
+            raise ValueError("a gdrive source needs METIS_INGEST_WORKER_CRED_STORE_KEY set")
+        store = credentials  # non-None for the persist closure below
+        resolver = store.for_connector("gdrive")
+        oauth = OAuth2Client(
+            token_url=settings.google_token_url,
+            client_id=settings.google_client_id,
+            client_secret=resolver.resolve("client_secret"),
+            http_client=token_http,
+        )
+
+        def _persist(tokens: OAuthTokens) -> None:
+            store.set_credential(
+                connector="gdrive", name="refresh_token", value=tokens.refresh_token
+            )
+
+        return await build_google_drive_connector(
+            workspace_id=source.workspace_id,
+            folder_id=settings.gdrive_folder_id,
+            sensitivity=source.sensitivity,
+            refresh_token=resolver.resolve("refresh_token"),
+            oauth=oauth,
+            drive_http=drive_http,
+            persist=_persist,
+        )
+
+    async def pipeline_factory(source: SourceConfig) -> Pipeline:
         return IngestionPipeline(
-            connector=build_connector(settings, source.workspace_id, connector=source.connector),
+            connector=await connector_for(source),
             artifact_store=artifact_store,
             document_store=document_store,
             claim_store=claim_store,
@@ -152,6 +198,8 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
             if await worker.run_once() == 0:
                 await asyncio.sleep(settings.poll_interval_seconds)
     finally:
+        await token_http.aclose()
+        drive_http.close()
         await engine.dispose()
 
 
