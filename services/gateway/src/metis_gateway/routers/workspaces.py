@@ -10,23 +10,36 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter
 
-from metis_gateway.deps import BackendDep, CurrentUserDep, MemberDep, WorkspaceAdminDep
+from metis_gateway.deps import (
+    BackendDep,
+    CurrentUserDep,
+    MemberDep,
+    WorkspaceAdminDep,
+    WorkspaceWriterDep,
+)
 from metis_gateway.errors import NotFoundError
 from metis_gateway.schemas import (
+    Citation,
+    IngestRequest,
+    IngestResponse,
     MembershipCreate,
     MembershipView,
+    QueryRequestBody,
+    QueryResponse,
     WorkspaceCreate,
     WorkspaceView,
 )
 from metis_protocol import (
     MembershipId,
     Role,
+    Sensitivity,
     UserId,
     Workspace,
     WorkspaceId,
     WorkspaceMembership,
     new_id,
 )
+from metis_runtime.agent import AgentRequest
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -111,3 +124,58 @@ async def add_member(
         )
     )
     return _membership_view(membership)
+
+
+# --- workspace-scoped engine (ingest + query), routed to that workspace's isolated engine -------
+
+
+@router.post("/{workspace_id}/ingest", response_model=IngestResponse, status_code=202)
+async def ingest_into_workspace(
+    body: IngestRequest, context: WorkspaceWriterDep, backend: BackendDep
+) -> IngestResponse:
+    """Ingest content into the workspace's own engine (writer role required by the gate)."""
+    workspace = backend.workspace_for(context.workspace.id)
+    sensitivity = (
+        body.sensitivity if body.sensitivity is not None else context.workspace.default_sensitivity
+    )
+    doc_id, claims = await workspace.ingest(
+        filename=body.filename, content=body.content, sensitivity=sensitivity
+    )
+    return IngestResponse(doc_id=doc_id, artifacts=1, claims=claims)
+
+
+@router.post("/{workspace_id}/query", response_model=QueryResponse)
+async def query_workspace(
+    body: QueryRequestBody, context: MemberDep, backend: BackendDep
+) -> QueryResponse:
+    """Answer against the workspace's own engine (membership required by the gate).
+
+    A member sees the workspace's evidence; intra-workspace sensitivity tiers are a later
+    refinement, so the ceiling is the workspace boundary itself.
+    """
+    run = await backend.agent_for(context.workspace.id).run(
+        AgentRequest(
+            workspace_id=context.workspace.id,
+            instruction=body.text,
+            max_sensitivity=Sensitivity.RESTRICTED,
+            top_k=body.top_k,
+        )
+    )
+    answer = run.answer
+    citations: list[Citation] = []
+    if answer is not None:
+        workspace = backend.workspace_for(context.workspace.id)
+        citations = [
+            Citation(claim_id=claim_id, source_span_id=span_id, artifact_id=artifact_id)
+            for claim_id, span_id, artifact_id in await workspace.citation_rows(answer.claims)
+        ]
+    return QueryResponse(
+        run_id=str(run.run_id),
+        status=run.status.value,
+        answer=answer.text if answer is not None else run.summary,
+        sufficient=answer.sufficient if answer is not None else False,
+        citations=citations,
+        contradictions=list(answer.contradictions) if answer is not None else [],
+        filebacks=len(run.filebacks),
+        pending_approvals=[request.key for request in run.pending_approvals],
+    )

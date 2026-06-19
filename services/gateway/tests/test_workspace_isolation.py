@@ -86,3 +86,47 @@ def test_member_management_is_admin_gated(client: TestClient, op: dict[str, str]
     assert added.status_code == 201, added.text
     assert client.get(f"/workspaces/{shared_ws}", headers=_bearer(grace)).status_code == 200
     assert client.get(f"/workspaces/{shared_ws}/members", headers=_bearer(grace)).status_code == 403
+
+
+def test_workspace_engine_is_isolated(client: TestClient, op: dict[str, str]) -> None:
+    org_id = client.post("/organizations", json={"name": "Acme"}, headers=op).json()["id"]
+    ada = _provision(client, op, org_id, "ada@acme.example")
+    grace = _provision(client, op, org_id, "grace@acme.example")
+
+    ada_ws = client.get("/workspaces", headers=_bearer(ada)).json()[0]["id"]
+    grace_ws = client.get("/workspaces", headers=_bearer(grace)).json()[0]["id"]
+
+    # Ada ingests evidence into her own workspace.
+    ingest = client.post(
+        f"/workspaces/{ada_ws}/ingest",
+        json={"filename": "note.md", "content": "Ada leads the Apollo project."},
+        headers=_bearer(ada),
+    )
+    assert ingest.status_code == 202, ingest.text
+    assert ingest.json()["claims"] >= 1
+
+    # Ada queries her workspace and the answer rests on that evidence.
+    ada_answer = client.post(
+        f"/workspaces/{ada_ws}/query", json={"text": "Apollo"}, headers=_bearer(ada)
+    )
+    assert ada_answer.status_code == 200
+    assert ada_answer.json()["sufficient"] is True
+
+    # Grace can neither ingest into nor query Ada's workspace — she is not a member.
+    blocked_ingest = client.post(
+        f"/workspaces/{ada_ws}/ingest",
+        json={"filename": "x.md", "content": "nope"},
+        headers=_bearer(grace),
+    )
+    assert blocked_ingest.status_code == 403
+    blocked_query = client.post(
+        f"/workspaces/{ada_ws}/query", json={"text": "Apollo"}, headers=_bearer(grace)
+    )
+    assert blocked_query.status_code == 403
+
+    # Cross-workspace isolation: Ada's evidence never leaks into Grace's own workspace.
+    grace_answer = client.post(
+        f"/workspaces/{grace_ws}/query", json={"text": "Apollo"}, headers=_bearer(grace)
+    )
+    assert grace_answer.status_code == 200
+    assert grace_answer.json()["sufficient"] is False

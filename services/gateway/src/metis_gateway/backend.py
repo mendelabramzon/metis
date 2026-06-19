@@ -10,7 +10,7 @@ settings change, never a router change, so every router stays a thin HTTP projec
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -606,6 +606,43 @@ class Backend:
     http_client: httpx.AsyncClient | None = (
         None  # set when a local model is wired; closed at shutdown
     )
+    # Builds a per-workspace engine on demand (set by the build functions); ``workspace``/``agent``
+    # above are the configured workspace's, and the caches below hold the rest.
+    workspace_factory: Callable[[WorkspaceId], Workspace] | None = None
+    _workspaces: dict[str, Workspace] = field(default_factory=dict, repr=False)
+    _agents: dict[str, AgentLoop] = field(default_factory=dict, repr=False)
+
+    def workspace_for(self, workspace_id: WorkspaceId) -> Workspace:
+        """The ingest/answer engine scoped to ``workspace_id`` — the configured one, or built on
+        demand via the factory and cached. The membership gate runs before this is reached, so the
+        caller is always a member of the workspace it returns."""
+        key = str(workspace_id)
+        if key == str(self.workspace_id):
+            return self.workspace
+        if self.workspace_factory is None:
+            raise NotFoundError(f"workspace {key} is not served by this backend")
+        engine = self._workspaces.get(key)
+        if engine is None:
+            engine = self.workspace_factory(workspace_id)
+            self._workspaces[key] = engine
+        return engine
+
+    def agent_for(self, workspace_id: WorkspaceId) -> AgentLoop:
+        """The agent loop bound to ``workspace_id``'s engine — cached so a run held for approval
+        persists between the request that proposes it and the one that resumes it."""
+        key = str(workspace_id)
+        if key == str(self.workspace_id):
+            return self.agent
+        agent = self._agents.get(key)
+        if agent is None:
+            agent = AgentLoop(
+                answerer=self.workspace_for(workspace_id),
+                skill_runner=self.skill_runner,
+                registry=self.skills,
+                audit_sink=self.audit,
+            )
+            self._agents[key] = agent
+        return agent
 
 
 def build_backend(settings: GatewaySettings) -> Backend:
@@ -631,7 +668,11 @@ def build_backend(settings: GatewaySettings) -> Backend:
     skill_runner = SkillRunner(
         skills, audit_sink=audit, object_store=object_store, workspace_id=workspace_id
     )
-    workspace = InMemoryWorkspace(workspace_id, caller=caller)
+
+    def _workspace_factory(ws_id: WorkspaceId) -> Workspace:
+        return InMemoryWorkspace(ws_id, caller=caller)
+
+    workspace = _workspace_factory(workspace_id)
     agent = AgentLoop(
         answerer=workspace, skill_runner=skill_runner, registry=skills, audit_sink=audit
     )
@@ -651,6 +692,7 @@ def build_backend(settings: GatewaySettings) -> Backend:
         inbox=inbox,
         object_store=object_store,
         http_client=client,
+        workspace_factory=_workspace_factory,
     )
 
 
@@ -695,13 +737,17 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         claim_store=PostgresClaimStore(sessionmaker),
         generator=FallbackAnswerGenerator(caller=caller) if caller is not None else None,
     )
-    workspace = PostgresWorkspace(
-        workspace_id=workspace_id,
-        sessionmaker=sessionmaker,
-        object_store=object_store,
-        query_engine=query_engine,
-        embedding_router=embedding_router,
-    )
+
+    def _workspace_factory(ws_id: WorkspaceId) -> Workspace:
+        return PostgresWorkspace(
+            workspace_id=ws_id,
+            sessionmaker=sessionmaker,
+            object_store=object_store,
+            query_engine=query_engine,
+            embedding_router=embedding_router,
+        )
+
+    workspace = _workspace_factory(workspace_id)
     skills = (
         SkillRegistry.discover(Path(settings.skills_root))
         if settings.skills_root
@@ -731,4 +777,5 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         object_store=object_store,
         engine=engine,
         http_client=client,
+        workspace_factory=_workspace_factory,
     )
