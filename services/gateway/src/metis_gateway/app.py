@@ -41,6 +41,8 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        for close in backend.model_closers:
+            await close()
         if backend.http_client is not None:
             await backend.http_client.aclose()
         if backend.engine is not None:

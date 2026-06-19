@@ -10,7 +10,7 @@ settings change, never a router change, so every router stays a thin HTTP projec
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,8 +36,7 @@ from metis_gateway.errors import ConflictError, NotFoundError
 from metis_gateway.models import (
     FallbackAnswerGenerator,
     build_embedding_router,
-    build_http_client,
-    build_model_caller,
+    build_model_plane,
 )
 from metis_gateway.settings import GatewaySettings
 from metis_gateway.tokens import terms
@@ -604,8 +603,9 @@ class Backend:
     object_store: ObjectStore = field(default_factory=InMemoryObjectStore)
     engine: AsyncEngine | None = None  # set for the Postgres backend; disposed at shutdown
     http_client: httpx.AsyncClient | None = (
-        None  # set when a local model is wired; closed at shutdown
+        None  # the local model client (chat + embeddings); closed at shutdown
     )
+    model_closers: tuple[Callable[[], Awaitable[None]], ...] = ()  # cloud clients to close
     # Builds a per-workspace engine on demand (set by the build functions); ``workspace``/``agent``
     # above are the configured workspace's, and the caches below hold the rest.
     workspace_factory: Callable[[WorkspaceId], Workspace] | None = None
@@ -651,14 +651,8 @@ def build_backend(settings: GatewaySettings) -> Backend:
     audit = RecordingAuditSink()
     object_store = InMemoryObjectStore()
 
-    client = build_http_client() if settings.model_endpoint else None
-    caller = (
-        build_model_caller(
-            client, endpoint=settings.model_endpoint, model=settings.chat_model, audit_sink=audit
-        )
-        if client is not None and settings.model_endpoint is not None
-        else None
-    )
+    plane = build_model_plane(settings, audit_sink=audit)
+    caller = plane.caller
 
     skills = (
         SkillRegistry.discover(Path(settings.skills_root))
@@ -691,7 +685,8 @@ def build_backend(settings: GatewaySettings) -> Backend:
         wiki=wiki,
         inbox=inbox,
         object_store=object_store,
-        http_client=client,
+        http_client=plane.local_client,
+        model_closers=plane.closers,
         workspace_factory=_workspace_factory,
     )
 
@@ -718,19 +713,17 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
 
     audit = PostgresAuditLog(sessionmaker, workspace_id)
 
-    # Local model wiring (optional): bge-m3 embeddings for semantic retrieval + an LLM answer
-    # generator with an extractive fallback. Without an endpoint: stub vectors + extractive answers.
-    client = build_http_client() if settings.model_endpoint else None
-    if client is not None and settings.model_endpoint is not None:
+    # Model wiring (optional). Chat: Anthropic/OpenAI-compatible cloud + local fallback assembled by
+    # the plane. Embeddings: local bge-m3 when an endpoint is set, else stub vectors. The answer
+    # generator degrades to extractive on a model error.
+    plane = build_model_plane(settings, audit_sink=audit)
+    caller = plane.caller
+    if plane.local_client is not None and settings.model_endpoint is not None:
         embedding_router: EmbeddingRouter = build_embedding_router(
-            client, endpoint=settings.model_endpoint, model=settings.embedding_model
-        )
-        caller: ModelCaller | None = build_model_caller(
-            client, endpoint=settings.model_endpoint, model=settings.chat_model, audit_sink=audit
+            plane.local_client, endpoint=settings.model_endpoint, model=settings.embedding_model
         )
     else:
         embedding_router = stub_router()
-        caller = None
 
     query_engine = QueryEngine(
         retriever=MemoryRetriever(MemoryIndexLookup(sessionmaker, embedding_router)),
@@ -776,6 +769,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         identity=PostgresIdentityStore(sessionmaker),
         object_store=object_store,
         engine=engine,
-        http_client=client,
+        http_client=plane.local_client,
+        model_closers=plane.closers,
         workspace_factory=_workspace_factory,
     )

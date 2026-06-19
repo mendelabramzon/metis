@@ -38,3 +38,11 @@ class GatewaySettings(BaseServiceSettings):
     model_endpoint: str | None = None  # e.g. http://localhost:11434
     chat_model: str = "gemma4:e4b"
     embedding_model: str = "bge-m3"
+
+    # Cloud chat providers (optional). With a key set, that provider serves the STANDARD/FRONTIER
+    # tiers for non-restricted data; restricted data always routes local (router-enforced). An HF
+    # model served behind an OpenAI-compatible server (vLLM/TGI) plugs in via openai_base_url.
+    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_chat_model: str = "gpt-4o-mini"
