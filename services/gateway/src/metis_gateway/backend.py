@@ -108,9 +108,24 @@ from metis_runtime.skills import (
 )
 
 
+@dataclass(frozen=True)
+class IngestOutcome:
+    """The parse-status projection of one ingested file: enough for the upload UI to show what
+    happened (the detected type, how many segments parsed, how many claims were extracted)."""
+
+    doc_id: str
+    media_type: str
+    segments: int
+    claims: int
+
+
 @runtime_checkable
 class Workspace(Protocol):
     """The ingest/answer/cite surface the routers use — in-memory or Postgres-backed."""
+
+    async def ingest_bytes(
+        self, *, filename: str, data: bytes, sensitivity: Sensitivity, connector: str = "upload"
+    ) -> IngestOutcome: ...
 
     async def ingest(
         self, *, filename: str, content: str, sensitivity: Sensitivity
@@ -273,10 +288,9 @@ class InMemoryWorkspace:
         # otherwise a deterministic extractive answer.
         self._generator = FallbackAnswerGenerator(caller=caller) if caller is not None else None
 
-    async def ingest(
-        self, *, filename: str, content: str, sensitivity: Sensitivity
-    ) -> tuple[str, int]:
-        data = content.encode("utf-8")
+    async def ingest_bytes(
+        self, *, filename: str, data: bytes, sensitivity: Sensitivity, connector: str = "upload"
+    ) -> IngestOutcome:
         media = mime.detect(filename, data[:512])
         fmt = get_format(media.media_type)
         if fmt is None:
@@ -291,7 +305,7 @@ class InMemoryWorkspace:
             filename=filename,
             media_info=media,
             policy=policy,
-            connector="gateway",
+            connector=connector,
         )
         doc = build_normalized_doc(raw, data, policy=policy)
         parsed, segments = parse_document(doc, fmt.segmentation)
@@ -301,7 +315,23 @@ class InMemoryWorkspace:
         for claim in result.batch.claims:
             self._claims.append(claim)
             self._by_id[str(claim.id)] = claim
-        return str(doc.id), len(result.batch.claims)
+        return IngestOutcome(
+            doc_id=str(doc.id),
+            media_type=media.media_type,
+            segments=len(segments),
+            claims=len(result.batch.claims),
+        )
+
+    async def ingest(
+        self, *, filename: str, content: str, sensitivity: Sensitivity
+    ) -> tuple[str, int]:
+        outcome = await self.ingest_bytes(
+            filename=filename,
+            data=content.encode("utf-8"),
+            sensitivity=sensitivity,
+            connector="gateway",
+        )
+        return outcome.doc_id, outcome.claims
 
     async def answer(self, query: QueryRequest) -> Answer:
         wanted = terms(query.text)
@@ -647,10 +677,9 @@ class PostgresWorkspace:
         self._builder = MemCellBuilder()  # deterministic, evidence-only (no model call)
         self._query = query_engine
 
-    async def ingest(
-        self, *, filename: str, content: str, sensitivity: Sensitivity
-    ) -> tuple[str, int]:
-        data = content.encode("utf-8")
+    async def ingest_bytes(
+        self, *, filename: str, data: bytes, sensitivity: Sensitivity, connector: str = "upload"
+    ) -> IngestOutcome:
         media = mime.detect(filename, data[:512])
         fmt = get_format(media.media_type)
         if fmt is None:
@@ -665,7 +694,7 @@ class PostgresWorkspace:
             filename=filename,
             media_info=media,
             policy=policy,
-            connector="gateway",
+            connector=connector,
         )
         await self._artifacts.put_blob(data)
         await self._artifacts.put(raw)
@@ -683,7 +712,23 @@ class PostgresWorkspace:
             )
             await self._memory.write_mem_cell(cell)
             await self._indexer.index_mem_cell(cell)
-        return str(doc.id), len(result.batch.claims)
+        return IngestOutcome(
+            doc_id=str(doc.id),
+            media_type=media.media_type,
+            segments=len(segments),
+            claims=len(result.batch.claims),
+        )
+
+    async def ingest(
+        self, *, filename: str, content: str, sensitivity: Sensitivity
+    ) -> tuple[str, int]:
+        outcome = await self.ingest_bytes(
+            filename=filename,
+            data=content.encode("utf-8"),
+            sensitivity=sensitivity,
+            connector="gateway",
+        )
+        return outcome.doc_id, outcome.claims
 
     async def answer(self, query: QueryRequest) -> Answer:
         return await self._query.answer(query)

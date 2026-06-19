@@ -8,6 +8,8 @@ matches the engine's.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, JsonValue
 
 from metis_protocol import JobState, Role, Sensitivity, SkillOutcome, WorkspaceKind
@@ -41,6 +43,22 @@ class IngestResponse(BaseModel):
     doc_id: str
     artifacts: int
     claims: int
+
+
+class ParseStatus(BaseModel):
+    """The visible per-file result of an upload: parsed, an unsupported type, or a parse failure."""
+
+    filename: str
+    status: Literal["parsed", "unsupported", "failed"]
+    doc_id: str | None = None
+    media_type: str | None = None
+    segments: int = 0
+    claims: int = 0
+    error: str | None = None
+
+
+class UploadResponse(BaseModel):
+    files: list[ParseStatus]
 
 
 # --- query / chat ------------------------------------------------------------------------------
