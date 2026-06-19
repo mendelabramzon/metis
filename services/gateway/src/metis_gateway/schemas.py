@@ -75,6 +75,19 @@ class IngestResponse(BaseModel):
     claims: int
 
 
+class ErasureView(BaseModel):
+    """The outcome of erasing one raw artifact: what the tombstone cascade marked, and whether the
+    raw blob was physically deleted (durable backend only)."""
+
+    artifact_tombstoned: bool
+    normalized_docs: int
+    parsed_docs: int
+    segments: int
+    claims: int
+    mem_cells: int
+    blobs_erased: int
+
+
 class ParseStatus(BaseModel):
     """The visible per-file result of an upload: parsed, an unsupported type, or a parse failure."""
 

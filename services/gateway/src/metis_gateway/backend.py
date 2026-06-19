@@ -27,9 +27,11 @@ from metis_core.db.session import unit_of_work
 from metis_core.jobs import PostgresJobQueue
 from metis_core.llm import ModelCaller
 from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup, stub_router
-from metis_core.models import SkillApprovalRow
+from metis_core.models import RawArtifactRow, SkillApprovalRow
 from metis_core.objectstore import S3ObjectStore
 from metis_core.security import Cryptobox
+from metis_core.security.deletion import ErasureResult
+from metis_core.security.deletion import erase_artifact as erase_artifact_core
 from metis_core.stores import (
     PostgresClaimStore,
     PostgresDocumentStore,
@@ -38,6 +40,7 @@ from metis_core.stores import (
     PostgresMinioArtifactStore,
     PostgresSourceStore,
 )
+from metis_core.tombstone import TombstoneResult
 from metis_core.wiki import PostgresWikiReviewInbox
 from metis_core.wiki.approval import WikiPatchReview, WikiPatchStatus
 from metis_gateway.errors import ConflictError, NotFoundError
@@ -140,6 +143,9 @@ class Workspace(Protocol):
     async def citation_rows(
         self, claim_refs: Sequence[ClaimRef]
     ) -> list[tuple[str, str | None, str | None]]: ...
+
+    # Returns None when no such artifact exists *in this workspace* (the isolation guard → 404).
+    async def erase_artifact(self, artifact_id: str) -> ErasureResult | None: ...
 
 
 @runtime_checkable
@@ -288,6 +294,7 @@ class InMemoryWorkspace:
         self._docs: dict[str, NormalizedDoc] = {}
         self._claims: list[Claim] = []
         self._by_id: dict[str, Claim] = {}
+        self._artifacts: dict[str, str] = {}  # artifact_id -> doc_id, so erasure can find the doc
         # With a caller wired, answers are LLM-generated over the matched evidence (cited);
         # otherwise a deterministic extractive answer.
         self._generator = FallbackAnswerGenerator(caller=caller) if caller is not None else None
@@ -316,6 +323,7 @@ class InMemoryWorkspace:
         result = BaselineExtractor().extract(doc, parsed.id, segments)
 
         self._docs[str(doc.id)] = doc
+        self._artifacts[str(raw.id)] = str(doc.id)
         for claim in result.batch.claims:
             self._claims.append(claim)
             self._by_id[str(claim.id)] = claim
@@ -336,6 +344,34 @@ class InMemoryWorkspace:
             connector="gateway",
         )
         return outcome.doc_id, outcome.claims
+
+    async def erase_artifact(self, artifact_id: str) -> ErasureResult | None:
+        """Best-effort erasure for the in-memory backend: drop the artifact's doc and the claims
+        citing it. There is no object store or row graph here, so the counts cover what is held;
+        the durable backend (``PostgresWorkspace``) runs the full tombstone cascade + blob erase."""
+        doc_id = self._artifacts.pop(artifact_id, None)
+        if doc_id is None:
+            return None
+        self._docs.pop(doc_id, None)
+        erased = [
+            claim
+            for claim in self._claims
+            if any(str(span.artifact_id) == artifact_id for span in claim.source_spans)
+        ]
+        for claim in erased:
+            self._claims.remove(claim)
+            self._by_id.pop(str(claim.id), None)
+        return ErasureResult(
+            tombstoned=TombstoneResult(
+                raw_artifacts=1,
+                normalized_docs=1,
+                parsed_docs=0,
+                segments=0,
+                claims=len(erased),
+                mem_cells=0,
+            ),
+            blobs_erased=0,
+        )
 
     async def answer(self, query: QueryRequest) -> Answer:
         wanted = terms(query.text)
@@ -672,6 +708,8 @@ class PostgresWorkspace:
         embedding_router: EmbeddingRouter,
     ) -> None:
         self._workspace_id = workspace_id
+        self._sessionmaker = sessionmaker
+        self._object_store = object_store
         self._artifacts = PostgresMinioArtifactStore(sessionmaker, object_store)
         self._documents = PostgresDocumentStore(sessionmaker)
         self._claims = PostgresClaimStore(sessionmaker)
@@ -752,6 +790,28 @@ class PostgresWorkspace:
                 )
             )
         return rows
+
+    async def erase_artifact(self, artifact_id: str) -> ErasureResult | None:
+        """Right-to-erasure for one raw artifact: tombstone its derived graph and delete its blob.
+
+        The artifact is resolved *within this workspace* first — the store's ``get`` keys off id
+        alone, so this workspace filter is the isolation guard that turns a cross-workspace id into
+        a 404 rather than a cross-tenant delete."""
+        async with unit_of_work(self._sessionmaker) as session:
+            owned = await session.scalar(
+                select(RawArtifactRow.id).where(
+                    RawArtifactRow.id == artifact_id,
+                    RawArtifactRow.workspace_id == str(self._workspace_id),
+                )
+            )
+        if owned is None:
+            return None
+        return await erase_artifact_core(
+            self._sessionmaker,
+            self._object_store,
+            workspace_id=str(self._workspace_id),
+            artifact_id=artifact_id,
+        )
 
 
 class PostgresAuditLog:

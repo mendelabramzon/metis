@@ -61,6 +61,17 @@ async def tombstone_artifact(
     """Tombstone a raw artifact and everything derived from it. Returns row counts."""
     now: datetime = now_utc()
     async with unit_of_work(sessionmaker) as session:
+        # Ownership guard: refuse to cascade when the raw artifact is owned by *another* workspace.
+        # The doc/segment updates below key off artifact_id/doc_id (not workspace_id), so without
+        # this a caller passing another workspace's artifact id would tombstone its docs/segments —
+        # an ACL leak. (A missing raw row is allowed through: the claim/mem-cell cascade is already
+        # workspace-scoped, so callers that tombstone derived rows without a raw parent still work.)
+        owner = await session.scalar(
+            select(RawArtifactRow.workspace_id).where(RawArtifactRow.id == artifact_id)
+        )
+        if owner is not None and owner != workspace_id:
+            return TombstoneResult(0, 0, 0, 0, 0, 0)
+
         raw = await _tombstone(
             session,
             update(RawArtifactRow)

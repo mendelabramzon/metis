@@ -21,6 +21,7 @@ from metis_gateway.errors import NotFoundError, TooManyRequestsError
 from metis_gateway.models import over_daily_cap
 from metis_gateway.schemas import (
     Citation,
+    ErasureView,
     IngestRequest,
     IngestResponse,
     MembershipCreate,
@@ -192,6 +193,30 @@ async def query_workspace(
         contradictions=list(answer.contradictions) if answer is not None else [],
         filebacks=len(run.filebacks),
         pending_approvals=[request.key for request in run.pending_approvals],
+    )
+
+
+@router.delete("/{workspace_id}/artifacts/{artifact_id}", response_model=ErasureView)
+async def erase_artifact(
+    artifact_id: str, context: WorkspaceAdminDep, backend: BackendDep
+) -> ErasureView:
+    """Right-to-erasure: tombstone the artifact's derived graph and delete its raw blob.
+
+    Admin-gated (destructive) and resolved against the workspace's own engine, so one workspace can
+    never erase another's artifact — an unknown id here is a 404, never a cross-workspace delete.
+    """
+    result = await backend.workspace_for(context.workspace.id).erase_artifact(artifact_id)
+    if result is None:
+        raise NotFoundError(f"no artifact {artifact_id!r} in this workspace")
+    tombstoned = result.tombstoned
+    return ErasureView(
+        artifact_tombstoned=tombstoned.raw_artifacts > 0,
+        normalized_docs=tombstoned.normalized_docs,
+        parsed_docs=tombstoned.parsed_docs,
+        segments=tombstoned.segments,
+        claims=tombstoned.claims,
+        mem_cells=tombstoned.mem_cells,
+        blobs_erased=result.blobs_erased,
     )
 
 
