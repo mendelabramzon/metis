@@ -39,6 +39,12 @@ from metis_ingestion.connectors.gdrive import GoogleDriveConnector
 from metis_ingestion.connectors.imap import ImapConnector
 from metis_ingestion.connectors.imap_transport import ImapConfig, ImapTransport
 from metis_ingestion.connectors.local_folder import LocalFolderConnector
+from metis_ingestion.connectors.oauth import (
+    OAuth2Client,
+    OAuthTokens,
+    RefreshingTokenProvider,
+    TokenProvider,
+)
 from metis_ingestion.connectors.registry import (
     ConnectorRegistry,
     ConnectorSpec,
@@ -75,12 +81,16 @@ __all__ = [
     "ImapTransport",
     "InMemorySecretResolver",
     "LocalFolderConnector",
+    "OAuth2Client",
+    "OAuthTokens",
     "RateLimitError",
     "RateLimiter",
     "RecordedTransport",
+    "RefreshingTokenProvider",
     "RenderedPayload",
     "SecretResolver",
     "SlackConnector",
+    "TokenProvider",
     "TransientError",
     "Transport",
     "UnknownConnectorError",
