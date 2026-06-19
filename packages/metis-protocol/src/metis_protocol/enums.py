@@ -36,6 +36,25 @@ class ModelTier(StrEnum):
     FRONTIER = "frontier"
 
 
+class ModelKind(StrEnum):
+    """What a deployed model does — the slot its capability manifest fills."""
+
+    CHAT = "chat"
+    EMBED = "embed"
+
+
+class PrivacyTier(StrEnum):
+    """Where a model runs, which bounds what data may reach it.
+
+    ``LOCAL`` stays inside the deployment, so the router may send it restricted data; ``EXTERNAL``
+    leaves for a third-party API and is blocked from restricted data by the same allowlist that
+    governs the built-in cloud providers.
+    """
+
+    LOCAL = "local"
+    EXTERNAL = "external"
+
+
 class JobState(StrEnum):
     PENDING = "pending"
     RUNNING = "running"

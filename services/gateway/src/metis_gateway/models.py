@@ -24,6 +24,7 @@ from metis_core.llm import (
     ModelError,
     OpenAICompatProvider,
     RoutableProvider,
+    chat_provider_from_capability,
 )
 from metis_core.memory_index import EmbeddingRouter, local_router
 from metis_gateway.settings import GatewaySettings
@@ -31,6 +32,8 @@ from metis_protocol import (
     AuditEvent,
     AuditSink,
     ContextBundle,
+    ModelCapability,
+    ModelKind,
     ModelTier,
     QueryRequest,
     WorkspaceId,
@@ -98,10 +101,12 @@ def assemble_chat_providers(
     anthropic_client: Any | None,
     openai_client: httpx.AsyncClient | None,
     local_client: httpx.AsyncClient | None,
+    manifest_providers: Sequence[RoutableProvider] = (),
 ) -> list[RoutableProvider]:
     """The router's chat providers, ordered cloud-first so non-restricted data prefers cloud and
     local stays the fallback — and the only path for restricted data, which the router enforces by
-    skipping external providers. Cloud serves STANDARD/FRONTIER; local also serves the LOCAL tier.
+    skipping external providers. Cloud serves STANDARD/FRONTIER; manifest-registered (self-hosted)
+    models slot in next; the local Ollama endpoint serves the LOCAL tier and restricted fallback.
     """
     providers: list[RoutableProvider] = []
     if anthropic_client is not None:
@@ -117,6 +122,7 @@ def assemble_chat_providers(
                 base_url=settings.openai_base_url.rstrip("/"),
             )
         )
+    providers.extend(manifest_providers)  # self-hosted models, enabled by their manifests
     if local_client is not None and settings.model_endpoint is not None:
         providers.append(
             OpenAICompatProvider(
@@ -144,6 +150,7 @@ class ModelPlane:
     spend: SpendTracker
     local_client: httpx.AsyncClient | None
     closers: tuple[Callable[[], Awaitable[None]], ...]
+    manifests: tuple[ModelCapability, ...] = ()  # the registered capability manifests (operators)
 
     def make_caller(self, *, allow_external: bool) -> ModelCaller | None:
         providers = (
@@ -183,17 +190,35 @@ def build_model_plane(settings: GatewaySettings, *, audit_sink: AuditSink) -> Mo
 
     local_client = build_http_client() if settings.model_endpoint else None
 
+    # Self-hosted models registered by manifest share one client (each provider carries its own
+    # base_url); a chat manifest becomes an OpenAICompatProvider, an embed manifest is wired via the
+    # embedding router instead, not here.
+    manifest_client = build_http_client() if settings.model_manifests else None
+    manifest_providers: list[RoutableProvider] = (
+        [
+            chat_provider_from_capability(cap, manifest_client)
+            for cap in settings.model_manifests
+            if cap.kind is ModelKind.CHAT
+        ]
+        if manifest_client is not None
+        else []
+    )
+    if manifest_client is not None:
+        closers.append(manifest_client.aclose)
+
     providers = assemble_chat_providers(
         settings,
         anthropic_client=anthropic_client,
         openai_client=openai_client,
         local_client=local_client,
+        manifest_providers=manifest_providers,
     )
     return ModelPlane(
         providers=tuple(providers),
         spend=spend,
         local_client=local_client,
         closers=tuple(closers),
+        manifests=settings.model_manifests,
     )
 
 

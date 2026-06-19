@@ -10,6 +10,7 @@ from metis_gateway.routers import (
     audit,
     ingestion,
     jobs,
+    providers,
     query,
     skills,
     sources,
@@ -31,6 +32,7 @@ ALL_ROUTERS = (
     approvals.router,
     jobs.router,
     audit.router,
+    providers.router,
 )
 
 __all__ = ["ALL_ROUTERS"]

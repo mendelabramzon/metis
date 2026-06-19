@@ -72,6 +72,7 @@ from metis_protocol import (
     Job,
     JobId,
     JobState,
+    ModelCapability,
     NormalizedDoc,
     ObjectStore,
     Organization,
@@ -792,6 +793,7 @@ class Backend:
     )
     model_closers: tuple[Callable[[], Awaitable[None]], ...] = ()  # cloud clients to close
     spend: SpendTracker | None = None  # per-workspace model spend (None when no model is wired)
+    model_manifests: tuple[ModelCapability, ...] = ()  # registered capability manifests (operators)
     # Builds a per-workspace engine for (workspace_id, allow_external) on demand (set by the build
     # functions); ``workspace``/``agent`` above are the configured workspace's default engine.
     workspace_factory: Callable[[WorkspaceId, bool], Workspace] | None = None
@@ -874,6 +876,7 @@ def build_backend(settings: GatewaySettings) -> Backend:
         http_client=plane.local_client,
         model_closers=plane.closers,
         spend=plane.spend,
+        model_manifests=plane.manifests,
         workspace_factory=_workspace_factory,
     )
 
@@ -968,5 +971,6 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         http_client=plane.local_client,
         model_closers=plane.closers,
         spend=plane.spend,
+        model_manifests=plane.manifests,
         workspace_factory=_workspace_factory,
     )

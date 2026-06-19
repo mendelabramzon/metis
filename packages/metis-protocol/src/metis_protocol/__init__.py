@@ -35,8 +35,10 @@ from metis_protocol.enums import (
     ForesightStatus,
     JobState,
     MemoryOp,
+    ModelKind,
     ModelTier,
     PermissionScope,
+    PrivacyTier,
     ProfileScope,
     Role,
     SegmentKind,
@@ -142,6 +144,7 @@ from metis_protocol.memory import (
     Profile,
     ProfileFact,
 )
+from metis_protocol.model_capability import ModelCapability
 from metis_protocol.policy import (
     PolicyDecision,
     PolicyState,
@@ -273,6 +276,8 @@ __all__ = [
     "MemoryPatchId",
     "MemoryScope",
     "MemoryStore",
+    "ModelCapability",
+    "ModelKind",
     "ModelMessage",
     "ModelProvider",
     "ModelRequest",
@@ -295,6 +300,7 @@ __all__ = [
     "PolicyState",
     "PolicyViolationError",
     "PrefixedId",
+    "PrivacyTier",
     "Profile",
     "ProfileFact",
     "ProfileId",

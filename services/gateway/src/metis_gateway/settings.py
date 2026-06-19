@@ -8,6 +8,7 @@ workspace for now (multi-tenant routing is a later concern).
 from pydantic_settings import SettingsConfigDict
 
 from metis_core import BaseServiceSettings
+from metis_protocol import ModelCapability
 
 _DEV_WORKSPACE = "ws_" + "0" * 32
 
@@ -46,3 +47,9 @@ class GatewaySettings(BaseServiceSettings):
     openai_api_key: str | None = None
     openai_base_url: str = "https://api.openai.com/v1"
     openai_chat_model: str = "gpt-4o-mini"
+
+    # Self-hosted / Hugging Face models, each enabled only by a capability manifest (no
+    # name-based auto-selection). A chat manifest's base_url is the OpenAI-compatible URL of its
+    # TGI/vLLM server, registered as a router provider; routing is driven by the declared
+    # capabilities. Set as a JSON list in METIS_GATEWAY_MODEL_MANIFESTS.
+    model_manifests: tuple[ModelCapability, ...] = ()

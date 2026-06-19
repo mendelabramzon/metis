@@ -15,6 +15,7 @@ from metis_core.llm.budget import (
     estimate_tokens,
 )
 from metis_core.llm.call import ModelCaller
+from metis_core.llm.capability import chat_provider_from_capability
 from metis_core.llm.errors import (
     BudgetExceededError,
     ModelError,
@@ -58,6 +59,7 @@ __all__ = [
     "WorkspaceLedger",
     "build_model_audit_event",
     "call_with_repair",
+    "chat_provider_from_capability",
     "compare_providers",
     "cost_usd",
     "default_registry",

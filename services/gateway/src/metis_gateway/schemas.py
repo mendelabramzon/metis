@@ -12,7 +12,16 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, JsonValue
 
-from metis_protocol import JobState, Role, Sensitivity, SkillOutcome, WorkspaceKind
+from metis_protocol import (
+    JobState,
+    ModelKind,
+    ModelTier,
+    PrivacyTier,
+    Role,
+    Sensitivity,
+    SkillOutcome,
+    WorkspaceKind,
+)
 
 # --- sources + ingestion -----------------------------------------------------------------------
 
@@ -59,6 +68,24 @@ class ParseStatus(BaseModel):
 
 class UploadResponse(BaseModel):
     files: list[ParseStatus]
+
+
+# --- model providers (operator) ----------------------------------------------------------------
+
+
+class ProviderView(BaseModel):
+    """An operator's view of a model enabled by its capability manifest."""
+
+    provider: str
+    model_id: str
+    kind: ModelKind
+    privacy_tier: PrivacyTier
+    tiers: list[ModelTier]
+    context_window: int
+    max_output_tokens: int
+    supports_tools: bool
+    supports_json: bool
+    embedding_dim: int | None = None
 
 
 # --- query / chat ------------------------------------------------------------------------------
