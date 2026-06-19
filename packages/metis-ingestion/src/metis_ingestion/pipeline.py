@@ -20,7 +20,7 @@ from metis_core.stores import (
 from metis_ingestion.connectors.base import FetchingConnector
 from metis_ingestion.extract import BaselineExtractor
 from metis_ingestion.failures import StepFailure, UnsupportedMediaType, record_failure
-from metis_ingestion.normalize import build_normalized_doc
+from metis_ingestion.normalize import build_normalized_doc_rich
 from metis_ingestion.parsers import get_format
 from metis_ingestion.segment import parse_document
 from metis_protocol import AuditSink, SourceId, SourceRef
@@ -85,13 +85,15 @@ class IngestionPipeline:
         await self._artifacts.put_blob(data)
         await self._artifacts.put(raw)
 
-        doc = build_normalized_doc(raw, data)
+        doc, product = build_normalized_doc_rich(raw, data)
         await self._documents.put_normalized(doc)
 
         fmt = get_format(raw.media_type)
         if fmt is None:
             raise UnsupportedMediaType(raw.media_type)
-        parsed, segments = parse_document(doc, fmt.segmentation)
+        parsed, segments = parse_document(
+            doc, fmt.segmentation, pages=product.pages, page_count=product.page_count
+        )
         await self._documents.put_parsed(parsed)
         await self._documents.put_segments(segments)
 

@@ -56,7 +56,8 @@ from metis_gateway.settings import GatewaySettings
 from metis_gateway.tokens import terms
 from metis_ingestion import (
     BaselineExtractor,
-    build_normalized_doc,
+    assess,
+    build_normalized_doc_rich,
     build_raw_artifact,
     get_format,
     mime,
@@ -136,12 +137,17 @@ from metis_runtime.skills import (
 @dataclass(frozen=True)
 class IngestOutcome:
     """The parse-status projection of one ingested file: enough for the upload UI to show what
-    happened (the detected type, how many segments parsed, how many claims were extracted)."""
+    happened (the detected type, segment/claim counts, and the parse-quality report)."""
 
     doc_id: str
     media_type: str
     segments: int
     claims: int
+    coverage: float = 1.0
+    page_count: int | None = None
+    tables: int = 0
+    warnings: tuple[str, ...] = ()
+    parse_path: str = "deterministic"
 
 
 # --- evidence drill-down (the evidence browser reads these) ------------------------------------
@@ -446,9 +452,12 @@ class InMemoryWorkspace:
             policy=policy,
             connector=connector,
         )
-        doc = build_normalized_doc(raw, data, policy=policy)
-        parsed, segments = parse_document(doc, fmt.segmentation)
+        doc, product = build_normalized_doc_rich(raw, data, policy=policy)
+        parsed, segments = parse_document(
+            doc, fmt.segmentation, pages=product.pages, page_count=product.page_count
+        )
         result = BaselineExtractor().extract(doc, parsed.id, segments)
+        quality = assess(product, segments=len(segments))
 
         self._docs[str(doc.id)] = doc
         self._artifacts[str(raw.id)] = str(doc.id)
@@ -463,6 +472,11 @@ class InMemoryWorkspace:
             media_type=media.media_type,
             segments=len(segments),
             claims=len(result.batch.claims),
+            coverage=quality.coverage,
+            page_count=quality.page_count,
+            tables=quality.tables,
+            warnings=quality.warnings,
+            parse_path=product.parse_path,
         )
 
     async def ingest(
@@ -950,14 +964,17 @@ class PostgresWorkspace:
         )
         await self._artifacts.put_blob(data)
         await self._artifacts.put(raw)
-        doc = build_normalized_doc(raw, data, policy=policy)
+        doc, product = build_normalized_doc_rich(raw, data, policy=policy)
         await self._documents.put_normalized(doc)
-        parsed, segments = parse_document(doc, fmt.segmentation)
+        parsed, segments = parse_document(
+            doc, fmt.segmentation, pages=product.pages, page_count=product.page_count
+        )
         await self._documents.put_parsed(parsed)
         await self._documents.put_segments(segments)
         result = BaselineExtractor().extract(doc, parsed.id, segments)
         await self._documents.put_source_spans(str(self._workspace_id), result.source_spans)
         await self._claims.write(result.batch)
+        quality = assess(product, segments=len(segments))
         if result.batch.claims:  # consolidate -> index so retrieval can find it
             cell = await self._builder.build(
                 workspace_id=self._workspace_id, claims=result.batch.claims
@@ -969,6 +986,11 @@ class PostgresWorkspace:
             media_type=media.media_type,
             segments=len(segments),
             claims=len(result.batch.claims),
+            coverage=quality.coverage,
+            page_count=quality.page_count,
+            tables=quality.tables,
+            warnings=quality.warnings,
+            parse_path=product.parse_path,
         )
 
     async def ingest(

@@ -116,6 +116,20 @@ def test_each_supported_format_uploads_with_a_parsed_status(
     assert status["segments"] >= 1  # the parser produced text; claim yield varies by format
 
 
+def test_pdf_upload_reports_parse_quality(client: TestClient, op: dict[str, str]) -> None:
+    _, ada, ws = _ada_workspace(client, op)
+    dense_pdf = _make_pdf(["Ada Lovelace is the CTO of Acme Inc. Founded in 2019."] * 30)
+    resp = client.post(
+        f"/workspaces/{ws}/upload", files=[("files", ("report.pdf", dense_pdf))], headers=ada
+    )
+    [status] = resp.json()["files"]
+    assert status["page_count"] == 1  # pypdf len(reader.pages), now surfaced
+    assert status["parse_path"] == "deterministic"
+    assert status["coverage"] is not None
+    assert status["coverage"] > 0.5
+    assert status["warnings"] == []  # a text-rich PDF has no quality warnings
+
+
 def test_batch_isolates_a_bad_file_and_still_reports_the_good_one(
     client: TestClient, op: dict[str, str]
 ) -> None:

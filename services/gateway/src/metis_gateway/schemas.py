@@ -211,7 +211,8 @@ class MemoryRevisionResult(BaseModel):
 
 
 class ParseStatus(BaseModel):
-    """The visible per-file result of an upload: parsed, an unsupported type, or a parse failure."""
+    """The visible per-file result of an upload: parsed, an unsupported type, or a parse failure,
+    plus the parse-quality report (coverage, page/table counts, warnings, the parse path taken)."""
 
     filename: str
     status: Literal["parsed", "unsupported", "failed"]
@@ -220,6 +221,11 @@ class ParseStatus(BaseModel):
     segments: int = 0
     claims: int = 0
     error: str | None = None
+    coverage: float | None = None
+    page_count: int | None = None
+    tables: int = 0
+    warnings: list[str] = Field(default_factory=list)
+    parse_path: str | None = None
 
 
 class UploadResponse(BaseModel):

@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 from metis_ingestion._build import make_provenance, now_utc, stable_id
-from metis_ingestion.parsers import Segmentation
+from metis_ingestion.parsers import PageText, Segmentation
 from metis_protocol import (
     AgentKind,
     NormalizedDoc,
@@ -52,14 +52,28 @@ def _blocks(text: str, segmentation: Segmentation) -> Iterator[Block]:
         cursor += len(raw) + len(separator)
 
 
+def _page_of(offset: int, pages: tuple[PageText, ...]) -> int | None:
+    """The 1-based page whose char range contains ``offset`` (None when pages are unknown)."""
+    for page in pages:
+        if page.char_start <= offset < page.char_end:
+            return page.page
+    return None
+
+
 def parse_document(
     doc: NormalizedDoc,
     segmentation: Segmentation,
     *,
+    pages: tuple[PageText, ...] = (),
+    page_count: int | None = None,
     policy: PolicyState | None = None,
     trace_id: str | None = None,
 ) -> tuple[ParsedDoc, list[Segment]]:
-    """Segment ``doc`` and return the ParsedDoc plus its Segments (with offsets)."""
+    """Segment ``doc`` and return the ParsedDoc plus its Segments (with offsets).
+
+    ``pages``/``page_count`` (from the rich parse) set ``Segment.page`` + ``ParsedDoc.page_count``;
+    omitted (the default), segmentation is identical to before — every segment's page stays None.
+    """
     parsed_doc_id = stable_id(ParsedDocId, str(doc.id))
     resolved_policy = policy if policy is not None else doc.policy
     workspace_id = doc.provenance.workspace_id
@@ -86,6 +100,7 @@ def parse_document(
                 text=block.text,
                 char_start=block.char_start,
                 char_end=block.char_end,
+                page=_page_of(block.char_start, pages),
             )
         )
 
@@ -104,5 +119,6 @@ def parse_document(
         doc_id=doc.id,
         segment_ids=tuple(segment.id for segment in segments),
         title=doc.title,
+        page_count=page_count,
     )
     return parsed, segments

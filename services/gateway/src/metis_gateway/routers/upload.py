@@ -46,6 +46,11 @@ async def upload_files(
                     media_type=outcome.media_type,
                     segments=outcome.segments,
                     claims=outcome.claims,
+                    coverage=outcome.coverage,
+                    page_count=outcome.page_count,
+                    tables=outcome.tables,
+                    warnings=list(outcome.warnings),
+                    parse_path=outcome.parse_path,
                 )
             )
     return UploadResponse(files=statuses)
