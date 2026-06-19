@@ -37,6 +37,7 @@ from metis_ingestion.connectors.base import (
 from metis_ingestion.connectors.calendar import CalendarConnector
 from metis_ingestion.connectors.gdrive import GoogleDriveConnector
 from metis_ingestion.connectors.imap import ImapConnector
+from metis_ingestion.connectors.imap_transport import ImapConfig, ImapTransport
 from metis_ingestion.connectors.local_folder import LocalFolderConnector
 from metis_ingestion.connectors.registry import (
     ConnectorRegistry,
@@ -69,7 +70,9 @@ __all__ = [
     "ConnectorSpec",
     "FetchingConnector",
     "GoogleDriveConnector",
+    "ImapConfig",
     "ImapConnector",
+    "ImapTransport",
     "InMemorySecretResolver",
     "LocalFolderConnector",
     "RateLimitError",
