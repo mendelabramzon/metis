@@ -18,6 +18,7 @@ from metis_protocol import (
     Sensitivity,
     SkillManifest,
     max_sensitivity,
+    role_can_admin,
     role_can_write,
     sensitivity_rank,
 )
@@ -71,16 +72,20 @@ def propagate_policy(parents: Sequence[PolicyState]) -> PolicyState:
     )
 
 
-def workspace_access_decision(role: Role | None, *, require_write: bool = False) -> PolicyDecision:
+def workspace_access_decision(
+    role: Role | None, *, require_write: bool = False, require_admin: bool = False
+) -> PolicyDecision:
     """Whether a caller holding ``role`` may access a workspace.
 
     ``role is None`` means no membership — the isolation gate, and a hard deny: this is what
-    keeps one user's personal workspace invisible to another. Any membership grants read;
-    writes additionally require a writer role (member/admin/owner), never viewer/auditor.
-    The caller resolves ``role`` from ``PostgresIdentityStore.resolve_role`` before retrieval.
+    keeps one user's personal workspace invisible to another. Any membership grants read; writes
+    require a writer role (member/admin/owner), and administering membership/settings requires
+    admin/owner. The caller resolves ``role`` from ``IdentityStore.resolve_role`` before access.
     """
     if role is None:
         return PolicyDecision.deny("no membership in this workspace")
+    if require_admin and not role_can_admin(role):
+        return PolicyDecision.deny(f"role {role.value} cannot administer this workspace")
     if require_write and not role_can_write(role):
         return PolicyDecision.deny(f"role {role.value} is read-only in this workspace")
     return PolicyDecision.allow(f"role {role.value} permits this access")

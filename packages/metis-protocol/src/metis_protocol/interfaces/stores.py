@@ -11,6 +11,8 @@ from typing import Protocol, runtime_checkable
 
 from metis_protocol.artifacts import NormalizedDoc, ParsedDoc, RawArtifact, Segment
 from metis_protocol.claims import Claim, ClaimWriteResult, ExtractionBatch
+from metis_protocol.enums import Role
+from metis_protocol.identity import Organization, User, Workspace, WorkspaceMembership
 from metis_protocol.ids import (
     ClaimId,
     ContradictionId,
@@ -21,7 +23,9 @@ from metis_protocol.ids import (
     ParsedDocId,
     ProfileId,
     SegmentId,
+    UserId,
     WikiPageId,
+    WorkspaceId,
 )
 from metis_protocol.memory import (
     Contradiction,
@@ -103,3 +107,30 @@ class WikiStore(Protocol):
     async def get_page_by_slug(self, slug: str) -> WikiPage | None: ...
 
     async def apply_patch(self, patch: WikiPatch) -> WikiPageId: ...
+
+
+@runtime_checkable
+class IdentityStore(Protocol):
+    """Organizations, users, workspaces, and memberships — the control plane the gateway
+    resolves a caller and their workspace access from. ``resolve_role`` is the isolation gate.
+    """
+
+    async def create_organization(self, org: Organization) -> Organization: ...
+
+    async def create_user(self, user: User) -> User: ...
+
+    async def create_workspace(self, workspace: Workspace) -> Workspace: ...
+
+    async def add_membership(self, membership: WorkspaceMembership) -> WorkspaceMembership: ...
+
+    async def get_user(self, user_id: UserId) -> User | None: ...
+
+    async def get_user_by_email(self, email: str) -> User | None: ...
+
+    async def get_workspace(self, workspace_id: WorkspaceId) -> Workspace | None: ...
+
+    async def resolve_role(self, *, user_id: UserId, workspace_id: WorkspaceId) -> Role | None: ...
+
+    async def workspaces_for_user(self, user_id: UserId) -> Sequence[Workspace]: ...
+
+    async def members_of(self, workspace_id: WorkspaceId) -> Sequence[WorkspaceMembership]: ...

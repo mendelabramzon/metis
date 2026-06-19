@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, JsonValue
 
-from metis_protocol import JobState, Sensitivity, SkillOutcome
+from metis_protocol import JobState, Role, Sensitivity, SkillOutcome, WorkspaceKind
 
 # --- sources + ingestion -----------------------------------------------------------------------
 
@@ -142,3 +142,55 @@ class WikiPatchView(BaseModel):
     id: str
     summary: str
     status: str
+
+
+# --- identity + workspaces ---------------------------------------------------------------------
+
+
+class OrganizationCreate(BaseModel):
+    name: str
+
+
+class OrganizationView(BaseModel):
+    id: str
+    name: str
+
+
+class UserCreate(BaseModel):
+    organization_id: str
+    email: str
+    display_name: str
+
+
+class UserView(BaseModel):
+    id: str
+    organization_id: str
+    email: str
+    display_name: str
+    active: bool
+
+
+class WorkspaceCreate(BaseModel):
+    name: str
+    kind: WorkspaceKind = WorkspaceKind.SHARED
+
+
+class WorkspaceView(BaseModel):
+    id: str
+    organization_id: str
+    kind: WorkspaceKind
+    name: str
+    owner_id: str | None = None
+    default_sensitivity: Sensitivity
+
+
+class MembershipCreate(BaseModel):
+    user_id: str
+    role: Role = Role.MEMBER
+
+
+class MembershipView(BaseModel):
+    id: str
+    workspace_id: str
+    user_id: str
+    role: Role

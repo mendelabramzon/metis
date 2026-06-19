@@ -9,16 +9,19 @@ Token-to-scope is a dev stand-in; encrypted credentials and SSO are Stage 14, bu
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import IntEnum
 from typing import Annotated
 
 from fastapi import Depends, Header, Request
 
-from metis_gateway.errors import ForbiddenError, UnauthorizedError
+from metis_core.policy import workspace_access_decision
+from metis_gateway.backend import Backend
+from metis_gateway.errors import ForbiddenError, NotFoundError, UnauthorizedError
 from metis_gateway.settings import GatewaySettings
-from metis_protocol import Sensitivity
+from metis_protocol import Role, Sensitivity, User, UserId, WorkspaceId
+from metis_protocol import Workspace as WorkspaceEntity
 
 
 class Scope(IntEnum):
@@ -71,3 +74,61 @@ def require(min_scope: Scope) -> Callable[[Principal], Principal]:
 
 require_user = require(Scope.USER)
 require_operator = require(Scope.OPERATOR)
+
+
+# --- identity-backed auth: a real User + the workspace membership gate -------------------------
+
+
+async def current_user(request: Request, authorization: str | None = Header(default=None)) -> User:
+    """Resolve the calling ``User`` from the bearer token.
+
+    The token is the user's id — a dev stand-in for a real session (sessions/SSO are Stage 14); the
+    seam (a ``User`` resolved per request from the identity store) is what matters. 401 if the token
+    is absent, malformed, or unknown.
+    """
+    if authorization is None or not authorization.lower().startswith("bearer "):
+        raise UnauthorizedError("expected 'Authorization: Bearer <token>'")
+    backend: Backend = request.app.state.backend
+    user = await backend.identity.get_user(UserId(authorization[7:].strip()))
+    if user is None:
+        raise UnauthorizedError()
+    return user
+
+
+@dataclass(frozen=True)
+class WorkspaceContext:
+    """A caller resolved against a workspace: their identity, the workspace, and admitted role."""
+
+    user: User
+    workspace: WorkspaceEntity
+    role: Role
+
+
+def workspace_context(
+    *, write: bool = False, admin: bool = False
+) -> Callable[..., Awaitable[WorkspaceContext]]:
+    """A dependency factory enforcing the membership gate on the ``{workspace_id}`` path param.
+
+    No membership -> 403 (the isolation boundary); an insufficient role for a write/admin op -> 403;
+    an unknown workspace -> 404. Returns the resolved :class:`WorkspaceContext` on success. Policy
+    lives in the pure ``workspace_access_decision``, not in this handler.
+    """
+
+    async def _dependency(
+        workspace_id: str,
+        request: Request,
+        user: Annotated[User, Depends(current_user)],
+    ) -> WorkspaceContext:
+        backend: Backend = request.app.state.backend
+        ws_id = WorkspaceId(workspace_id)
+        workspace = await backend.identity.get_workspace(ws_id)
+        if workspace is None:
+            raise NotFoundError(f"unknown workspace {workspace_id}")
+        role = await backend.identity.resolve_role(user_id=user.id, workspace_id=ws_id)
+        decision = workspace_access_decision(role, require_write=write, require_admin=admin)
+        if not decision.allowed:
+            raise ForbiddenError(decision.reason)
+        assert role is not None  # decision.allowed implies a resolved role
+        return WorkspaceContext(user=user, workspace=workspace, role=role)
+
+    return _dependency

@@ -13,10 +13,14 @@ from metis_gateway.routers import (
     query,
     skills,
     sources,
+    users,
     wiki,
+    workspaces,
 )
 
 ALL_ROUTERS = (
+    users.router,
+    workspaces.router,
     sources.router,
     ingestion.router,
     query.router,

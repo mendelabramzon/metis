@@ -27,6 +27,7 @@ from metis_core.objectstore import S3ObjectStore
 from metis_core.stores import (
     PostgresClaimStore,
     PostgresDocumentStore,
+    PostgresIdentityStore,
     PostgresMemoryStore,
     PostgresMinioArtifactStore,
 )
@@ -60,19 +61,28 @@ from metis_protocol import (
     ContextBundle,
     ContextBundleId,
     ContextSection,
+    IdentityStore,
     Job,
     JobId,
     JobState,
     NormalizedDoc,
     ObjectStore,
+    Organization,
     PolicyState,
     QueryRequest,
+    Role,
     Sensitivity,
     SourceId,
+    User,
+    UserId,
     WorkspaceId,
+    WorkspaceMembership,
     is_at_least,
     max_sensitivity,
     new_id,
+)
+from metis_protocol import (
+    Workspace as WorkspaceEntity,
 )
 from metis_runtime.agent import AgentLoop
 from metis_runtime.query import Answer, MemoryRetriever, QueryEngine
@@ -135,6 +145,54 @@ class RecordingAuditSink:
     async def recent(self, *, action: str | None = None, limit: int = 100) -> list[AuditEvent]:
         chosen = [e for e in self.events if action is None or e.action == action]
         return list(reversed(chosen))[:limit]
+
+
+class InMemoryIdentityStore:
+    """An in-process ``IdentityStore`` for the default backend and tests (no Postgres).
+
+    Conforms structurally to the protocol ``IdentityStore``; ``PostgresIdentityStore`` is the
+    durable sibling. Writes are idempotent by id (``setdefault``), matching the durable store.
+    """
+
+    def __init__(self) -> None:
+        self._orgs: dict[str, Organization] = {}
+        self._users: dict[str, User] = {}
+        self._workspaces: dict[str, WorkspaceEntity] = {}
+        self._memberships: dict[str, WorkspaceMembership] = {}
+
+    async def create_organization(self, org: Organization) -> Organization:
+        return self._orgs.setdefault(str(org.id), org)
+
+    async def create_user(self, user: User) -> User:
+        return self._users.setdefault(str(user.id), user)
+
+    async def create_workspace(self, workspace: WorkspaceEntity) -> WorkspaceEntity:
+        return self._workspaces.setdefault(str(workspace.id), workspace)
+
+    async def add_membership(self, membership: WorkspaceMembership) -> WorkspaceMembership:
+        return self._memberships.setdefault(str(membership.id), membership)
+
+    async def get_user(self, user_id: UserId) -> User | None:
+        return self._users.get(str(user_id))
+
+    async def get_user_by_email(self, email: str) -> User | None:
+        return next((u for u in self._users.values() if u.email == email), None)
+
+    async def get_workspace(self, workspace_id: WorkspaceId) -> WorkspaceEntity | None:
+        return self._workspaces.get(str(workspace_id))
+
+    async def resolve_role(self, *, user_id: UserId, workspace_id: WorkspaceId) -> Role | None:
+        for membership in self._memberships.values():
+            if membership.user_id == user_id and membership.workspace_id == workspace_id:
+                return membership.role
+        return None
+
+    async def workspaces_for_user(self, user_id: UserId) -> Sequence[WorkspaceEntity]:
+        ids = [m.workspace_id for m in self._memberships.values() if m.user_id == user_id]
+        return [self._workspaces[str(i)] for i in ids if str(i) in self._workspaces]
+
+    async def members_of(self, workspace_id: WorkspaceId) -> Sequence[WorkspaceMembership]:
+        return [m for m in self._memberships.values() if m.workspace_id == workspace_id]
 
 
 class InMemoryWorkspace:
@@ -542,6 +600,7 @@ class Backend:
     sources: SourceRegistry
     wiki: WikiInbox
     inbox: ApprovalInbox
+    identity: IdentityStore = field(default_factory=InMemoryIdentityStore)
     object_store: ObjectStore = field(default_factory=InMemoryObjectStore)
     engine: AsyncEngine | None = None  # set for the Postgres backend; disposed at shutdown
     http_client: httpx.AsyncClient | None = (
@@ -668,6 +727,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         sources=SourceRegistry(ConnectorRegistry.with_defaults()),
         wiki=wiki,
         inbox=inbox,
+        identity=PostgresIdentityStore(sessionmaker),
         object_store=object_store,
         engine=engine,
         http_client=client,

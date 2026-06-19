@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         ArtifactStore,
         ClaimStore,
         DocumentStore,
+        IdentityStore,
         MemoryStore,
         ObjectStore,
         WikiStore,
@@ -36,11 +37,12 @@ if TYPE_CHECKING:
 
     def _conformance(
         sessionmaker: async_sessionmaker[AsyncSession], objects: ObjectStore
-    ) -> tuple[ArtifactStore, DocumentStore, ClaimStore, MemoryStore, WikiStore]:
+    ) -> tuple[ArtifactStore, DocumentStore, ClaimStore, MemoryStore, WikiStore, IdentityStore]:
         return (
             PostgresMinioArtifactStore(sessionmaker, objects),
             PostgresDocumentStore(sessionmaker),
             PostgresClaimStore(sessionmaker),
             PostgresMemoryStore(sessionmaker),
             PostgresWikiStore(sessionmaker),
+            PostgresIdentityStore(sessionmaker),
         )

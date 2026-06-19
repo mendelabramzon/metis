@@ -26,6 +26,7 @@ from metis_protocol.interfaces.stores import (
     ArtifactStore,
     ClaimStore,
     DocumentStore,
+    IdentityStore,
     MemoryStore,
     WikiStore,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "DocumentStore",
     "Extractor",
     "ForesightBuilder",
+    "IdentityStore",
     "JobQueue",
     "MemoryStore",
     "ModelMessage",
