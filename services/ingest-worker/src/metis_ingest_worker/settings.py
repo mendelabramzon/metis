@@ -20,6 +20,11 @@ class IngestWorkerSettings(BaseSettings):
     log_level: str = "INFO"
     # The source to poll and the workspace it belongs to. Database and object-store
     # configuration come from metis-core's CoreSettings (METIS_CORE_* env).
+    # When set, ``source_id`` names a registered SourceConfig: the worker resumes from that
+    # source's durable cursor and records a ConnectorRun per cycle, and the source's workspace
+    # (not ``workspace_id`` below) drives ingestion. Left empty, the worker polls with an
+    # in-process cursor and no run history (the local-folder dev mode).
+    source_id: str = ""
     connector: str = "local_folder"  # "local_folder" | "imap"
     workspace_id: str = ""
     ingest_root: str = "."  # for connector == "local_folder"

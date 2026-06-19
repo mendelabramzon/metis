@@ -1,9 +1,11 @@
 """Entrypoint wiring for the ingest worker (ADR 0009).
 
-``run()`` builds typed settings and wires an ``IngestPoller`` over the configured connector (a local
-folder or an IMAP mailbox) and the core stores, then polls it on an interval — each cycle ingests
-what is new and advances the cursor. ``--dry-run`` wires settings and stops (no database needed),
-backing the boot test.
+``run()`` builds typed settings and wires a poller over the configured connector (a local folder or
+an IMAP mailbox) and the core stores, then polls it on an interval — each cycle ingests what is new
+and advances the cursor. When ``source_id`` names a registered source, the poll loop is durable
+(``DurableIngestPoller``): it resumes from that source's stored cursor and records a connector run
+per active cycle, so a restart resumes rather than re-ingests. ``--dry-run`` wires settings and
+stops (no database needed), backing the boot test.
 """
 
 from __future__ import annotations
@@ -20,8 +22,10 @@ from metis_core.stores import (
     PostgresClaimStore,
     PostgresDocumentStore,
     PostgresMinioArtifactStore,
+    PostgresSourceStore,
 )
 from metis_ingestion import (
+    DurableIngestPoller,
     ImapConfig,
     ImapConnector,
     ImapTransport,
@@ -30,7 +34,7 @@ from metis_ingestion import (
     LocalFolderConnector,
 )
 from metis_ingestion.connectors import FetchingConnector
-from metis_protocol import WorkspaceId
+from metis_protocol import SourceId, WorkspaceId
 
 from .settings import IngestWorkerSettings
 
@@ -61,23 +65,36 @@ async def _poll(settings: IngestWorkerSettings, core: CoreSettings) -> None:
         secret_key=core.object_store_secret_key,
     )
     await object_store.ensure_bucket()
-    poller = IngestPoller(
-        IngestionPipeline(
-            connector=build_connector(settings, WorkspaceId(settings.workspace_id)),
-            artifact_store=PostgresMinioArtifactStore(sessionmaker, object_store),
-            document_store=PostgresDocumentStore(sessionmaker),
-            claim_store=PostgresClaimStore(sessionmaker),
-            audit_sink=PostgresAuditSink(sessionmaker),
-        )
+    source_store = PostgresSourceStore(sessionmaker)
+
+    # A registered source drives the workspace and gives the poll loop a durable cursor + run
+    # history; absent one, fall back to the configured workspace with an in-process cursor.
+    source = await source_store.get(SourceId(settings.source_id)) if settings.source_id else None
+    if settings.source_id and source is None:
+        raise ValueError(f"configured source {settings.source_id!r} is not registered")
+    workspace_id = source.workspace_id if source is not None else WorkspaceId(settings.workspace_id)
+
+    pipeline = IngestionPipeline(
+        connector=build_connector(settings, workspace_id),
+        artifact_store=PostgresMinioArtifactStore(sessionmaker, object_store),
+        document_store=PostgresDocumentStore(sessionmaker),
+        claim_store=PostgresClaimStore(sessionmaker),
+        audit_sink=PostgresAuditSink(sessionmaker),
+    )
+    poller: IngestPoller | DurableIngestPoller = (
+        await DurableIngestPoller.resume(pipeline, source=source, store=source_store)
+        if source is not None
+        else IngestPoller(pipeline)
     )
     try:
         while True:
             result = await poller.poll_once()
             logger.info(
-                "ingested %d artifact(s), %d claim(s), %d failure(s) (cursor=%s)",
+                "ingested %d artifact(s), %d claim(s), %d failure(s) (source=%s cursor=%s)",
                 result.artifacts,
                 result.claims,
                 len(result.failures),
+                settings.source_id or "-",
                 poller.cursor,
             )
             await asyncio.sleep(settings.poll_interval_seconds)
