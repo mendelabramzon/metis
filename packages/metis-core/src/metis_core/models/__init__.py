@@ -15,6 +15,7 @@ from metis_core.models.identity import (
     OrganizationRow,
     UserRow,
     WorkspaceMembershipRow,
+    WorkspaceModelPolicyRow,
     WorkspaceRow,
 )
 from metis_core.models.jobs import JobRow
@@ -51,5 +52,6 @@ __all__ = [
     "WikiPageRow",
     "WikiPatchRow",
     "WorkspaceMembershipRow",
+    "WorkspaceModelPolicyRow",
     "WorkspaceRow",
 ]

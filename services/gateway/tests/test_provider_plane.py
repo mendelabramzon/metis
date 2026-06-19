@@ -10,11 +10,22 @@ from __future__ import annotations
 from typing import Any
 
 from metis_core.llm import MetisModelRouter, RoutableProvider
-from metis_gateway.models import assemble_chat_providers
+from metis_gateway.models import ModelPlane, SpendTracker, assemble_chat_providers
 from metis_gateway.settings import GatewaySettings
-from metis_protocol import ModelRequest, ModelTaskClass, Sensitivity
+from metis_protocol import AuditEvent, ModelRequest, ModelTaskClass, Sensitivity
 
 _LOCAL = "http://localhost:11434"
+
+
+class _Sink:
+    async def emit(self, event: AuditEvent) -> None:  # pragma: no cover - not exercised
+        return None
+
+
+def _plane(providers: tuple[RoutableProvider, ...]) -> ModelPlane:
+    return ModelPlane(
+        providers=providers, spend=SpendTracker(_Sink()), local_client=None, closers=()
+    )
 
 
 def _router(
@@ -75,3 +86,23 @@ def test_no_providers_without_config() -> None:
         GatewaySettings(), anthropic_client=None, openai_client=None, local_client=None
     )
     assert providers == []
+
+
+def test_local_only_policy_drops_external_providers() -> None:
+    settings = GatewaySettings(openai_api_key="k", model_endpoint=_LOCAL)
+    dummy: Any = object()
+    providers = assemble_chat_providers(
+        settings, anthropic_client=None, openai_client=dummy, local_client=dummy
+    )
+    # providers[0] is the external OpenAI provider, providers[1] the local Ollama one.
+    assert providers[0].is_external is True
+    assert providers[1].is_external is False
+
+    plane = _plane(tuple(providers))
+    assert plane.make_caller(allow_external=True) is not None  # both providers
+    assert plane.make_caller(allow_external=False) is not None  # local survives
+
+    # A workspace forbidding external models, with only an external provider available, gets no
+    # caller at all — it can never reach the cloud.
+    external_only = _plane((providers[0],))
+    assert external_only.make_caller(allow_external=False) is None

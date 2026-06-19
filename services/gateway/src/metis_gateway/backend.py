@@ -35,6 +35,7 @@ from metis_core.wiki.approval import WikiPatchReview, WikiPatchStatus
 from metis_gateway.errors import ConflictError, NotFoundError
 from metis_gateway.models import (
     FallbackAnswerGenerator,
+    SpendTracker,
     build_embedding_router,
     build_model_plane,
 )
@@ -76,6 +77,7 @@ from metis_protocol import (
     UserId,
     WorkspaceId,
     WorkspaceMembership,
+    WorkspaceModelPolicy,
     is_at_least,
     max_sensitivity,
     new_id,
@@ -158,6 +160,7 @@ class InMemoryIdentityStore:
         self._users: dict[str, User] = {}
         self._workspaces: dict[str, WorkspaceEntity] = {}
         self._memberships: dict[str, WorkspaceMembership] = {}
+        self._policies: dict[str, WorkspaceModelPolicy] = {}
 
     async def create_organization(self, org: Organization) -> Organization:
         return self._orgs.setdefault(str(org.id), org)
@@ -192,6 +195,15 @@ class InMemoryIdentityStore:
 
     async def members_of(self, workspace_id: WorkspaceId) -> Sequence[WorkspaceMembership]:
         return [m for m in self._memberships.values() if m.workspace_id == workspace_id]
+
+    async def get_model_policy(self, workspace_id: WorkspaceId) -> WorkspaceModelPolicy:
+        return self._policies.get(
+            str(workspace_id), WorkspaceModelPolicy(workspace_id=workspace_id)
+        )
+
+    async def set_model_policy(self, policy: WorkspaceModelPolicy) -> WorkspaceModelPolicy:
+        self._policies[str(policy.workspace_id)] = policy
+        return policy
 
 
 class InMemoryWorkspace:
@@ -606,37 +618,39 @@ class Backend:
         None  # the local model client (chat + embeddings); closed at shutdown
     )
     model_closers: tuple[Callable[[], Awaitable[None]], ...] = ()  # cloud clients to close
-    # Builds a per-workspace engine on demand (set by the build functions); ``workspace``/``agent``
-    # above are the configured workspace's, and the caches below hold the rest.
-    workspace_factory: Callable[[WorkspaceId], Workspace] | None = None
-    _workspaces: dict[str, Workspace] = field(default_factory=dict, repr=False)
-    _agents: dict[str, AgentLoop] = field(default_factory=dict, repr=False)
+    spend: SpendTracker | None = None  # per-workspace model spend (None when no model is wired)
+    # Builds a per-workspace engine for (workspace_id, allow_external) on demand (set by the build
+    # functions); ``workspace``/``agent`` above are the configured workspace's default engine.
+    workspace_factory: Callable[[WorkspaceId, bool], Workspace] | None = None
+    _workspaces: dict[tuple[str, bool], Workspace] = field(default_factory=dict, repr=False)
+    _agents: dict[tuple[str, bool], AgentLoop] = field(default_factory=dict, repr=False)
 
-    def workspace_for(self, workspace_id: WorkspaceId) -> Workspace:
-        """The ingest/answer engine scoped to ``workspace_id`` — the configured one, or built on
-        demand via the factory and cached. The membership gate runs before this is reached, so the
-        caller is always a member of the workspace it returns."""
-        key = str(workspace_id)
-        if key == str(self.workspace_id):
+    def workspace_for(self, workspace_id: WorkspaceId, *, allow_external: bool = True) -> Workspace:
+        """The ingest/answer engine for ``workspace_id`` under its model policy — the configured
+        default one, or built on demand and cached. The membership gate runs before this is reached,
+        so the caller is always a member of the workspace it returns."""
+        if str(workspace_id) == str(self.workspace_id) and allow_external:
             return self.workspace
         if self.workspace_factory is None:
-            raise NotFoundError(f"workspace {key} is not served by this backend")
+            raise NotFoundError(f"workspace {workspace_id} is not served by this backend")
+        key = (str(workspace_id), allow_external)
         engine = self._workspaces.get(key)
         if engine is None:
-            engine = self.workspace_factory(workspace_id)
+            engine = self.workspace_factory(workspace_id, allow_external)
             self._workspaces[key] = engine
         return engine
 
-    def agent_for(self, workspace_id: WorkspaceId) -> AgentLoop:
-        """The agent loop bound to ``workspace_id``'s engine — cached so a run held for approval
-        persists between the request that proposes it and the one that resumes it."""
-        key = str(workspace_id)
-        if key == str(self.workspace_id):
+    def agent_for(self, workspace_id: WorkspaceId, *, allow_external: bool = True) -> AgentLoop:
+        """The agent loop for ``workspace_id`` under its model policy — cached so a run held for
+        approval persists from the request that proposes it to the one that resumes it (a policy
+        change between those is the rare case that drops the held run)."""
+        if str(workspace_id) == str(self.workspace_id) and allow_external:
             return self.agent
+        key = (str(workspace_id), allow_external)
         agent = self._agents.get(key)
         if agent is None:
             agent = AgentLoop(
-                answerer=self.workspace_for(workspace_id),
+                answerer=self.workspace_for(workspace_id, allow_external=allow_external),
                 skill_runner=self.skill_runner,
                 registry=self.skills,
                 audit_sink=self.audit,
@@ -652,7 +666,6 @@ def build_backend(settings: GatewaySettings) -> Backend:
     object_store = InMemoryObjectStore()
 
     plane = build_model_plane(settings, audit_sink=audit)
-    caller = plane.caller
 
     skills = (
         SkillRegistry.discover(Path(settings.skills_root))
@@ -663,10 +676,10 @@ def build_backend(settings: GatewaySettings) -> Backend:
         skills, audit_sink=audit, object_store=object_store, workspace_id=workspace_id
     )
 
-    def _workspace_factory(ws_id: WorkspaceId) -> Workspace:
-        return InMemoryWorkspace(ws_id, caller=caller)
+    def _workspace_factory(ws_id: WorkspaceId, allow_external: bool) -> Workspace:
+        return InMemoryWorkspace(ws_id, caller=plane.make_caller(allow_external=allow_external))
 
-    workspace = _workspace_factory(workspace_id)
+    workspace = _workspace_factory(workspace_id, allow_external=True)
     agent = AgentLoop(
         answerer=workspace, skill_runner=skill_runner, registry=skills, audit_sink=audit
     )
@@ -687,6 +700,7 @@ def build_backend(settings: GatewaySettings) -> Backend:
         object_store=object_store,
         http_client=plane.local_client,
         model_closers=plane.closers,
+        spend=plane.spend,
         workspace_factory=_workspace_factory,
     )
 
@@ -717,7 +731,6 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
     # the plane. Embeddings: local bge-m3 when an endpoint is set, else stub vectors. The answer
     # generator degrades to extractive on a model error.
     plane = build_model_plane(settings, audit_sink=audit)
-    caller = plane.caller
     if plane.local_client is not None and settings.model_endpoint is not None:
         embedding_router: EmbeddingRouter = build_embedding_router(
             plane.local_client, endpoint=settings.model_endpoint, model=settings.embedding_model
@@ -725,13 +738,19 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
     else:
         embedding_router = stub_router()
 
-    query_engine = QueryEngine(
-        retriever=MemoryRetriever(MemoryIndexLookup(sessionmaker, embedding_router)),
-        claim_store=PostgresClaimStore(sessionmaker),
-        generator=FallbackAnswerGenerator(caller=caller) if caller is not None else None,
-    )
+    # Retriever + claim store are workspace-agnostic (they scope by the request's workspace_id), so
+    # they are built once and shared; only the answer generator's caller varies with the workspace's
+    # model policy, so the query engine is assembled per (workspace, allow_external) in the factory.
+    retriever = MemoryRetriever(MemoryIndexLookup(sessionmaker, embedding_router))
+    claim_store = PostgresClaimStore(sessionmaker)
 
-    def _workspace_factory(ws_id: WorkspaceId) -> Workspace:
+    def _workspace_factory(ws_id: WorkspaceId, allow_external: bool) -> Workspace:
+        caller = plane.make_caller(allow_external=allow_external)
+        query_engine = QueryEngine(
+            retriever=retriever,
+            claim_store=claim_store,
+            generator=FallbackAnswerGenerator(caller=caller) if caller is not None else None,
+        )
         return PostgresWorkspace(
             workspace_id=ws_id,
             sessionmaker=sessionmaker,
@@ -740,7 +759,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
             embedding_router=embedding_router,
         )
 
-    workspace = _workspace_factory(workspace_id)
+    workspace = _workspace_factory(workspace_id, allow_external=True)
     skills = (
         SkillRegistry.discover(Path(settings.skills_root))
         if settings.skills_root
@@ -771,5 +790,6 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         engine=engine,
         http_client=plane.local_client,
         model_closers=plane.closers,
+        spend=plane.spend,
         workspace_factory=_workspace_factory,
     )

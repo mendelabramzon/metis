@@ -12,7 +12,13 @@ from typing import Protocol, runtime_checkable
 from metis_protocol.artifacts import NormalizedDoc, ParsedDoc, RawArtifact, Segment
 from metis_protocol.claims import Claim, ClaimWriteResult, ExtractionBatch
 from metis_protocol.enums import Role
-from metis_protocol.identity import Organization, User, Workspace, WorkspaceMembership
+from metis_protocol.identity import (
+    Organization,
+    User,
+    Workspace,
+    WorkspaceMembership,
+    WorkspaceModelPolicy,
+)
 from metis_protocol.ids import (
     ClaimId,
     ContradictionId,
@@ -134,3 +140,7 @@ class IdentityStore(Protocol):
     async def workspaces_for_user(self, user_id: UserId) -> Sequence[Workspace]: ...
 
     async def members_of(self, workspace_id: WorkspaceId) -> Sequence[WorkspaceMembership]: ...
+
+    async def get_model_policy(self, workspace_id: WorkspaceId) -> WorkspaceModelPolicy: ...
+
+    async def set_model_policy(self, policy: WorkspaceModelPolicy) -> WorkspaceModelPolicy: ...

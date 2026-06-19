@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
 from typing import Any
 
 import httpx
@@ -26,8 +27,64 @@ from metis_core.llm import (
 )
 from metis_core.memory_index import EmbeddingRouter, local_router
 from metis_gateway.settings import GatewaySettings
-from metis_protocol import AuditSink, ContextBundle, ModelTier, QueryRequest
+from metis_protocol import (
+    AuditEvent,
+    AuditSink,
+    ContextBundle,
+    ModelTier,
+    QueryRequest,
+    WorkspaceId,
+    WorkspaceModelPolicy,
+)
 from metis_runtime.query import AnswerGenerator, query_registry
+
+
+def _today() -> date:
+    return datetime.now(UTC).date()
+
+
+class SpendTracker:
+    """An ``AuditSink`` decorator that accumulates per-workspace model spend (today, by task class)
+    from model-call events, then forwards to the wrapped sink. In-process and reset on restart — a
+    durable ledger over the audit log is a follow-up; this gives immediate visibility + cap checks.
+    """
+
+    def __init__(self, inner: AuditSink) -> None:
+        self._inner = inner
+        self._spend: dict[
+            tuple[str, str], dict[str, float]
+        ] = {}  # (workspace, day) -> {task: cost}
+
+    def record(
+        self,
+        workspace_id: WorkspaceId,
+        task_class: str,
+        cost_usd: float,
+        *,
+        day: date | None = None,
+    ) -> None:
+        key = (str(workspace_id), (day or _today()).isoformat())
+        bucket = self._spend.setdefault(key, {})
+        bucket[task_class] = bucket.get(task_class, 0.0) + cost_usd
+
+    async def emit(self, event: AuditEvent) -> None:
+        run = event.model_run
+        if run is not None and run.cost_usd:
+            self.record(
+                event.workspace_id, run.task_class.value, run.cost_usd, day=event.occurred_at.date()
+            )
+        await self._inner.emit(event)
+
+    def today_total(self, workspace_id: WorkspaceId) -> float:
+        return sum(self._spend.get((str(workspace_id), _today().isoformat()), {}).values())
+
+    def today_by_task(self, workspace_id: WorkspaceId) -> dict[str, float]:
+        return dict(self._spend.get((str(workspace_id), _today().isoformat()), {}))
+
+
+def over_daily_cap(policy: WorkspaceModelPolicy, spent_today_usd: float) -> bool:
+    """True if a daily cap is set and today's spend has reached it (a deny before the next call)."""
+    return policy.daily_cost_cap_usd is not None and spent_today_usd >= policy.daily_cost_cap_usd
 
 
 def build_http_client() -> httpx.AsyncClient:
@@ -76,23 +133,38 @@ def assemble_chat_providers(
 
 @dataclass(frozen=True)
 class ModelPlane:
-    """The assembled chat ``ModelCaller`` plus the client lifecycles the app closes at shutdown.
+    """The assembled chat providers + a spend tracker + the client lifecycles the app closes.
 
+    ``make_caller`` builds a ``ModelCaller`` for a workspace, dropping external providers when the
+    workspace's policy forbids them (so a local-only workspace never reaches the cloud).
     ``local_client`` is also reused for local embeddings on the Postgres backend.
     """
 
-    caller: ModelCaller | None
+    providers: tuple[RoutableProvider, ...]
+    spend: SpendTracker
     local_client: httpx.AsyncClient | None
     closers: tuple[Callable[[], Awaitable[None]], ...]
+
+    def make_caller(self, *, allow_external: bool) -> ModelCaller | None:
+        providers = (
+            self.providers
+            if allow_external
+            else tuple(p for p in self.providers if not p.is_external)
+        )
+        if not providers:
+            return None
+        return ModelCaller(MetisModelRouter(list(providers)), self.spend, registry=query_registry())
 
 
 def build_model_plane(settings: GatewaySettings, *, audit_sink: AuditSink) -> ModelPlane:
     """Assemble the chat provider plane from settings: Anthropic and/or any OpenAI-compatible cloud
     (incl. a Hugging Face model behind vLLM/TGI) for the upper tiers, and a local Ollama endpoint
-    for the LOCAL tier and as the restricted-data fallback. No provider configured -> no caller (the
-    gateway then returns deterministic extractive answers).
+    for the LOCAL tier and as the restricted-data fallback. Model spend is tracked per workspace via
+    a ``SpendTracker`` wrapping the audit sink. No provider configured -> ``make_caller`` returns
+    ``None`` (the gateway then answers extractively).
     """
     closers: list[Callable[[], Awaitable[None]]] = []
+    spend = SpendTracker(audit_sink)
 
     anthropic_client: Any | None = None
     if settings.anthropic_api_key:
@@ -117,12 +189,12 @@ def build_model_plane(settings: GatewaySettings, *, audit_sink: AuditSink) -> Mo
         openai_client=openai_client,
         local_client=local_client,
     )
-    caller = (
-        ModelCaller(MetisModelRouter(providers), audit_sink, registry=query_registry())
-        if providers
-        else None
+    return ModelPlane(
+        providers=tuple(providers),
+        spend=spend,
+        local_client=local_client,
+        closers=tuple(closers),
     )
-    return ModelPlane(caller=caller, local_client=local_client, closers=tuple(closers))
 
 
 def build_embedding_router(

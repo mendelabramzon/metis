@@ -67,6 +67,7 @@ from metis_protocol.identity import (
     User,
     Workspace,
     WorkspaceMembership,
+    WorkspaceModelPolicy,
 )
 from metis_protocol.ids import (
     ArtifactId,
@@ -328,6 +329,7 @@ __all__ = [
     "WorkspaceId",
     "WorkspaceKind",
     "WorkspaceMembership",
+    "WorkspaceModelPolicy",
     "WorkspaceRef",
     "__version__",
     "build_envelope",

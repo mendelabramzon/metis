@@ -17,15 +17,19 @@ from metis_gateway.deps import (
     WorkspaceAdminDep,
     WorkspaceWriterDep,
 )
-from metis_gateway.errors import NotFoundError
+from metis_gateway.errors import NotFoundError, TooManyRequestsError
+from metis_gateway.models import over_daily_cap
 from metis_gateway.schemas import (
     Citation,
     IngestRequest,
     IngestResponse,
     MembershipCreate,
     MembershipView,
+    ModelPolicyUpdate,
+    ModelPolicyView,
     QueryRequestBody,
     QueryResponse,
+    SpendView,
     WorkspaceCreate,
     WorkspaceView,
 )
@@ -37,6 +41,7 @@ from metis_protocol import (
     Workspace,
     WorkspaceId,
     WorkspaceMembership,
+    WorkspaceModelPolicy,
     new_id,
 )
 from metis_runtime.agent import AgentRequest
@@ -134,7 +139,10 @@ async def ingest_into_workspace(
     body: IngestRequest, context: WorkspaceWriterDep, backend: BackendDep
 ) -> IngestResponse:
     """Ingest content into the workspace's own engine (writer role required by the gate)."""
-    workspace = backend.workspace_for(context.workspace.id)
+    policy = await backend.identity.get_model_policy(context.workspace.id)
+    workspace = backend.workspace_for(
+        context.workspace.id, allow_external=policy.allow_external_models
+    )
     sensitivity = (
         body.sensitivity if body.sensitivity is not None else context.workspace.default_sensitivity
     )
@@ -151,11 +159,17 @@ async def query_workspace(
     """Answer against the workspace's own engine (membership required by the gate).
 
     A member sees the workspace's evidence; intra-workspace sensitivity tiers are a later
-    refinement, so the ceiling is the workspace boundary itself.
+    refinement, so the ceiling is the workspace boundary itself. The workspace's model policy
+    selects providers (local-only when external is forbidden) and caps daily model spend.
     """
-    run = await backend.agent_for(context.workspace.id).run(
+    ws_id = context.workspace.id
+    policy = await backend.identity.get_model_policy(ws_id)
+    if backend.spend is not None and over_daily_cap(policy, backend.spend.today_total(ws_id)):
+        raise TooManyRequestsError("workspace daily model-spend cap reached")
+    allow_external = policy.allow_external_models
+    run = await backend.agent_for(ws_id, allow_external=allow_external).run(
         AgentRequest(
-            workspace_id=context.workspace.id,
+            workspace_id=ws_id,
             instruction=body.text,
             max_sensitivity=Sensitivity.RESTRICTED,
             top_k=body.top_k,
@@ -164,7 +178,7 @@ async def query_workspace(
     answer = run.answer
     citations: list[Citation] = []
     if answer is not None:
-        workspace = backend.workspace_for(context.workspace.id)
+        workspace = backend.workspace_for(ws_id, allow_external=allow_external)
         citations = [
             Citation(claim_id=claim_id, source_span_id=span_id, artifact_id=artifact_id)
             for claim_id, span_id, artifact_id in await workspace.citation_rows(answer.claims)
@@ -179,3 +193,41 @@ async def query_workspace(
         filebacks=len(run.filebacks),
         pending_approvals=[request.key for request in run.pending_approvals],
     )
+
+
+# --- per-workspace model policy + spend ---------------------------------------------------------
+
+
+def _policy_view(policy: WorkspaceModelPolicy) -> ModelPolicyView:
+    return ModelPolicyView(
+        workspace_id=str(policy.workspace_id),
+        allow_external_models=policy.allow_external_models,
+        daily_cost_cap_usd=policy.daily_cost_cap_usd,
+    )
+
+
+@router.get("/{workspace_id}/model-policy", response_model=ModelPolicyView)
+async def get_model_policy(context: MemberDep, backend: BackendDep) -> ModelPolicyView:
+    return _policy_view(await backend.identity.get_model_policy(context.workspace.id))
+
+
+@router.put("/{workspace_id}/model-policy", response_model=ModelPolicyView)
+async def set_model_policy(
+    body: ModelPolicyUpdate, context: WorkspaceAdminDep, backend: BackendDep
+) -> ModelPolicyView:
+    policy = await backend.identity.set_model_policy(
+        WorkspaceModelPolicy(
+            workspace_id=context.workspace.id,
+            allow_external_models=body.allow_external_models,
+            daily_cost_cap_usd=body.daily_cost_cap_usd,
+        )
+    )
+    return _policy_view(policy)
+
+
+@router.get("/{workspace_id}/spend", response_model=SpendView)
+async def get_spend(context: WorkspaceAdminDep, backend: BackendDep) -> SpendView:
+    ws_id = context.workspace.id
+    total = backend.spend.today_total(ws_id) if backend.spend is not None else 0.0
+    by_task = backend.spend.today_by_task(ws_id) if backend.spend is not None else {}
+    return SpendView(workspace_id=str(ws_id), today_total_usd=total, today_by_task=by_task)

@@ -8,7 +8,7 @@ is unique per (workspace, user) — a user holds at most one role in a workspace
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import Boolean, Float, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from metis_core.db.base import Base
@@ -48,3 +48,14 @@ class WorkspaceMembershipRow(Base, IdMixin, VersionMixin, BodyMixin):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     role: Mapped[str] = mapped_column(index=True)
     created_at: Mapped[TZDateTime] = mapped_column(index=True)
+
+
+class WorkspaceModelPolicyRow(Base, VersionMixin, BodyMixin):
+    """One row per workspace (keyed by workspace_id): its model-routing policy. Mutable config, so
+    ``set`` upserts rather than insert-by-id like the append-only artifact stores."""
+
+    __tablename__ = "workspace_model_policies"
+
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), primary_key=True)
+    allow_external_models: Mapped[bool] = mapped_column(Boolean)
+    daily_cost_cap_usd: Mapped[float | None] = mapped_column(Float, nullable=True)

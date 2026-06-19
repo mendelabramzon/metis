@@ -194,3 +194,20 @@ class MembershipView(BaseModel):
     workspace_id: str
     user_id: str
     role: Role
+
+
+class ModelPolicyView(BaseModel):
+    workspace_id: str
+    allow_external_models: bool
+    daily_cost_cap_usd: float | None = None
+
+
+class ModelPolicyUpdate(BaseModel):
+    allow_external_models: bool = True
+    daily_cost_cap_usd: float | None = None
+
+
+class SpendView(BaseModel):
+    workspace_id: str
+    today_total_usd: float
+    today_by_task: dict[str, float] = Field(default_factory=dict)

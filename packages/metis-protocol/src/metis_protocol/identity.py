@@ -9,7 +9,7 @@ membership *before* it touches spans, claims, memory, or wiki pages.
 
 from __future__ import annotations
 
-from pydantic import AwareDatetime
+from pydantic import AwareDatetime, Field
 
 from metis_protocol.enums import Role, Sensitivity, WorkspaceKind
 from metis_protocol.ids import MembershipId, OrganizationId, UserId, WorkspaceId
@@ -68,3 +68,15 @@ class WorkspaceMembership(VersionedModel):
     user_id: UserId
     role: Role
     created_at: AwareDatetime
+
+
+class WorkspaceModelPolicy(VersionedModel):
+    """Per-workspace model-routing policy: whether the workspace's data may use external providers,
+    and an optional daily model-spend cap. Absent a stored policy, the default below applies
+    (external allowed, no cap). This is mutable operational config, not an audited artifact, so it
+    is not registered in the schema snapshot set.
+    """
+
+    workspace_id: WorkspaceId
+    allow_external_models: bool = True
+    daily_cost_cap_usd: float | None = Field(default=None, ge=0.0)

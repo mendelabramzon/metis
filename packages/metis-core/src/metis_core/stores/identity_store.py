@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from metis_core.db.session import unit_of_work
 from metis_core.mappers import (
     membership_to_row,
+    model_policy_to_row,
     organization_to_row,
     to_model,
     user_to_row,
@@ -26,6 +27,7 @@ from metis_core.models import (
     OrganizationRow,
     UserRow,
     WorkspaceMembershipRow,
+    WorkspaceModelPolicyRow,
     WorkspaceRow,
 )
 from metis_protocol import (
@@ -36,6 +38,7 @@ from metis_protocol import (
     Workspace,
     WorkspaceId,
     WorkspaceMembership,
+    WorkspaceModelPolicy,
 )
 
 
@@ -127,3 +130,24 @@ class PostgresIdentityStore:
         async with unit_of_work(self._sessionmaker) as session:
             rows = (await session.scalars(stmt)).all()
         return [to_model(row, WorkspaceMembership) for row in rows]
+
+    async def get_model_policy(self, workspace_id: WorkspaceId) -> WorkspaceModelPolicy:
+        """The workspace's model policy, or the permissive default if none is stored."""
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(WorkspaceModelPolicyRow, str(workspace_id))
+        if row is None:
+            return WorkspaceModelPolicy(workspace_id=workspace_id)
+        return to_model(row, WorkspaceModelPolicy)
+
+    async def set_model_policy(self, policy: WorkspaceModelPolicy) -> WorkspaceModelPolicy:
+        """Upsert the workspace's model policy (mutable config, unlike the append-only stores)."""
+        async with unit_of_work(self._sessionmaker) as session:
+            existing = await session.get(WorkspaceModelPolicyRow, str(policy.workspace_id))
+            if existing is None:
+                session.add(model_policy_to_row(policy))
+            else:
+                existing.schema_version = policy.schema_version
+                existing.allow_external_models = policy.allow_external_models
+                existing.daily_cost_cap_usd = policy.daily_cost_cap_usd
+                existing.body = policy.model_dump(mode="json")
+        return policy

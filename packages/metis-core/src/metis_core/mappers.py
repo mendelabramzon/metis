@@ -32,6 +32,7 @@ from metis_core.models import (
     WikiPageRow,
     WikiPatchRow,
     WorkspaceMembershipRow,
+    WorkspaceModelPolicyRow,
     WorkspaceRow,
 )
 from metis_protocol import (
@@ -61,6 +62,7 @@ from metis_protocol import (
     WikiPatch,
     Workspace,
     WorkspaceMembership,
+    WorkspaceModelPolicy,
 )
 
 
@@ -254,5 +256,15 @@ def membership_to_row(m: WorkspaceMembership) -> WorkspaceMembershipRow:
         user_id=str(m.user_id),
         role=m.role.value,
         created_at=m.created_at,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def model_policy_to_row(m: WorkspaceModelPolicy) -> WorkspaceModelPolicyRow:
+    return WorkspaceModelPolicyRow(
+        workspace_id=str(m.workspace_id),
+        schema_version=m.schema_version,
+        allow_external_models=m.allow_external_models,
+        daily_cost_cap_usd=m.daily_cost_cap_usd,
         body=m.model_dump(mode="json"),
     )

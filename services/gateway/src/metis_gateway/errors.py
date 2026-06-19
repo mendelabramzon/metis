@@ -42,6 +42,11 @@ class ConflictError(ApiError):
         super().__init__(409, "conflict", message)
 
 
+class TooManyRequestsError(ApiError):
+    def __init__(self, message: str) -> None:
+        super().__init__(429, "too_many_requests", message)
+
+
 def _error_body(code: str, message: str) -> dict[str, dict[str, str]]:
     return {"error": {"code": code, "message": message}}
 
