@@ -8,6 +8,7 @@ from __future__ import annotations
 from metis_gateway.routers import (
     approvals,
     audit,
+    contradictions,
     evidence,
     ingestion,
     jobs,
@@ -30,6 +31,7 @@ ALL_ROUTERS = (
     upload.router,
     query.router,
     evidence.router,
+    contradictions.router,
     wiki.router,
     skills.router,
     approvals.router,

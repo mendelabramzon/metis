@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, JsonValue
 
 from metis_protocol import (
+    ContradictionStatus,
     JobState,
     ModelKind,
     ModelTier,
@@ -158,6 +159,27 @@ class MemCellEvidenceView(BaseModel):
     summary: str
     sensitivity: Sensitivity
     claim_ids: list[str]
+
+
+# --- contradiction inbox -----------------------------------------------------------------------
+
+
+class ContradictionView(BaseModel):
+    """A detected conflict between claims, surfaced for review — never silently merged."""
+
+    contradiction_id: str
+    summary: str
+    explanation: str
+    status: ContradictionStatus
+    claim_ids: list[str]
+    sensitivity: Sensitivity
+    created_at: datetime
+
+
+class ContradictionUpdate(BaseModel):
+    """Resolve or dismiss a contradiction — the only review transitions (no reopen via the API)."""
+
+    status: Literal[ContradictionStatus.RESOLVED, ContradictionStatus.DISMISSED]
 
 
 class ParseStatus(BaseModel):

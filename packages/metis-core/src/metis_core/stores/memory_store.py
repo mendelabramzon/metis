@@ -34,6 +34,7 @@ from metis_core.models import (
 from metis_protocol import (
     Contradiction,
     ContradictionId,
+    ContradictionStatus,
     Foresight,
     ForesightId,
     MemCell,
@@ -45,6 +46,7 @@ from metis_protocol import (
     MemSceneId,
     Profile,
     ProfileId,
+    WorkspaceId,
 )
 
 
@@ -194,6 +196,36 @@ class PostgresMemoryStore:
         async with unit_of_work(self._sessionmaker) as session:
             rows = (await session.scalars(stmt)).all()
         return [to_model(row, Contradiction) for row in rows]
+
+    async def set_contradiction_status(
+        self,
+        contradiction_id: ContradictionId,
+        status: ContradictionStatus,
+        *,
+        workspace_id: WorkspaceId,
+    ) -> Contradiction | None:
+        """Review action: move a contradiction to RESOLVED/DISMISSED, scoped to its workspace (None
+        if it is not there). The finding stays in the table (auditable); only its status changes."""
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(ContradictionRow, str(contradiction_id))
+            if (
+                row is None
+                or row.workspace_id != str(workspace_id)
+                or row.tombstoned_at is not None
+            ):
+                return None
+            updated = to_model(row, Contradiction).model_copy(update={"status": status})
+            row.status = status.value
+            row.body = updated.model_dump(mode="json")
+            await emit_store_audit(
+                session,
+                workspace_id=str(workspace_id),
+                action="store.review.contradiction",
+                target_id=str(contradiction_id),
+                target_kind="Contradiction",
+                sensitivity=updated.policy.sensitivity.value,
+            )
+        return updated
 
     async def write_foresight(self, foresight: Foresight) -> ForesightId:
         # Upsert: rebuilding foresights re-evaluates status (e.g. ACTIVE -> EXPIRED) for a

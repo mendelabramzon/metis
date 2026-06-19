@@ -79,11 +79,15 @@ from metis_protocol import (
     ContextBundle,
     ContextBundleId,
     ContextSection,
+    Contradiction,
+    ContradictionId,
+    ContradictionStatus,
     IdentityStore,
     Job,
     JobId,
     JobState,
     MemCellId,
+    MemoryScope,
     ModelCapability,
     NormalizedDoc,
     ObjectStore,
@@ -238,6 +242,16 @@ class Workspace(Protocol):
     async def artifact_evidence(self, artifact_id: str) -> ArtifactEvidence | None: ...
 
     async def mem_cell_evidence(self, mem_cell_id: str) -> MemCellEvidence | None: ...
+
+    # Contradiction inbox — conflicting evidence for review (empty in-memory; the maintainer
+    # detects and persists these on the durable backend).
+    async def list_contradictions(
+        self, *, status: ContradictionStatus | None
+    ) -> Sequence[Contradiction]: ...
+
+    async def resolve_contradiction(
+        self, contradiction_id: str, *, status: ContradictionStatus
+    ) -> Contradiction | None: ...
 
 
 @runtime_checkable
@@ -532,6 +546,16 @@ class InMemoryWorkspace:
 
     async def mem_cell_evidence(self, mem_cell_id: str) -> MemCellEvidence | None:
         return None  # the in-memory backend builds no mem cells
+
+    async def list_contradictions(
+        self, *, status: ContradictionStatus | None
+    ) -> Sequence[Contradiction]:
+        return ()  # the in-memory backend detects no contradictions
+
+    async def resolve_contradiction(
+        self, contradiction_id: str, *, status: ContradictionStatus
+    ) -> Contradiction | None:
+        return None
 
     async def answer(self, query: QueryRequest) -> Answer:
         wanted = terms(query.text)
@@ -1043,6 +1067,21 @@ class PostgresWorkspace:
             summary=cell.summary,
             sensitivity=cell.policy.sensitivity.value,
             claim_ids=tuple(str(c.claim_id) for c in cell.claims),
+        )
+
+    async def list_contradictions(
+        self, *, status: ContradictionStatus | None
+    ) -> Sequence[Contradiction]:
+        found = await self._memory.query_contradictions(
+            MemoryScope(workspace_id=self._workspace_id)
+        )
+        return [c for c in found if status is None or c.status is status]
+
+    async def resolve_contradiction(
+        self, contradiction_id: str, *, status: ContradictionStatus
+    ) -> Contradiction | None:
+        return await self._memory.set_contradiction_status(
+            ContradictionId(contradiction_id), status, workspace_id=self._workspace_id
         )
 
 
