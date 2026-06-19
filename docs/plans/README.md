@@ -5,6 +5,8 @@ Per-stage detailed plans. Each refines the corresponding stage in the
 objective, package ownership, concrete files/modules, schemas/interfaces touched,
 implementation steps, tests/fixtures, acceptance criteria, and risks.
 
+Product deployment roadmap: [Server deployment product roadmap](server-deployment-product-roadmap.md).
+
 | Stage | Plan | Status |
 |---|---|---|
 | 0 | [Repository and architecture guardrails](stage-00-repo-guardrails.md) | Implemented |
@@ -23,3 +25,15 @@ implementation steps, tests/fixtures, acceptance criteria, and risks.
 | 13 | [Evaluation harness](stage-13-evaluation.md) | Planned |
 | 14 | [Security, privacy, and hardening](stage-14-security-hardening.md) | Planned |
 | 15 | [Deployment and operational readiness](stage-15-deployment.md) | Planned |
+
+## Server Deployment Product Roadmap
+
+A product track layered on the completed engine, taking it from single-node engine to a
+multi-user server, then federation. See
+[server-deployment-product-roadmap.md](server-deployment-product-roadmap.md) for the overview.
+
+| Stage | Plan | Status |
+|---|---|---|
+| 1 | [Ten-user server deployment](server-deployment-stage-1.md) | Planned |
+| 2 | [Connectors, skills, and deep research](server-deployment-stage-2.md) | Planned |
+| 3 | [Server-to-server context exchange](server-deployment-stage-3.md) | Planned |
