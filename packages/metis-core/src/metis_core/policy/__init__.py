@@ -7,6 +7,7 @@ from metis_core.policy.decisions import (
     propagate_policy,
     route_decision,
     skill_access_decision,
+    workspace_access_decision,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "propagate_policy",
     "route_decision",
     "skill_access_decision",
+    "workspace_access_decision",
 ]

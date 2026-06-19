@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "Role": {
+      "description": "A user's role in a workspace.\n\nAny role grants read. ``MEMBER`` and above may write; ``ADMIN``/``OWNER`` may\nadminister membership. ``AUDITOR`` is read-only (it may read, including audit, but\nnever writes) and so sits outside the write ladder \u2014 see the ``role_*`` helpers in\n``policy`` rather than ordering these values directly.",
+      "enum": [
+        "auditor",
+        "viewer",
+        "member",
+        "admin",
+        "owner"
+      ],
+      "title": "Role",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A user's role in a workspace \u2014 the unit the retrieval/access gate checks.\n\nIts absence is the isolation boundary: no membership means no access, which is how one\nuser's personal workspace stays invisible to another.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "role": {
+      "$ref": "#/$defs/Role"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "user_id": {
+      "title": "User Id",
+      "type": "string"
+    },
+    "workspace_id": {
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "workspace_id",
+    "user_id",
+    "role",
+    "created_at"
+  ],
+  "title": "WorkspaceMembership",
+  "type": "object"
+}

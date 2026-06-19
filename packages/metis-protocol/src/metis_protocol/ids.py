@@ -185,3 +185,15 @@ class ModelRunId(PrefixedId):
 
 class JobId(PrefixedId):
     prefix = "job"
+
+
+class OrganizationId(PrefixedId):
+    prefix = "org"
+
+
+class UserId(PrefixedId):
+    prefix = "usr"
+
+
+class MembershipId(PrefixedId):
+    prefix = "mbr"

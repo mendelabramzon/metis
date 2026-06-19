@@ -7,12 +7,14 @@ from typing import TYPE_CHECKING
 from metis_core.stores.artifact_store import PostgresMinioArtifactStore
 from metis_core.stores.claim_store import PostgresClaimStore
 from metis_core.stores.document_store import PostgresDocumentStore
+from metis_core.stores.identity_store import PostgresIdentityStore
 from metis_core.stores.memory_store import PostgresMemoryStore
 from metis_core.stores.wiki_store import PostgresWikiStore
 
 __all__ = [
     "PostgresClaimStore",
     "PostgresDocumentStore",
+    "PostgresIdentityStore",
     "PostgresMemoryStore",
     "PostgresMinioArtifactStore",
     "PostgresWikiStore",

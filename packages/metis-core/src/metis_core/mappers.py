@@ -22,13 +22,17 @@ from metis_core.models import (
     MemoryPatchRow,
     MemSceneRow,
     NormalizedDocRow,
+    OrganizationRow,
     ParsedDocRow,
     ProfileRow,
     RawArtifactRow,
     SegmentRow,
     SourceSpanRow,
+    UserRow,
     WikiPageRow,
     WikiPatchRow,
+    WorkspaceMembershipRow,
+    WorkspaceRow,
 )
 from metis_protocol import (
     Artifact as ProtocolArtifact,
@@ -45,14 +49,18 @@ from metis_protocol import (
     MemoryPatch,
     MemScene,
     NormalizedDoc,
+    Organization,
     ParsedDoc,
     Profile,
     RawArtifact,
     Segment,
     SourceSpan,
+    User,
     VersionedModel,
     WikiPage,
     WikiPatch,
+    Workspace,
+    WorkspaceMembership,
 )
 
 
@@ -201,5 +209,50 @@ def job_to_row(m: Job) -> JobRow:
         attempts=m.attempts,
         created_at=m.created_at,
         scheduled_at=m.scheduled_at,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def organization_to_row(m: Organization) -> OrganizationRow:
+    return OrganizationRow(
+        id=str(m.id),
+        schema_version=m.schema_version,
+        name=m.name,
+        created_at=m.created_at,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def user_to_row(m: User) -> UserRow:
+    return UserRow(
+        id=str(m.id),
+        schema_version=m.schema_version,
+        organization_id=str(m.organization_id),
+        email=m.email,
+        created_at=m.created_at,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def workspace_to_row(m: Workspace) -> WorkspaceRow:
+    return WorkspaceRow(
+        id=str(m.id),
+        schema_version=m.schema_version,
+        organization_id=str(m.organization_id),
+        kind=m.kind.value,
+        owner_id=str(m.owner_id) if m.owner_id is not None else None,
+        created_at=m.created_at,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def membership_to_row(m: WorkspaceMembership) -> WorkspaceMembershipRow:
+    return WorkspaceMembershipRow(
+        id=str(m.id),
+        schema_version=m.schema_version,
+        workspace_id=str(m.workspace_id),
+        user_id=str(m.user_id),
+        role=m.role.value,
+        created_at=m.created_at,
         body=m.model_dump(mode="json"),
     )

@@ -142,3 +142,27 @@ class PermissionScope(StrEnum):
     OUTBOUND_ACTION = "outbound_action"
     MODEL_CALL = "model_call"
     SUBPROCESS = "subprocess"
+
+
+class WorkspaceKind(StrEnum):
+    """What a workspace is for; ``EXTERNAL`` is reserved for federated/imported context."""
+
+    PERSONAL = "personal"
+    SHARED = "shared"
+    EXTERNAL = "external"
+
+
+class Role(StrEnum):
+    """A user's role in a workspace.
+
+    Any role grants read. ``MEMBER`` and above may write; ``ADMIN``/``OWNER`` may
+    administer membership. ``AUDITOR`` is read-only (it may read, including audit, but
+    never writes) and so sits outside the write ladder — see the ``role_*`` helpers in
+    ``policy`` rather than ordering these values directly.
+    """
+
+    AUDITOR = "auditor"
+    VIEWER = "viewer"
+    MEMBER = "member"
+    ADMIN = "admin"
+    OWNER = "owner"

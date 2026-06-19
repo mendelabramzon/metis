@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "id": "ws_00000000000000000000000000000001",
+  "organization_id": "org_00000000000000000000000000000001",
+  "kind": "personal",
+  "name": "Ada (personal)",
+  "owner_id": "usr_00000000000000000000000000000001",
+  "default_sensitivity": "internal",
+  "created_at": "2026-01-01T12:00:00Z"
+}

@@ -5,10 +5,10 @@ defines the *vocabulary* and the pure helpers for reasoning about sensitivity.
 
 from __future__ import annotations
 
-from typing import Self
+from typing import Final, Self
 
 from metis_protocol.base import ProtocolModel
-from metis_protocol.enums import SENSITIVITY_ORDER, PermissionScope, Sensitivity
+from metis_protocol.enums import SENSITIVITY_ORDER, PermissionScope, Role, Sensitivity
 
 
 def sensitivity_rank(value: Sensitivity) -> int:
@@ -24,6 +24,29 @@ def max_sensitivity(*values: Sensitivity) -> Sensitivity:
 def is_at_least(value: Sensitivity, floor: Sensitivity) -> bool:
     """True if ``value`` is at least as restrictive as ``floor``."""
     return sensitivity_rank(value) >= sensitivity_rank(floor)
+
+
+#: Roles that may read a workspace (any membership implies read).
+_READ_ROLES: Final[frozenset[Role]] = frozenset(Role)
+#: Roles that may write content (everything but the read-only viewer/auditor).
+_WRITE_ROLES: Final[frozenset[Role]] = frozenset({Role.MEMBER, Role.ADMIN, Role.OWNER})
+#: Roles that may administer membership and workspace settings.
+_ADMIN_ROLES: Final[frozenset[Role]] = frozenset({Role.ADMIN, Role.OWNER})
+
+
+def role_can_read(role: Role) -> bool:
+    """True if the role may read the workspace — every membership role can."""
+    return role in _READ_ROLES
+
+
+def role_can_write(role: Role) -> bool:
+    """True if the role may write content (not ``VIEWER``/``AUDITOR``)."""
+    return role in _WRITE_ROLES
+
+
+def role_can_admin(role: Role) -> bool:
+    """True if the role may administer membership/settings (``ADMIN``/``OWNER``)."""
+    return role in _ADMIN_ROLES
 
 
 class PolicyState(ProtocolModel):

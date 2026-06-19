@@ -27,13 +27,16 @@ from metis_protocol.enums import (
     ForesightStatus,
     MemoryOp,
     ProfileScope,
+    Role,
     SegmentKind,
     Sensitivity,
     SkillOutcome,
     WikiOp,
+    WorkspaceKind,
 )
 from metis_protocol.errors import SchemaVersionError
 from metis_protocol.events import EventEnvelope, EventName, Job
+from metis_protocol.identity import Organization, User, Workspace, WorkspaceMembership
 from metis_protocol.ids import (
     ArtifactId,
     AuditId,
@@ -48,10 +51,12 @@ from metis_protocol.ids import (
     EvidenceSetId,
     ForesightId,
     JobId,
+    MembershipId,
     MemCellId,
     MemoryPatchId,
     MemSceneId,
     ModelRunId,
+    OrganizationId,
     ParsedDocId,
     PrefixedId,
     ProfileId,
@@ -59,6 +64,7 @@ from metis_protocol.ids import (
     SegmentId,
     SkillResultId,
     SourceSpanId,
+    UserId,
     WikiPageId,
     WikiPatchId,
     WorkspaceId,
@@ -425,6 +431,42 @@ def job() -> Job:
     )
 
 
+def organization() -> Organization:
+    return Organization(id=_fixed(OrganizationId, 1), name="Acme", created_at=_T)
+
+
+def user() -> User:
+    return User(
+        id=_fixed(UserId, 1),
+        organization_id=_fixed(OrganizationId, 1),
+        email="ada@acme.example",
+        display_name="Ada Lovelace",
+        created_at=_T,
+    )
+
+
+def workspace() -> Workspace:
+    return Workspace(
+        id=WS,
+        organization_id=_fixed(OrganizationId, 1),
+        kind=WorkspaceKind.PERSONAL,
+        name="Ada (personal)",
+        owner_id=_fixed(UserId, 1),
+        default_sensitivity=Sensitivity.INTERNAL,
+        created_at=_T,
+    )
+
+
+def workspace_membership() -> WorkspaceMembership:
+    return WorkspaceMembership(
+        id=_fixed(MembershipId, 1),
+        workspace_id=WS,
+        user_id=_fixed(UserId, 1),
+        role=Role.OWNER,
+        created_at=_T,
+    )
+
+
 #: One builder per registered schema name.
 EXAMPLE_BUILDERS: dict[str, Callable[[], VersionedModel]] = {
     "SourceSpan": source_span,
@@ -453,6 +495,10 @@ EXAMPLE_BUILDERS: dict[str, Callable[[], VersionedModel]] = {
     "AuditEvent": audit_event,
     "EventEnvelope": event_envelope,
     "Job": job,
+    "Organization": organization,
+    "User": user,
+    "Workspace": workspace,
+    "WorkspaceMembership": workspace_membership,
 }
 
 

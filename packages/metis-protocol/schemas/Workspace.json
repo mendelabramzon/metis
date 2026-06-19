@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "Sensitivity": {
+      "description": "Data sensitivity, ordered least to most restrictive (see ``SENSITIVITY_ORDER``).",
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    },
+    "WorkspaceKind": {
+      "description": "What a workspace is for; ``EXTERNAL`` is reserved for federated/imported context.",
+      "enum": [
+        "personal",
+        "shared",
+        "external"
+      ],
+      "title": "WorkspaceKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A personal or shared context boundary; every artifact is scoped to one of these.\n\n``owner_id`` is set for a personal workspace (its single owner). ``default_sensitivity``\nis the floor stamped on artifacts ingested into the workspace absent a stricter source\nACL.",
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "default_sensitivity": {
+      "$ref": "#/$defs/Sensitivity",
+      "default": "internal"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/WorkspaceKind"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "organization_id": {
+      "title": "Organization Id",
+      "type": "string"
+    },
+    "owner_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Owner Id"
+    },
+    "schema_version": {
+      "default": "1.0",
+      "pattern": "^\\d+\\.\\d+$",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "organization_id",
+    "kind",
+    "name",
+    "created_at"
+  ],
+  "title": "Workspace",
+  "type": "object"
+}
