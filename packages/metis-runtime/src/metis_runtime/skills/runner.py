@@ -43,7 +43,7 @@ from metis_protocol import (
     WorkspaceId,
     new_id,
 )
-from metis_runtime.skills.approval import ApprovalQueue
+from metis_runtime.skills.approval import ApprovalQueue, InMemoryApprovalQueue
 from metis_runtime.skills.capture import ArtifactCapture
 from metis_runtime.skills.policy import SkillPolicy
 from metis_runtime.skills.registry import SkillRegistry
@@ -68,7 +68,7 @@ class SkillRunner:
         self._capture = ArtifactCapture(object_store, audit_sink)
         self._workspace_id = workspace_id
         self._sandbox = sandbox if sandbox is not None else SubprocessSandbox()
-        self._approvals = approvals if approvals is not None else ApprovalQueue()
+        self._approvals = approvals if approvals is not None else InMemoryApprovalQueue()
         self._secrets = dict(secrets or {})
         self._data_sensitivity = data_sensitivity
 
@@ -95,8 +95,8 @@ class SkillRunner:
                 skill_input, SkillOutcome.REJECTED, error=f"input schema violation: {exc.message}"
             )
 
-        if policy.needs_approval() and not self._approvals.is_approved(skill_input):
-            self._approvals.submit(skill_input)
+        if policy.needs_approval() and not await self._approvals.is_approved(skill_input):
+            await self._approvals.submit(skill_input)
             await self._audit_run("skill.action.proposed", loaded.manifest)
             return self._result(skill_input, SkillOutcome.NEEDS_APPROVAL, approval_required=True)
 

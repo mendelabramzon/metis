@@ -167,7 +167,7 @@ class AgentLoop:
         while state.cursor < len(steps):
             step = steps[state.cursor]
 
-            decision = self._approval.gate(step, context_bundle_id=bundle.id)
+            decision = await self._approval.gate(step, context_bundle_id=bundle.id)
             if not decision.proceed and decision.request is not None:
                 state.status = TaskStatus.AWAITING_APPROVAL
                 state.pending = (decision.request,)

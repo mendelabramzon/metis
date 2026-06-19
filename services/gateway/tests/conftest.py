@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from testcontainers.minio import MinioContainer
 from testcontainers.postgres import PostgresContainer
 
+from metis_core import make_engine, make_sessionmaker
 from metis_core.dev.testing import (
     async_url,
     docker_available,
@@ -100,3 +101,9 @@ def pg_settings(
         user_token="user-token",
         workspace_id="ws_" + "2" * 32,
     )
+
+
+@pytest.fixture
+def pg_sessionmaker(postgres: PostgresContainer):
+    """A sessionmaker over the migrated test Postgres, for unit-testing durable gateway stores."""
+    return make_sessionmaker(make_engine(async_url(postgres)))

@@ -48,7 +48,7 @@ async def test_outbound_action_is_held_then_runs_after_approval(make_loop, skill
     assert held.actions == ()  # the action did not run before approval
     assert len(held.pending_approvals) == 1
 
-    skill_runner.approvals.approve(held.pending_approvals[0].key)
+    await skill_runner.approvals.approve(held.pending_approvals[0].key)
     done = await loop.resume(request.run_id)
 
     assert done.status is TaskStatus.COMPLETED

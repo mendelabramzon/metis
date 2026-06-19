@@ -15,9 +15,9 @@ async def test_outbound_action_is_held_then_runs_after_approval(
     assert held.outcome is SkillOutcome.NEEDS_APPROVAL
     assert held.approval_required
 
-    pending = skill_runner.approvals.pending()
+    pending = await skill_runner.approvals.pending()
     assert len(pending) == 1
-    skill_runner.approvals.approve(pending[0].key)
+    await skill_runner.approvals.approve(pending[0].key)
 
     executed = await skill_runner.run(loaded.manifest, skill_input, bundle)
     assert executed.outcome is SkillOutcome.SUCCESS

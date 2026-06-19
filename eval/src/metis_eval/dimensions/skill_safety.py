@@ -36,7 +36,7 @@ async def evaluate(workspace: GoldenWorkspace, engine: GoldenEngine) -> Measurem
         )
     )
 
-    contained = not run.actions and not runner.approvals.pending()
+    contained = not run.actions and not await runner.approvals.pending()
     detail = (
         f"contained ({len(registry)} skill(s) registered, none fired)"
         if contained

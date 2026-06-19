@@ -17,13 +17,16 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 import httpx
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from metis_core import CoreSettings, make_engine, make_sessionmaker
 from metis_core.audit import PostgresAuditSink, recent_audit_events
+from metis_core.db.session import unit_of_work
 from metis_core.jobs import PostgresJobQueue
 from metis_core.llm import ModelCaller
 from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup, stub_router
+from metis_core.models import SkillApprovalRow
 from metis_core.objectstore import S3ObjectStore
 from metis_core.stores import (
     PostgresClaimStore,
@@ -74,6 +77,7 @@ from metis_protocol import (
     QueryRequest,
     Role,
     Sensitivity,
+    SkillInput,
     SourceId,
     User,
     UserId,
@@ -89,7 +93,14 @@ from metis_protocol import (
 )
 from metis_runtime.agent import AgentLoop
 from metis_runtime.query import Answer, MemoryRetriever, QueryEngine
-from metis_runtime.skills import ApprovalQueue, SkillRegistry, SkillRunner
+from metis_runtime.skills import (
+    ApprovalQueue,
+    ApprovalRequest,
+    SkillApprovalStatus,
+    SkillRegistry,
+    SkillRunner,
+    approval_key,
+)
 
 
 @runtime_checkable
@@ -487,7 +498,7 @@ class ApprovalInbox:
     async def pending(self) -> list[InboxItem]:
         items = [
             InboxItem("action", r.key, f"{r.skill_name}@{r.skill_version}", r.status.value)
-            for r in self._approvals.pending()
+            for r in await self._approvals.pending()
         ]
         items += [
             InboxItem("wiki_patch", str(r.patch.id), _patch_summary(r), r.status.value)
@@ -497,10 +508,10 @@ class ApprovalInbox:
 
     async def approve(self, *, kind: str, item_id: str, note: str) -> InboxItem:
         if kind == "action":
-            keys = {r.key for r in self._approvals.pending()}
+            keys = {r.key for r in await self._approvals.pending()}
             if item_id not in keys:
                 raise NotFoundError(f"no pending action {item_id!r}")
-            self._approvals.approve(item_id)
+            await self._approvals.approve(item_id)
             await self._record("SkillAction", item_id, note)
             return InboxItem("action", item_id, item_id, "approved")
         if kind == "wiki_patch":
@@ -524,6 +535,82 @@ class ApprovalInbox:
                 payload={"note": note} if note else None,
             )
         )
+
+
+def _to_request(row: SkillApprovalRow) -> ApprovalRequest:
+    return ApprovalRequest(
+        key=row.key,
+        skill_name=row.skill_name,
+        skill_version=row.skill_version,
+        status=SkillApprovalStatus(row.status),
+    )
+
+
+class PostgresApprovalQueue:
+    """Durable Postgres skill-approval queue, conforming to the runtime ``ApprovalQueue`` protocol.
+
+    It lives here (not metis-core) because it bridges a runtime value (``ApprovalRequest``) to a
+    core table; the gateway is the composition root that already imports both. Held approvals
+    survive a restart, so a proposed outbound action is not lost.
+    """
+
+    def __init__(
+        self, sessionmaker: async_sessionmaker[AsyncSession], workspace_id: WorkspaceId
+    ) -> None:
+        self._sessionmaker = sessionmaker
+        self._workspace_id = workspace_id
+
+    async def submit(self, skill_input: SkillInput) -> ApprovalRequest:
+        key = approval_key(skill_input)
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(SkillApprovalRow, (str(self._workspace_id), key))
+            if row is not None:
+                return _to_request(row)
+            session.add(
+                SkillApprovalRow(
+                    workspace_id=str(self._workspace_id),
+                    key=key,
+                    skill_name=skill_input.skill_name,
+                    skill_version=skill_input.skill_version,
+                    status=SkillApprovalStatus.PENDING.value,
+                    created_at=datetime.now(UTC),
+                )
+            )
+        return ApprovalRequest(
+            key=key, skill_name=skill_input.skill_name, skill_version=skill_input.skill_version
+        )
+
+    async def is_approved(self, skill_input: SkillInput) -> bool:
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(
+                SkillApprovalRow, (str(self._workspace_id), approval_key(skill_input))
+            )
+        return row is not None and row.status == SkillApprovalStatus.APPROVED.value
+
+    async def approve(self, key: str) -> None:
+        await self._set(key, SkillApprovalStatus.APPROVED)
+
+    async def reject(self, key: str) -> None:
+        await self._set(key, SkillApprovalStatus.REJECTED)
+
+    async def pending(self) -> Sequence[ApprovalRequest]:
+        stmt = (
+            select(SkillApprovalRow)
+            .where(
+                SkillApprovalRow.workspace_id == str(self._workspace_id),
+                SkillApprovalRow.status == SkillApprovalStatus.PENDING.value,
+            )
+            .order_by(SkillApprovalRow.created_at.asc())
+        )
+        async with unit_of_work(self._sessionmaker) as session:
+            rows = (await session.scalars(stmt)).all()
+        return [_to_request(row) for row in rows]
+
+    async def _set(self, key: str, status: SkillApprovalStatus) -> None:
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(SkillApprovalRow, (str(self._workspace_id), key))
+            if row is not None:
+                row.status = status.value
 
 
 class PostgresWorkspace:
@@ -800,7 +887,11 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         else SkillRegistry()
     )
     skill_runner = SkillRunner(
-        skills, audit_sink=audit, object_store=object_store, workspace_id=workspace_id
+        skills,
+        audit_sink=audit,
+        object_store=object_store,
+        workspace_id=workspace_id,
+        approvals=PostgresApprovalQueue(sessionmaker, workspace_id),
     )
     agent = AgentLoop(
         answerer=workspace, skill_runner=skill_runner, registry=skills, audit_sink=audit

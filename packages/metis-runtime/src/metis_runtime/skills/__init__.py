@@ -8,7 +8,13 @@ schema-checked, captured, and audited. The agent loop that *chooses* skills is S
 
 from __future__ import annotations
 
-from metis_runtime.skills.approval import ApprovalQueue, ApprovalRequest, SkillApprovalStatus
+from metis_runtime.skills.approval import (
+    ApprovalQueue,
+    ApprovalRequest,
+    InMemoryApprovalQueue,
+    SkillApprovalStatus,
+    approval_key,
+)
 from metis_runtime.skills.capture import ArtifactCapture
 from metis_runtime.skills.policy import SkillPolicy
 from metis_runtime.skills.registry import SkillRegistry, ToolDoc
@@ -20,6 +26,7 @@ __all__ = [
     "ApprovalRequest",
     "ArtifactCapture",
     "CapturedFile",
+    "InMemoryApprovalQueue",
     "Sandbox",
     "SandboxResult",
     "SkillApprovalStatus",
@@ -28,4 +35,5 @@ __all__ = [
     "SkillRunner",
     "SubprocessSandbox",
     "ToolDoc",
+    "approval_key",
 ]

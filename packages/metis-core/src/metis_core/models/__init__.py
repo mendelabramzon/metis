@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from metis_core.models.approvals import SkillApprovalRow
 from metis_core.models.artifacts import (
     NormalizedDocRow,
     ParsedDocRow,
@@ -47,6 +48,7 @@ __all__ = [
     "ProfileRow",
     "RawArtifactRow",
     "SegmentRow",
+    "SkillApprovalRow",
     "SourceSpanRow",
     "UserRow",
     "WikiPageRow",

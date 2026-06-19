@@ -42,19 +42,19 @@ class ActionApproval:
     def __init__(self, queue: ApprovalQueue) -> None:
         self._queue = queue
 
-    def gate(
+    async def gate(
         self, step: PlanStep, *, context_bundle_id: ContextBundleId | None = None
     ) -> ApprovalDecision:
         """Decide whether ``step`` may run now, holding it for approval if it must."""
         if not step.requires_approval:
             return ApprovalDecision(proceed=True)
         skill_input = step_input(step, context_bundle_id=context_bundle_id)
-        if self._queue.is_approved(skill_input):
+        if await self._queue.is_approved(skill_input):
             return ApprovalDecision(proceed=True)
-        return ApprovalDecision(proceed=False, request=self._queue.submit(skill_input))
+        return ApprovalDecision(proceed=False, request=await self._queue.submit(skill_input))
 
-    def approve(self, key: str) -> None:
-        self._queue.approve(key)
+    async def approve(self, key: str) -> None:
+        await self._queue.approve(key)
 
-    def pending(self) -> list[ApprovalRequest]:
-        return self._queue.pending()
+    async def pending(self) -> list[ApprovalRequest]:
+        return list(await self._queue.pending())
