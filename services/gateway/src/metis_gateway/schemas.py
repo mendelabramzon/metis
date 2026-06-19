@@ -8,6 +8,7 @@ matches the engine's.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, JsonValue
@@ -108,6 +109,55 @@ class UserErasureView(BaseModel):
     claims: int
     mem_cells: int
     blobs_erased: int
+
+
+# --- evidence drill-down (the evidence browser) ------------------------------------------------
+
+
+class SpanView(BaseModel):
+    """One source span behind a claim: its location and the exact quoted source text."""
+
+    source_span_id: str
+    artifact_id: str
+    doc_id: str | None = None
+    char_start: int
+    char_end: int
+    page: int | None = None
+    quote: str | None = None
+
+
+class ClaimEvidenceView(BaseModel):
+    """A claim with its supporting spans expanded — the evidence behind a citation."""
+
+    claim_id: str
+    text: str
+    confidence: float
+    negated: bool
+    sensitivity: Sensitivity
+    spans: list[SpanView]
+
+
+class ArtifactEvidenceView(BaseModel):
+    """A raw artifact's metadata — the source document a span points back to."""
+
+    artifact_id: str
+    filename: str | None = None
+    media_type: str
+    byte_size: int
+    kind: str
+    connector: str
+    source_id: str | None = None
+    created_at: datetime
+    tombstoned: bool
+
+
+class MemCellEvidenceView(BaseModel):
+    """A consolidated memory cell and the claim ids it rests on."""
+
+    mem_cell_id: str
+    summary: str
+    sensitivity: Sensitivity
+    claim_ids: list[str]
 
 
 class ParseStatus(BaseModel):

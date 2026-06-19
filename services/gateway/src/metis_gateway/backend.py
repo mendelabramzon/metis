@@ -67,10 +67,13 @@ from metis_ingestion.security.cred_store import EncryptedCredentialStore
 from metis_maintainer.memory import MemCellBuilder
 from metis_protocol import (
     AgentKind,
+    ArtifactId,
+    ArtifactRef,
     Attribution,
     AuditEvent,
     AuditId,
     Claim,
+    ClaimId,
     ClaimRef,
     ConnectorRun,
     ContextBundle,
@@ -80,18 +83,22 @@ from metis_protocol import (
     Job,
     JobId,
     JobState,
+    MemCellId,
     ModelCapability,
     NormalizedDoc,
     ObjectStore,
     Organization,
     PolicyState,
     QueryRequest,
+    RawArtifact,
     Role,
     Sensitivity,
     SkillInput,
     SourceConfig,
     SourceCursor,
     SourceId,
+    SourceSpan,
+    SourceSpanRef,
     SourceStore,
     User,
     UserId,
@@ -128,6 +135,73 @@ class IngestOutcome:
     claims: int
 
 
+# --- evidence drill-down (the evidence browser reads these) ------------------------------------
+
+
+@dataclass(frozen=True)
+class SpanEvidence:
+    """One source span behind a claim: where it points, and the exact quoted text."""
+
+    source_span_id: str
+    artifact_id: str
+    doc_id: str | None
+    char_start: int
+    char_end: int
+    page: int | None
+    quote: str | None  # NormalizedDoc.text[char_start:char_end], when the doc is resolvable
+
+
+@dataclass(frozen=True)
+class ClaimEvidence:
+    """A claim with its supporting spans expanded — the 'why this claim' trail."""
+
+    claim_id: str
+    text: str
+    confidence: float
+    negated: bool
+    sensitivity: str
+    spans: tuple[SpanEvidence, ...]
+
+
+@dataclass(frozen=True)
+class ArtifactEvidence:
+    """A raw artifact's metadata — the source a span points back to."""
+
+    artifact_id: str
+    filename: str | None
+    media_type: str
+    byte_size: int
+    kind: str
+    connector: str
+    source_id: str | None
+    created_at: datetime
+    tombstoned: bool
+
+
+@dataclass(frozen=True)
+class MemCellEvidence:
+    """A consolidated memory cell and the claims it rests on."""
+
+    mem_cell_id: str
+    summary: str
+    sensitivity: str
+    claim_ids: tuple[str, ...]
+
+
+def _artifact_evidence(raw: RawArtifact) -> ArtifactEvidence:
+    return ArtifactEvidence(
+        artifact_id=str(raw.id),
+        filename=raw.filename,
+        media_type=raw.media_type,
+        byte_size=raw.byte_size,
+        kind=raw.kind.value,
+        connector=raw.provenance.attribution.agent,
+        source_id=str(raw.source_id) if raw.source_id is not None else None,
+        created_at=raw.created_at,
+        tombstoned=raw.tombstoned_at is not None,
+    )
+
+
 @runtime_checkable
 class Workspace(Protocol):
     """The ingest/answer/cite surface the routers use — in-memory or Postgres-backed."""
@@ -157,6 +231,13 @@ class Workspace(Protocol):
     async def erase_workspace_artifacts(self) -> ErasureSummary: ...
 
     # Erase every artifact in this workspace (purges a user's personal workspace on erasure).
+
+    # Evidence drill-down — each returns None when the entity is not in this workspace (→ 404).
+    async def claim_evidence(self, claim_id: str) -> ClaimEvidence | None: ...
+
+    async def artifact_evidence(self, artifact_id: str) -> ArtifactEvidence | None: ...
+
+    async def mem_cell_evidence(self, mem_cell_id: str) -> MemCellEvidence | None: ...
 
 
 @runtime_checkable
@@ -314,6 +395,8 @@ class InMemoryWorkspace:
         self._claims: list[Claim] = []
         self._by_id: dict[str, Claim] = {}
         self._artifacts: dict[str, str] = {}  # artifact_id -> doc_id, so erasure can find the doc
+        self._raw: dict[str, RawArtifact] = {}  # artifact_id -> raw, for evidence drill-down
+        self._spans: dict[str, SourceSpan] = {}  # span_id -> span, to resolve a claim's quotes
         # With a caller wired, answers are LLM-generated over the matched evidence (cited);
         # otherwise a deterministic extractive answer.
         self._generator = FallbackAnswerGenerator(caller=caller) if caller is not None else None
@@ -343,6 +426,9 @@ class InMemoryWorkspace:
 
         self._docs[str(doc.id)] = doc
         self._artifacts[str(raw.id)] = str(doc.id)
+        self._raw[str(raw.id)] = raw
+        for span in result.source_spans:
+            self._spans[str(span.id)] = span
         for claim in result.batch.claims:
             self._claims.append(claim)
             self._by_id[str(claim.id)] = claim
@@ -372,6 +458,9 @@ class InMemoryWorkspace:
         if doc_id is None:
             return None
         self._docs.pop(doc_id, None)
+        self._raw.pop(artifact_id, None)
+        for span_id in [sid for sid, s in self._spans.items() if str(s.artifact_id) == artifact_id]:
+            self._spans.pop(span_id, None)
         erased = [
             claim
             for claim in self._claims
@@ -406,6 +495,43 @@ class InMemoryWorkspace:
                 artifacts += result.tombstoned.raw_artifacts
                 claims += result.tombstoned.claims
         return ErasureSummary(artifacts=artifacts, claims=claims, mem_cells=0, blobs_erased=0)
+
+    async def claim_evidence(self, claim_id: str) -> ClaimEvidence | None:
+        claim = self._by_id.get(claim_id)
+        if claim is None:
+            return None
+        return ClaimEvidence(
+            claim_id=claim_id,
+            text=claim.text,
+            confidence=claim.confidence,
+            negated=claim.negated,
+            sensitivity=claim.policy.sensitivity.value,
+            spans=tuple(self._span_evidence(ref) for ref in claim.source_spans),
+        )
+
+    def _span_evidence(self, ref: SourceSpanRef) -> SpanEvidence:
+        span = self._spans.get(str(ref.source_span_id))
+        quote: str | None = None
+        if span is not None and span.doc_id is not None:
+            doc = self._docs.get(str(span.doc_id))
+            if doc is not None:
+                quote = doc.text[span.char_start : span.char_end]
+        return SpanEvidence(
+            source_span_id=str(ref.source_span_id),
+            artifact_id=str(ref.artifact_id),
+            doc_id=str(ref.doc_id) if ref.doc_id is not None else None,
+            char_start=span.char_start if span is not None else 0,
+            char_end=span.char_end if span is not None else 0,
+            page=span.page if span is not None else None,
+            quote=quote,
+        )
+
+    async def artifact_evidence(self, artifact_id: str) -> ArtifactEvidence | None:
+        raw = self._raw.get(artifact_id)
+        return _artifact_evidence(raw) if raw is not None else None
+
+    async def mem_cell_evidence(self, mem_cell_id: str) -> MemCellEvidence | None:
+        return None  # the in-memory backend builds no mem cells
 
     async def answer(self, query: QueryRequest) -> Answer:
         wanted = terms(query.text)
@@ -866,6 +992,57 @@ class PostgresWorkspace:
         """Erase every artifact in this workspace (whole evidence graph, cascade + blob each)."""
         return await erase_workspace_artifacts_core(
             self._sessionmaker, self._object_store, workspace_id=str(self._workspace_id)
+        )
+
+    async def claim_evidence(self, claim_id: str) -> ClaimEvidence | None:
+        claim = await self._claims.get(ClaimId(claim_id))
+        if claim is None or str(claim.provenance.workspace_id) != str(self._workspace_id):
+            return None
+        spans = tuple([await self._span_evidence(ref) for ref in claim.source_spans])
+        return ClaimEvidence(
+            claim_id=claim_id,
+            text=claim.text,
+            confidence=claim.confidence,
+            negated=claim.negated,
+            sensitivity=claim.policy.sensitivity.value,
+            spans=spans,
+        )
+
+    async def _span_evidence(self, ref: SourceSpanRef) -> SpanEvidence:
+        span = await self._documents.get_source_span(ref.source_span_id)
+        quote: str | None = None
+        doc_id = (
+            ref.doc_id if ref.doc_id is not None else (span.doc_id if span is not None else None)
+        )
+        if span is not None and span.doc_id is not None:
+            doc = await self._documents.get_normalized(span.doc_id)
+            if doc is not None:
+                quote = doc.text[span.char_start : span.char_end]
+        return SpanEvidence(
+            source_span_id=str(ref.source_span_id),
+            artifact_id=str(ref.artifact_id),
+            doc_id=str(doc_id) if doc_id is not None else None,
+            char_start=span.char_start if span is not None else 0,
+            char_end=span.char_end if span is not None else 0,
+            page=span.page if span is not None else None,
+            quote=quote,
+        )
+
+    async def artifact_evidence(self, artifact_id: str) -> ArtifactEvidence | None:
+        raw = await self._artifacts.get(ArtifactRef(artifact_id=ArtifactId(artifact_id)))
+        if raw is None or str(raw.provenance.workspace_id) != str(self._workspace_id):
+            return None
+        return _artifact_evidence(raw)
+
+    async def mem_cell_evidence(self, mem_cell_id: str) -> MemCellEvidence | None:
+        cell = await self._memory.get_mem_cell(MemCellId(mem_cell_id))
+        if cell is None or str(cell.provenance.workspace_id) != str(self._workspace_id):
+            return None
+        return MemCellEvidence(
+            mem_cell_id=mem_cell_id,
+            summary=cell.summary,
+            sensitivity=cell.policy.sensitivity.value,
+            claim_ids=tuple(str(c.claim_id) for c in cell.claims),
         )
 
 
