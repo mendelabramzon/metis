@@ -10,7 +10,8 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from metis_core.db.base import Base
-from metis_core.db.mixins import ArtifactRow
+from metis_core.db.mixins import ArtifactRow, BodyMixin, TimestampMixin, WorkspaceMixin
+from metis_core.db.types import Id
 
 
 class WikiPageRow(Base, ArtifactRow):
@@ -25,3 +26,15 @@ class WikiPatchRow(Base, ArtifactRow):
 
     op: Mapped[str] = mapped_column(index=True)
     page_id: Mapped[str | None] = mapped_column(nullable=True, index=True)
+
+
+class WikiPatchReviewRow(Base, WorkspaceMixin, TimestampMixin, BodyMixin):
+    """The approval state of a proposed patch (keyed by patch id). Mutable state, so the store
+    upserts on transition; ``body`` carries the full review (patch + status + note).
+    """
+
+    __tablename__ = "wiki_patch_reviews"
+
+    patch_id: Mapped[Id] = mapped_column(primary_key=True)
+    status: Mapped[str] = mapped_column(index=True)
+    note: Mapped[str] = mapped_column()

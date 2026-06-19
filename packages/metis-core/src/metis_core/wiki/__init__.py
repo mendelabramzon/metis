@@ -26,12 +26,14 @@ from metis_core.wiki.pages import (
 )
 from metis_core.wiki.patch_apply import CommitResult, apply_and_commit
 from metis_core.wiki.repo import WikiRepo, WikiRepoError
+from metis_core.wiki.review_store import PostgresWikiReviewInbox
 
 __all__ = [
     "INDEX_SLUG",
     "LOG_SLUG",
     "CommitResult",
     "InvalidTransitionError",
+    "PostgresWikiReviewInbox",
     "WikiPageKind",
     "WikiPatchReview",
     "WikiPatchStatus",

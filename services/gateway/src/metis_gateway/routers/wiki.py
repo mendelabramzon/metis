@@ -24,5 +24,5 @@ async def list_patches(backend: BackendDep, _principal: OperatorDep) -> list[Wik
             summary=review.patch.title or review.patch.rationale or str(review.patch.id),
             status=review.status.value,
         )
-        for review in backend.wiki.pending()
+        for review in await backend.wiki.pending()
     ]

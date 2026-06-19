@@ -27,7 +27,7 @@ from metis_core.models.memory import (
     MemSceneRow,
     ProfileRow,
 )
-from metis_core.models.wiki import WikiPageRow, WikiPatchRow
+from metis_core.models.wiki import WikiPageRow, WikiPatchReviewRow, WikiPatchRow
 
 __all__ = [
     "AuditEventRow",
@@ -50,6 +50,7 @@ __all__ = [
     "SourceSpanRow",
     "UserRow",
     "WikiPageRow",
+    "WikiPatchReviewRow",
     "WikiPatchRow",
     "WorkspaceMembershipRow",
     "WorkspaceModelPolicyRow",

@@ -17,7 +17,7 @@ def _view(item: InboxItem) -> InboxItemView:
 
 @router.get("", response_model=list[InboxItemView])
 async def inbox(backend: BackendDep, _principal: OperatorDep) -> list[InboxItemView]:
-    return [_view(item) for item in backend.inbox.pending()]
+    return [_view(item) for item in await backend.inbox.pending()]
 
 
 @router.post("/{kind}/{item_id}/approve", response_model=InboxItemView)

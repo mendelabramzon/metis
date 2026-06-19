@@ -32,6 +32,7 @@ from metis_core.stores import (
     PostgresMemoryStore,
     PostgresMinioArtifactStore,
 )
+from metis_core.wiki import PostgresWikiReviewInbox
 from metis_core.wiki.approval import WikiPatchReview, WikiPatchStatus
 from metis_gateway.errors import ConflictError, NotFoundError
 from metis_gateway.models import (
@@ -134,6 +135,17 @@ class JobOps(Protocol):
     async def error_for(self, job_id: JobId) -> str | None: ...
 
     async def retry(self, job_id: JobId) -> Job | None: ...
+
+
+@runtime_checkable
+class WikiReviewInbox(Protocol):
+    """The wiki patch approval queue — in-memory or Postgres-backed."""
+
+    async def propose(self, review: WikiPatchReview) -> None: ...
+
+    async def pending(self) -> Sequence[WikiPatchReview]: ...
+
+    async def approve(self, patch_id: str, *, note: str) -> WikiPatchReview | None: ...
 
 
 class InMemoryObjectStore:
@@ -374,21 +386,21 @@ class SourceRegistry:
 
 
 class WikiInbox:
-    """In-memory wiki patch reviews (the Stage 7 state machine; durable store is later)."""
+    """In-memory wiki patch reviews (dev backend; durable sibling is PostgresWikiReviewInbox)."""
 
     def __init__(self) -> None:
         self._reviews: dict[str, WikiPatchReview] = {}
 
-    def propose(self, review: WikiPatchReview) -> None:
-        self._reviews[str(review.patch.id)] = review
+    async def propose(self, review: WikiPatchReview) -> None:
+        self._reviews.setdefault(str(review.patch.id), review)
 
-    def pending(self) -> list[WikiPatchReview]:
+    async def pending(self) -> Sequence[WikiPatchReview]:
         return [r for r in self._reviews.values() if r.status is WikiPatchStatus.PROPOSED]
 
-    def approve(self, patch_id: str, *, note: str) -> WikiPatchReview:
+    async def approve(self, patch_id: str, *, note: str) -> WikiPatchReview | None:
         review = self._reviews.get(patch_id)
-        if review is None:
-            raise NotFoundError(f"no wiki patch {patch_id!r}")
+        if review is None or review.status is not WikiPatchStatus.PROPOSED:
+            return None
         approved = review.approve(note=note)
         self._reviews[patch_id] = approved
         return approved
@@ -463,7 +475,7 @@ class ApprovalInbox:
     def __init__(
         self,
         approvals: ApprovalQueue,
-        wiki: WikiInbox,
+        wiki: WikiReviewInbox,
         audit: AuditLog,
         workspace_id: WorkspaceId,
     ) -> None:
@@ -472,14 +484,14 @@ class ApprovalInbox:
         self._audit = audit
         self._workspace_id = workspace_id
 
-    def pending(self) -> list[InboxItem]:
+    async def pending(self) -> list[InboxItem]:
         items = [
             InboxItem("action", r.key, f"{r.skill_name}@{r.skill_version}", r.status.value)
             for r in self._approvals.pending()
         ]
         items += [
             InboxItem("wiki_patch", str(r.patch.id), _patch_summary(r), r.status.value)
-            for r in self._wiki.pending()
+            for r in await self._wiki.pending()
         ]
         return items
 
@@ -492,7 +504,9 @@ class ApprovalInbox:
             await self._record("SkillAction", item_id, note)
             return InboxItem("action", item_id, item_id, "approved")
         if kind == "wiki_patch":
-            review = self._wiki.approve(item_id, note=note)
+            review = await self._wiki.approve(item_id, note=note)
+            if review is None:
+                raise NotFoundError(f"no pending wiki patch {item_id!r}")
             await self._record("WikiPatch", item_id, note)
             return InboxItem("wiki_patch", item_id, _patch_summary(review), review.status.value)
         raise NotFoundError(f"unknown approval kind {kind!r}")
@@ -629,7 +643,7 @@ class Backend:
     jobs: JobOps
     audit: AuditLog
     sources: SourceRegistry
-    wiki: WikiInbox
+    wiki: WikiReviewInbox
     inbox: ApprovalInbox
     identity: IdentityStore = field(default_factory=InMemoryIdentityStore)
     object_store: ObjectStore = field(default_factory=InMemoryObjectStore)
@@ -791,7 +805,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
     agent = AgentLoop(
         answerer=workspace, skill_runner=skill_runner, registry=skills, audit_sink=audit
     )
-    wiki = WikiInbox()
+    wiki = PostgresWikiReviewInbox(sessionmaker, workspace_id)
     inbox = ApprovalInbox(skill_runner.approvals, wiki, audit, workspace_id)
 
     return Backend(
