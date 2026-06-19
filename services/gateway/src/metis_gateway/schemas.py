@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, JsonValue
 from metis_protocol import (
     ContradictionStatus,
     JobState,
+    MemoryOp,
     ModelKind,
     ModelTier,
     PrivacyTier,
@@ -180,6 +181,33 @@ class ContradictionUpdate(BaseModel):
     """Resolve or dismiss a contradiction — the only review transitions (no reopen via the API)."""
 
     status: Literal[ContradictionStatus.RESOLVED, ContradictionStatus.DISMISSED]
+
+
+# --- memory review (the write/manage/read loop) ------------------------------------------------
+
+
+class MemoryCellView(BaseModel):
+    """A consolidated memory cell in the review queue (claims drill in via the evidence API)."""
+
+    mem_cell_id: str
+    summary: str
+    sensitivity: Sensitivity
+    claim_ids: list[str]
+    created_at: datetime
+
+
+class MemoryRevisionRequest(BaseModel):
+    """An optional reason recorded on a retract/supersede review action."""
+
+    reason: str = ""
+
+
+class MemoryRevisionResult(BaseModel):
+    """Confirmation of a memory-review action: the cell and the revision applied."""
+
+    mem_cell_id: str
+    op: MemoryOp
+    summary: str
 
 
 class ParseStatus(BaseModel):

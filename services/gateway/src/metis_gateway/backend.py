@@ -86,13 +86,18 @@ from metis_protocol import (
     Job,
     JobId,
     JobState,
+    MemCell,
     MemCellId,
+    MemoryOp,
+    MemoryPatch,
+    MemoryPatchId,
     MemoryScope,
     ModelCapability,
     NormalizedDoc,
     ObjectStore,
     Organization,
     PolicyState,
+    Provenance,
     QueryRequest,
     RawArtifact,
     Role,
@@ -252,6 +257,13 @@ class Workspace(Protocol):
     async def resolve_contradiction(
         self, contradiction_id: str, *, status: ContradictionStatus
     ) -> Contradiction | None: ...
+
+    # Memory review — the write/manage/read loop over consolidated memory (empty in-memory).
+    async def list_memory(self) -> Sequence[MemCell]: ...
+
+    async def revise_mem_cell(
+        self, mem_cell_id: str, *, op: MemoryOp, reason: str, actor: str
+    ) -> MemCell | None: ...
 
 
 @runtime_checkable
@@ -555,6 +567,14 @@ class InMemoryWorkspace:
     async def resolve_contradiction(
         self, contradiction_id: str, *, status: ContradictionStatus
     ) -> Contradiction | None:
+        return None
+
+    async def list_memory(self) -> Sequence[MemCell]:
+        return ()  # the in-memory backend builds no consolidated memory cells
+
+    async def revise_mem_cell(
+        self, mem_cell_id: str, *, op: MemoryOp, reason: str, actor: str
+    ) -> MemCell | None:
         return None
 
     async def answer(self, query: QueryRequest) -> Answer:
@@ -1083,6 +1103,31 @@ class PostgresWorkspace:
         return await self._memory.set_contradiction_status(
             ContradictionId(contradiction_id), status, workspace_id=self._workspace_id
         )
+
+    async def list_memory(self) -> Sequence[MemCell]:
+        return await self._memory.query_cells(MemoryScope(workspace_id=self._workspace_id))
+
+    async def revise_mem_cell(
+        self, mem_cell_id: str, *, op: MemoryOp, reason: str, actor: str
+    ) -> MemCell | None:
+        cell = await self._memory.get_mem_cell(MemCellId(mem_cell_id))
+        if cell is None or str(cell.provenance.workspace_id) != str(self._workspace_id):
+            return None
+        await self._memory.apply_patch(
+            MemoryPatch(
+                id=new_id(MemoryPatchId),
+                provenance=Provenance(
+                    workspace_id=self._workspace_id,
+                    attribution=Attribution(agent_kind=AgentKind.HUMAN, agent=actor),
+                ),
+                policy=cell.policy,
+                created_at=datetime.now(UTC),
+                op=op,
+                target_id=mem_cell_id,
+                reason=reason,
+            )
+        )
+        return cell
 
 
 class PostgresAuditLog:
