@@ -88,6 +88,28 @@ class ErasureView(BaseModel):
     blobs_erased: int
 
 
+class SourceErasureView(BaseModel):
+    """The outcome of deleting a source: how many of its artifacts were erased (derived graphs
+    tombstoned + blobs deleted). The source registration itself is removed too."""
+
+    artifacts: int
+    claims: int
+    mem_cells: int
+    blobs_erased: int
+
+
+class UserErasureView(BaseModel):
+    """The outcome of erasing a user: their personal-workspace artifacts erased and the account
+    deactivated (locked out). Shared-workspace contributions and the audit trail are kept."""
+
+    user_id: str
+    deactivated: bool
+    artifacts: int
+    claims: int
+    mem_cells: int
+    blobs_erased: int
+
+
 class ParseStatus(BaseModel):
     """The visible per-file result of an upload: parsed, an unsupported type, or a parse failure."""
 

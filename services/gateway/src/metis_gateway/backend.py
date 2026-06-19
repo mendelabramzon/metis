@@ -30,8 +30,10 @@ from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexL
 from metis_core.models import RawArtifactRow, SkillApprovalRow
 from metis_core.objectstore import S3ObjectStore
 from metis_core.security import Cryptobox
-from metis_core.security.deletion import ErasureResult
+from metis_core.security.deletion import ErasureResult, ErasureSummary
 from metis_core.security.deletion import erase_artifact as erase_artifact_core
+from metis_core.security.deletion import erase_source as erase_source_core
+from metis_core.security.deletion import erase_workspace_artifacts as erase_workspace_artifacts_core
 from metis_core.stores import (
     PostgresClaimStore,
     PostgresDocumentStore,
@@ -146,6 +148,15 @@ class Workspace(Protocol):
 
     # Returns None when no such artifact exists *in this workspace* (the isolation guard → 404).
     async def erase_artifact(self, artifact_id: str) -> ErasureResult | None: ...
+
+    async def erase_source(self, source_id: str) -> ErasureSummary: ...
+
+    # Erase every artifact this source produced in this workspace (empty on the in-memory backend,
+    # which does not track source provenance).
+
+    async def erase_workspace_artifacts(self) -> ErasureSummary: ...
+
+    # Erase every artifact in this workspace (purges a user's personal workspace on erasure).
 
 
 @runtime_checkable
@@ -280,6 +291,14 @@ class InMemoryIdentityStore:
         self._policies[str(policy.workspace_id)] = policy
         return policy
 
+    async def deactivate_user(self, user_id: UserId) -> User | None:
+        user = self._users.get(str(user_id))
+        if user is None:
+            return None
+        deactivated = user.model_copy(update={"active": False})
+        self._users[str(user_id)] = deactivated
+        return deactivated
+
 
 class InMemoryWorkspace:
     """Ingests text into real claims/spans and answers by grounded lexical retrieval.
@@ -372,6 +391,21 @@ class InMemoryWorkspace:
             ),
             blobs_erased=0,
         )
+
+    async def erase_source(self, source_id: str) -> ErasureSummary:
+        """The in-memory backend does not record source provenance on its artifacts (inline ingest
+        has no source), so there is nothing to enumerate; the durable backend does the real work."""
+        return ErasureSummary(artifacts=0, claims=0, mem_cells=0, blobs_erased=0)
+
+    async def erase_workspace_artifacts(self) -> ErasureSummary:
+        """Erase every artifact held in this workspace (drops each doc and the claims citing it)."""
+        artifacts = claims = 0
+        for artifact_id in list(self._artifacts):
+            result = await self.erase_artifact(artifact_id)
+            if result is not None:
+                artifacts += result.tombstoned.raw_artifacts
+                claims += result.tombstoned.claims
+        return ErasureSummary(artifacts=artifacts, claims=claims, mem_cells=0, blobs_erased=0)
 
     async def answer(self, query: QueryRequest) -> Answer:
         wanted = terms(query.text)
@@ -470,6 +504,12 @@ class InMemorySourceStore:
         runs = [r for r in self._runs.values() if r.source_id == source_id]
         runs.sort(key=lambda r: r.started_at, reverse=True)
         return runs[:limit]
+
+    async def delete(self, source_id: SourceId) -> None:
+        sid = str(source_id)
+        self._configs.pop(sid, None)
+        self._cursors.pop(sid, None)
+        self._runs = {k: v for k, v in self._runs.items() if str(v.source_id) != sid}
 
 
 class WikiInbox:
@@ -811,6 +851,21 @@ class PostgresWorkspace:
             self._object_store,
             workspace_id=str(self._workspace_id),
             artifact_id=artifact_id,
+        )
+
+    async def erase_source(self, source_id: str) -> ErasureSummary:
+        """Erase every artifact this source produced in this workspace (cascade + blob each)."""
+        return await erase_source_core(
+            self._sessionmaker,
+            self._object_store,
+            workspace_id=str(self._workspace_id),
+            source_id=source_id,
+        )
+
+    async def erase_workspace_artifacts(self) -> ErasureSummary:
+        """Erase every artifact in this workspace (whole evidence graph, cascade + blob each)."""
+        return await erase_workspace_artifacts_core(
+            self._sessionmaker, self._object_store, workspace_id=str(self._workspace_id)
         )
 
 

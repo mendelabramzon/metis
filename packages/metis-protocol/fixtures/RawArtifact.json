@@ -50,5 +50,6 @@
   "media_type": "text/plain",
   "byte_size": 42,
   "storage_ref": "raw/2026/01/demo.txt",
-  "filename": "demo.txt"
+  "filename": "demo.txt",
+  "source_id": null
 }

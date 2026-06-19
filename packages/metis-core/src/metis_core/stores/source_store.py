@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -104,3 +105,16 @@ class PostgresSourceStore:
         async with unit_of_work(self._sessionmaker) as session:
             rows = (await session.scalars(stmt)).all()
         return [to_model(row, ConnectorRun) for row in rows]
+
+    async def delete(self, source_id: SourceId) -> None:
+        """Remove the source registration: its run history, resume cursor, and config. The artifacts
+        it produced are erased separately (right-to-erasure), not here."""
+        sid = str(source_id)
+        async with unit_of_work(self._sessionmaker) as session:
+            await session.execute(
+                sa_delete(ConnectorRunRow).where(ConnectorRunRow.source_id == sid)
+            )
+            await session.execute(
+                sa_delete(SourceCursorRow).where(SourceCursorRow.source_id == sid)
+            )
+            await session.execute(sa_delete(SourceConfigRow).where(SourceConfigRow.id == sid))

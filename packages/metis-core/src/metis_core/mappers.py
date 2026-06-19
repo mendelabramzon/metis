@@ -98,6 +98,7 @@ def raw_artifact_to_row(m: RawArtifact) -> RawArtifactRow:
         media_type=m.media_type,
         byte_size=m.byte_size,
         storage_ref=m.storage_ref,
+        source_id=str(m.source_id) if m.source_id is not None else None,
     )
 
 

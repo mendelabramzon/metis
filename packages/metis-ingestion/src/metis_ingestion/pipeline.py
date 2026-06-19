@@ -23,7 +23,7 @@ from metis_ingestion.failures import StepFailure, UnsupportedMediaType, record_f
 from metis_ingestion.normalize import build_normalized_doc
 from metis_ingestion.parsers import get_format
 from metis_ingestion.segment import parse_document
-from metis_protocol import AuditSink, SourceRef
+from metis_protocol import AuditSink, SourceId, SourceRef
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,7 @@ class IngestionPipeline:
         claim_store: PostgresClaimStore,
         audit_sink: AuditSink,
         extractor: BaselineExtractor | None = None,
+        source_id: SourceId | None = None,
     ) -> None:
         self._connector = connector
         self._artifacts = artifact_store
@@ -51,6 +52,9 @@ class IngestionPipeline:
         self._claims = claim_store
         self._audit = audit_sink
         self._extractor = extractor if extractor is not None else BaselineExtractor()
+        # The registered source this pipeline syncs (None for unregistered/inline ingest); stamped
+        # onto each raw artifact so source-level erasure can find what this source produced.
+        self._source_id = source_id
 
     async def run(self, *, cursor: str | None = None) -> IngestResult:
         refs = await self._connector.discover(cursor)
@@ -76,6 +80,8 @@ class IngestionPipeline:
 
     async def _ingest_one(self, ref: SourceRef) -> int:
         raw, data = await self._connector.fetch_with_bytes(ref)
+        if self._source_id is not None:  # tag with the registered source (id is content-addressed,
+            raw = raw.model_copy(update={"source_id": self._source_id})  # so dedup is unaffected)
         await self._artifacts.put_blob(data)
         await self._artifacts.put(raw)
 

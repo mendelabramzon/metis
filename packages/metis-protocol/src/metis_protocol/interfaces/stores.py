@@ -147,6 +147,11 @@ class IdentityStore(Protocol):
 
     async def set_model_policy(self, policy: WorkspaceModelPolicy) -> WorkspaceModelPolicy: ...
 
+    async def deactivate_user(self, user_id: UserId) -> User | None: ...
+
+    # Soft-disable a user (active=False) so the auth boundary rejects them; their audit trail stays.
+    # Returns the updated user, or None if unknown.
+
 
 @runtime_checkable
 class SourceStore(Protocol):
@@ -170,3 +175,8 @@ class SourceStore(Protocol):
     async def record_run(self, run: ConnectorRun) -> ConnectorRun: ...
 
     async def runs_for(self, source_id: SourceId, *, limit: int = 50) -> Sequence[ConnectorRun]: ...
+
+    async def delete(self, source_id: SourceId) -> None: ...
+
+    # Remove the source registration (config + cursor + run history). The artifacts it produced are
+    # erased separately (right-to-erasure), not here.

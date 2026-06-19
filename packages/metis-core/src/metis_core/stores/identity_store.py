@@ -151,3 +151,14 @@ class PostgresIdentityStore:
                 existing.daily_cost_cap_usd = policy.daily_cost_cap_usd
                 existing.body = policy.model_dump(mode="json")
         return policy
+
+    async def deactivate_user(self, user_id: UserId) -> User | None:
+        """Soft-disable a user (active=False) so the auth boundary rejects them; the audit trail
+        stays. ``active`` lives in the body, so rewrite it. Returns the user, or None if unknown."""
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(UserRow, str(user_id))
+            if row is None:
+                return None
+            user = to_model(row, User).model_copy(update={"active": False})
+            row.body = user.model_dump(mode="json")
+        return user

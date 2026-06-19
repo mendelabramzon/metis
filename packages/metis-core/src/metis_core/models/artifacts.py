@@ -30,6 +30,9 @@ class RawArtifactRow(Base, ArtifactRow):
     media_type: Mapped[str] = mapped_column()
     byte_size: Mapped[int] = mapped_column(Integer)
     storage_ref: Mapped[str] = mapped_column()
+    # The registered source that produced it (NULL for uploads/inline ingest); source-level erasure
+    # enumerates artifacts by this, so it is indexed.
+    source_id: Mapped[str | None] = mapped_column(nullable=True, index=True)
 
 
 class NormalizedDocRow(Base, ArtifactRow):

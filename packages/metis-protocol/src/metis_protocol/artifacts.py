@@ -77,6 +77,7 @@ class RawArtifact(Artifact[ArtifactId]):
     byte_size: int = Field(ge=0)
     storage_ref: str  # object-store key, resolved by core
     filename: str | None = None
+    source_id: SourceId | None = None  # the registered source that produced it (None for uploads)
 
 
 @schema

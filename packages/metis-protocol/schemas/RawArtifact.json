@@ -430,6 +430,18 @@
       "title": "Schema Version",
       "type": "string"
     },
+    "source_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Id"
+    },
     "storage_ref": {
       "title": "Storage Ref",
       "type": "string"

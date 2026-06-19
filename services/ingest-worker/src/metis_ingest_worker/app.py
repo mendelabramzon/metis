@@ -97,6 +97,7 @@ async def _poll(settings: IngestWorkerSettings, core: CoreSettings) -> None:
         document_store=PostgresDocumentStore(sessionmaker),
         claim_store=PostgresClaimStore(sessionmaker),
         audit_sink=PostgresAuditSink(sessionmaker),
+        source_id=source.id if source is not None else None,
     )
     poller: IngestPoller | DurableIngestPoller = (
         await DurableIngestPoller.resume(pipeline, source=source, store=source_store)
@@ -188,6 +189,7 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
             document_store=document_store,
             claim_store=claim_store,
             audit_sink=audit_sink,
+            source_id=source.id,
         )
 
     worker = ConnectorSyncWorker(

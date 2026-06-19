@@ -13,7 +13,7 @@ from fastapi import APIRouter
 
 from metis_gateway.deps import BackendDep, OperatorDep, UserDep
 from metis_gateway.errors import ConflictError, NotFoundError
-from metis_gateway.schemas import SourceCreate, SourceView, SyncResponse
+from metis_gateway.schemas import SourceCreate, SourceErasureView, SourceView, SyncResponse
 from metis_ingestion import ConnectorScheduler
 from metis_protocol import SourceConfig, SourceId, WorkspaceId, new_id
 
@@ -71,3 +71,22 @@ async def sync_source(source_id: str, backend: BackendDep, _principal: OperatorD
         cursor=cursor.cursor if cursor is not None else None,
     )
     return SyncResponse(job_id=str(job_id), source_id=source_id)
+
+
+@router.delete("/{source_id}", response_model=SourceErasureView)
+async def delete_source(
+    source_id: str, backend: BackendDep, _principal: OperatorDep
+) -> SourceErasureView:
+    """Delete a source: erase every artifact it produced (cascade + blob) and remove its
+    registration (config, cursor, run history). Operator-gated, like source creation."""
+    source = await backend.sources.get(SourceId(source_id))
+    if source is None:
+        raise NotFoundError(f"no source {source_id!r}")
+    result = await backend.workspace_for(source.workspace_id).erase_source(str(source.id))
+    await backend.sources.delete(source.id)
+    return SourceErasureView(
+        artifacts=result.artifacts,
+        claims=result.claims,
+        mem_cells=result.mem_cells,
+        blobs_erased=result.blobs_erased,
+    )
