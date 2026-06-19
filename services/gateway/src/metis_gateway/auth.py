@@ -90,7 +90,7 @@ async def current_user(request: Request, authorization: str | None = Header(defa
         raise UnauthorizedError("expected 'Authorization: Bearer <token>'")
     backend: Backend = request.app.state.backend
     user = await backend.identity.get_user(UserId(authorization[7:].strip()))
-    if user is None:
+    if user is None or not user.active:  # a deactivated (erased) user can no longer authenticate
         raise UnauthorizedError()
     return user
 

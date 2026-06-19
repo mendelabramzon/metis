@@ -12,11 +12,12 @@ from datetime import UTC, datetime
 from fastapi import APIRouter
 
 from metis_gateway.deps import BackendDep, CurrentUserDep, OperatorDep
-from metis_gateway.errors import ConflictError
+from metis_gateway.errors import ConflictError, NotFoundError
 from metis_gateway.schemas import (
     OrganizationCreate,
     OrganizationView,
     UserCreate,
+    UserErasureView,
     UserView,
 )
 from metis_protocol import (
@@ -97,3 +98,31 @@ async def create_user(body: UserCreate, backend: BackendDep, _principal: Operato
 @router.get("/users/me", response_model=UserView)
 async def me(user: CurrentUserDep) -> UserView:
     return _user_view(user)
+
+
+@router.delete("/users/{user_id}", response_model=UserErasureView)
+async def erase_user(user_id: str, backend: BackendDep, _principal: OperatorDep) -> UserErasureView:
+    """Erase a user (right-to-erasure): purge their personal-workspace artifacts and deactivate the
+    account so it can no longer authenticate. Shared-workspace contributions (the org's) and the
+    audit trail are kept. Operator-gated, like provisioning."""
+    user = await backend.identity.get_user(UserId(user_id))
+    if user is None:
+        raise NotFoundError(f"unknown user {user_id}")
+    workspaces = await backend.identity.workspaces_for_user(user.id)
+    personal = [w for w in workspaces if w.kind is WorkspaceKind.PERSONAL and w.owner_id == user.id]
+    artifacts = claims = mem_cells = blobs = 0
+    for workspace in personal:
+        summary = await backend.workspace_for(workspace.id).erase_workspace_artifacts()
+        artifacts += summary.artifacts
+        claims += summary.claims
+        mem_cells += summary.mem_cells
+        blobs += summary.blobs_erased
+    await backend.identity.deactivate_user(user.id)
+    return UserErasureView(
+        user_id=user_id,
+        deactivated=True,
+        artifacts=artifacts,
+        claims=claims,
+        mem_cells=mem_cells,
+        blobs_erased=blobs,
+    )
