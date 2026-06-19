@@ -21,6 +21,7 @@ from metis_ingestion import mime
 from metis_ingestion._build import stable_id
 from metis_ingestion.connectors.base import BaseConnector, ConnectorError, RenderedPayload
 from metis_ingestion.mime import MediaInfo
+from metis_ingestion.parsers.registry import get_format
 from metis_protocol import ArtifactKind, SourceId, SourceRef
 
 
@@ -56,12 +57,44 @@ def _date(msg: Message) -> datetime:
 def _body(msg: Message) -> str:
     parts = msg.walk() if msg.is_multipart() else [msg]
     for part in parts:
-        if part.get_content_type() == "text/plain":
+        if part.get_content_type() == "text/plain" and part.get_filename() is None:
             payload = part.get_payload(decode=True)
             if isinstance(payload, bytes):
                 return payload.decode("utf-8", "replace").strip()
     payload = msg.get_payload()
     return payload.strip() if isinstance(payload, str) else ""
+
+
+def _attachment_texts(msg: Message) -> list[tuple[str, str]]:
+    """Extract each attachment's text through the parser registry: ``(filename, text)`` per part.
+
+    A message's documents live in its attachments, not its body, so they must reach the pipeline as
+    evidence. Each non-body part with a filename is routed by detected media type to the same parser
+    the pipeline uses; unsupported types (an image with no OCR — a later slice) and parts that fail
+    to extract are skipped rather than breaking the thread render, which keeps replay deterministic.
+    """
+    if not msg.is_multipart():
+        return []
+    texts: list[tuple[str, str]] = []
+    for part in msg.walk():
+        filename = part.get_filename()
+        disposition = (part.get("Content-Disposition") or "").lower()
+        if filename is None and "attachment" not in disposition:
+            continue  # a body part, not an attachment
+        payload = part.get_payload(decode=True)
+        if not isinstance(payload, bytes) or not payload:
+            continue
+        media = mime.detect(filename or "", payload[:512])
+        fmt = get_format(media.media_type)
+        if fmt is None:
+            continue  # unsupported attachment type (OCR/VLM fallback is a later slice)
+        try:
+            text = fmt.extract(payload).strip()
+        except Exception:  # a malformed attachment must not break thread rendering
+            continue
+        if text:
+            texts.append((filename or media.media_type, text))
+    return texts
 
 
 def _render_thread(subject: str, ordered: Sequence[tuple[Message, datetime]]) -> str:
@@ -70,6 +103,10 @@ def _render_thread(subject: str, ordered: Sequence[tuple[Message, datetime]]) ->
         sender = _header(msg, "From") or "(unknown sender)"
         lines.append(f"From {sender} on {when.isoformat()}:")
         lines.append(_body(msg))
+        for name, text in _attachment_texts(msg):
+            lines.append("")
+            lines.append(f"[Attachment: {name}]")
+            lines.append(text)
         lines.append("")
     return "\n".join(lines).strip() + "\n"
 
