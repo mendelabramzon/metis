@@ -53,3 +53,14 @@ class GatewaySettings(BaseServiceSettings):
     # TGI/vLLM server, registered as a router provider; routing is driven by the declared
     # capabilities. Set as a JSON list in METIS_GATEWAY_MODEL_MANIFESTS.
     model_manifests: tuple[ModelCapability, ...] = ()
+
+    # Google OAuth consent flow: with a client id/secret set, /oauth/{connector}/authorize starts
+    # the consent and /oauth/callback stores the resulting refresh token in the encrypted credential
+    # store (keyed by cred_store_key) for the ingest worker to use. Empty = the flow is disabled.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_auth_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
+    google_token_url: str = "https://oauth2.googleapis.com/token"
+    google_redirect_uri: str = ""
+    google_scopes: str = "https://www.googleapis.com/auth/drive.readonly"
+    cred_store_key: str = ""  # Fernet key for the encrypted credential store (tokens at rest)

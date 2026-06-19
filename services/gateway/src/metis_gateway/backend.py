@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+from urllib.parse import urlencode
 
 import httpx
 from sqlalchemy import select
@@ -28,6 +29,7 @@ from metis_core.llm import ModelCaller
 from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup, stub_router
 from metis_core.models import SkillApprovalRow
 from metis_core.objectstore import S3ObjectStore
+from metis_core.security import Cryptobox
 from metis_core.stores import (
     PostgresClaimStore,
     PostgresDocumentStore,
@@ -56,6 +58,7 @@ from metis_ingestion import (
     parse_document,
 )
 from metis_ingestion.connectors import ConnectorRegistry
+from metis_ingestion.security.cred_store import EncryptedCredentialStore
 from metis_maintainer.memory import MemCellBuilder
 from metis_protocol import (
     AgentKind,
@@ -770,6 +773,53 @@ class PostgresAuditLog:
         )
 
 
+@dataclass(frozen=True)
+class GoogleOAuthConfig:
+    """Google OAuth client config + the consent-URL builder for the gateway's connect flow."""
+
+    client_id: str
+    client_secret: str
+    auth_url: str
+    token_url: str
+    redirect_uri: str
+    scopes: str
+
+    def authorize_url(self, *, state: str) -> str:
+        """The Google consent URL; ``access_type=offline`` + ``prompt=consent`` ask for a refresh
+        token, and ``state`` is the CSRF token the callback verifies."""
+        params = {
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+            "response_type": "code",
+            "scope": self.scopes,
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state,
+        }
+        return f"{self.auth_url}?{urlencode(params)}"
+
+
+def _build_credentials(settings: GatewaySettings) -> EncryptedCredentialStore | None:
+    """The encrypted credential store the OAuth callback writes refresh tokens into."""
+    if not settings.cred_store_key:
+        return None
+    return EncryptedCredentialStore(Cryptobox(settings.cred_store_key))
+
+
+def _build_google_oauth(settings: GatewaySettings) -> GoogleOAuthConfig | None:
+    """The Google consent config (None when no client id is set, i.e. the flow is disabled)."""
+    if not settings.google_client_id:
+        return None
+    return GoogleOAuthConfig(
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+        auth_url=settings.google_auth_url,
+        token_url=settings.google_token_url,
+        redirect_uri=settings.google_redirect_uri,
+        scopes=settings.google_scopes,
+    )
+
+
 @dataclass
 class Backend:
     """Everything the routers depend on, wired once at app assembly (memory or Postgres)."""
@@ -794,6 +844,9 @@ class Backend:
     model_closers: tuple[Callable[[], Awaitable[None]], ...] = ()  # cloud clients to close
     spend: SpendTracker | None = None  # per-workspace model spend (None when no model is wired)
     model_manifests: tuple[ModelCapability, ...] = ()  # registered capability manifests (operators)
+    credentials: EncryptedCredentialStore | None = None  # encrypted connector secrets at rest
+    google_oauth: GoogleOAuthConfig | None = None  # the Google consent config (None = disabled)
+    oauth_states: dict[str, str] = field(default_factory=dict)  # pending CSRF state -> connector
     # Builds a per-workspace engine for (workspace_id, allow_external) on demand (set by the build
     # functions); ``workspace``/``agent`` above are the configured workspace's default engine.
     workspace_factory: Callable[[WorkspaceId, bool], Workspace] | None = None
@@ -877,6 +930,8 @@ def build_backend(settings: GatewaySettings) -> Backend:
         model_closers=plane.closers,
         spend=plane.spend,
         model_manifests=plane.manifests,
+        credentials=_build_credentials(settings),
+        google_oauth=_build_google_oauth(settings),
         workspace_factory=_workspace_factory,
     )
 
@@ -972,5 +1027,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         model_closers=plane.closers,
         spend=plane.spend,
         model_manifests=plane.manifests,
+        credentials=_build_credentials(settings),
+        google_oauth=_build_google_oauth(settings),
         workspace_factory=_workspace_factory,
     )

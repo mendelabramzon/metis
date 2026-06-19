@@ -49,6 +49,20 @@ class SyncResponse(BaseModel):
     source_id: str
 
 
+class AuthorizeView(BaseModel):
+    """The Google consent URL to open, plus the CSRF state the callback verifies."""
+
+    authorize_url: str
+    state: str
+
+
+class ConnectionView(BaseModel):
+    """The result of an OAuth callback: which connector was connected."""
+
+    connector: str
+    status: str
+
+
 class IngestRequest(BaseModel):
     filename: str
     content: str
