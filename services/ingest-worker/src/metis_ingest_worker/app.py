@@ -39,6 +39,7 @@ from metis_ingestion import (
     LocalFolderConnector,
     OAuth2Client,
     OAuthTokens,
+    build_gmail_connector,
     build_google_drive_connector,
 )
 from metis_ingestion.connectors import FetchingConnector
@@ -154,12 +155,14 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
     )
 
     async def connector_for(source: SourceConfig) -> FetchingConnector:
-        if source.connector != "gdrive":
+        if source.connector not in ("gdrive", "gmail"):
             return build_connector(settings, source.workspace_id, connector=source.connector)
         if credentials is None:
-            raise ValueError("a gdrive source needs METIS_INGEST_WORKER_CRED_STORE_KEY set")
+            raise ValueError(
+                f"a {source.connector} source needs METIS_INGEST_WORKER_CRED_STORE_KEY set"
+            )
         store = credentials  # non-None for the persist closure below
-        resolver = store.for_connector("gdrive")
+        resolver = store.for_connector(source.connector)  # Drive + Gmail share Google OAuth
         oauth = OAuth2Client(
             token_url=settings.google_token_url,
             client_id=settings.google_client_id,
@@ -169,9 +172,22 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
 
         def _persist(tokens: OAuthTokens) -> None:
             store.set_credential(
-                connector="gdrive", name="refresh_token", value=tokens.refresh_token
+                connector=source.connector, name="refresh_token", value=tokens.refresh_token
             )
 
+        if source.connector == "gmail":
+            labels = tuple(label for label in settings.gmail_label_ids.split(",") if label)
+            return await build_gmail_connector(
+                workspace_id=source.workspace_id,
+                sensitivity=source.sensitivity,
+                refresh_token=resolver.resolve("refresh_token"),
+                oauth=oauth,
+                gmail_http=drive_http,  # the sync Google-API client (shared with Drive)
+                query=settings.gmail_query,
+                label_ids=labels,
+                user_id=settings.gmail_user_id,
+                persist=_persist,
+            )
         return await build_google_drive_connector(
             workspace_id=source.workspace_id,
             folder_id=settings.gdrive_folder_id,

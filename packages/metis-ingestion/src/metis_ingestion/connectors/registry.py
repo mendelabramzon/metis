@@ -15,6 +15,7 @@ from metis_ingestion.connectors.auth import ConnectorAuth, basic_auth, no_auth, 
 from metis_ingestion.connectors.base import FetchingConnector, RateLimiter, Transport
 from metis_ingestion.connectors.calendar import CalendarConnector
 from metis_ingestion.connectors.gdrive import GoogleDriveConnector
+from metis_ingestion.connectors.gmail import GmailConnector
 from metis_ingestion.connectors.imap import ImapConnector
 from metis_ingestion.connectors.slack import SlackConnector
 from metis_ingestion.connectors.web_clip import WebClipConnector
@@ -87,6 +88,9 @@ class ConnectorRegistry:
         )
         registry.register(
             ConnectorSpec("gdrive", GoogleDriveConnector, oauth2(), Sensitivity.INTERNAL)
+        )
+        registry.register(
+            ConnectorSpec("gmail", GmailConnector, oauth2(), Sensitivity.CONFIDENTIAL)
         )
         registry.register(
             ConnectorSpec("calendar", CalendarConnector, oauth2(), Sensitivity.INTERNAL)

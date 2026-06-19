@@ -40,6 +40,11 @@ class IngestWorkerSettings(BaseSettings):
     # and client id. The refresh token and client secret are resolved from the encrypted credential
     # store (keyed by cred_store_key); per-source folder selection is a later slice.
     gdrive_folder_id: str = ""
+    # Gmail source (connector == "gmail"): the mailbox slice to sync (an optional Gmail search query
+    # and comma-separated label ids), over the same Google OAuth as Drive.
+    gmail_query: str = ""
+    gmail_label_ids: str = ""  # comma-separated label ids, e.g. "INBOX,IMPORTANT"
+    gmail_user_id: str = "me"
     google_token_url: str = "https://oauth2.googleapis.com/token"
     google_client_id: str = ""
     cred_store_key: str = ""  # Fernet key for the encrypted credential store (tokens at rest)
