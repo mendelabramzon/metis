@@ -19,10 +19,12 @@ class SourceCreate(BaseModel):
     name: str
     connector: str
     sensitivity: Sensitivity = Sensitivity.INTERNAL
+    workspace_id: str | None = None  # defaults to the deployment's configured workspace
 
 
 class SourceView(BaseModel):
     id: str
+    workspace_id: str
     name: str
     connector: str
     sensitivity: Sensitivity

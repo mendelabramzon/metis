@@ -28,6 +28,7 @@ from metis_protocol.interfaces.stores import (
     DocumentStore,
     IdentityStore,
     MemoryStore,
+    SourceStore,
     WikiStore,
 )
 
@@ -55,5 +56,6 @@ __all__ = [
     "Retriever",
     "Skill",
     "SkillRunner",
+    "SourceStore",
     "WikiStore",
 ]

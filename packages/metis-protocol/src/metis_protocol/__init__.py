@@ -29,6 +29,7 @@ from metis_protocol.enums import (
     SENSITIVITY_ORDER,
     AgentKind,
     ArtifactKind,
+    ConnectorRunStatus,
     ContradictionStatus,
     EntityKind,
     ForesightStatus,
@@ -74,6 +75,7 @@ from metis_protocol.ids import (
     AuditId,
     BatchId,
     ClaimId,
+    ConnectorRunId,
     ContextBundleId,
     ContradictionId,
     DocId,
@@ -128,6 +130,7 @@ from metis_protocol.interfaces import (
     Retriever,
     Skill,
     SkillRunner,
+    SourceStore,
     WikiStore,
 )
 from metis_protocol.memory import (
@@ -173,6 +176,12 @@ from metis_protocol.refs import (
     WorkspaceRef,
 )
 from metis_protocol.skills import SkillInput, SkillManifest, SkillResult
+from metis_protocol.sources import (
+    ConnectorRun,
+    SourceConfig,
+    SourceCredentialRef,
+    SourceCursor,
+)
 from metis_protocol.tasks import ModelTaskClass
 from metis_protocol.versioning import (
     SCHEMA_REGISTRY,
@@ -210,6 +219,9 @@ __all__ = [
     "ClaimStore",
     "ClaimWriteResult",
     "Connector",
+    "ConnectorRun",
+    "ConnectorRunId",
+    "ConnectorRunStatus",
     "Consolidator",
     "ContextBundle",
     "ContextBundleId",
@@ -309,11 +321,15 @@ __all__ = [
     "SkillResult",
     "SkillResultId",
     "SkillRunner",
+    "SourceConfig",
+    "SourceCredentialRef",
+    "SourceCursor",
     "SourceId",
     "SourceRef",
     "SourceSpan",
     "SourceSpanId",
     "SourceSpanRef",
+    "SourceStore",
     "UnknownEventError",
     "User",
     "UserId",

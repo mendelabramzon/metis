@@ -197,3 +197,7 @@ class UserId(PrefixedId):
 
 class MembershipId(PrefixedId):
     prefix = "mbr"
+
+
+class ConnectorRunId(PrefixedId):
+    prefix = "cnr"

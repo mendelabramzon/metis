@@ -45,6 +45,14 @@ class JobState(StrEnum):
     RETRYING = "retrying"
 
 
+class ConnectorRunStatus(StrEnum):
+    """The outcome of one connector pass over a source (the source-dashboard sync history)."""
+
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class ArtifactKind(StrEnum):
     """The category of a raw artifact, independent of media type."""
 

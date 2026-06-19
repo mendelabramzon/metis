@@ -9,6 +9,7 @@ from metis_core.stores.claim_store import PostgresClaimStore
 from metis_core.stores.document_store import PostgresDocumentStore
 from metis_core.stores.identity_store import PostgresIdentityStore
 from metis_core.stores.memory_store import PostgresMemoryStore
+from metis_core.stores.source_store import PostgresSourceStore
 from metis_core.stores.wiki_store import PostgresWikiStore
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "PostgresIdentityStore",
     "PostgresMemoryStore",
     "PostgresMinioArtifactStore",
+    "PostgresSourceStore",
     "PostgresWikiStore",
 ]
 
@@ -32,12 +34,15 @@ if TYPE_CHECKING:
         IdentityStore,
         MemoryStore,
         ObjectStore,
+        SourceStore,
         WikiStore,
     )
 
     def _conformance(
         sessionmaker: async_sessionmaker[AsyncSession], objects: ObjectStore
-    ) -> tuple[ArtifactStore, DocumentStore, ClaimStore, MemoryStore, WikiStore, IdentityStore]:
+    ) -> tuple[
+        ArtifactStore, DocumentStore, ClaimStore, MemoryStore, WikiStore, IdentityStore, SourceStore
+    ]:
         return (
             PostgresMinioArtifactStore(sessionmaker, objects),
             PostgresDocumentStore(sessionmaker),
@@ -45,4 +50,5 @@ if TYPE_CHECKING:
             PostgresMemoryStore(sessionmaker),
             PostgresWikiStore(sessionmaker),
             PostgresIdentityStore(sessionmaker),
+            PostgresSourceStore(sessionmaker),
         )

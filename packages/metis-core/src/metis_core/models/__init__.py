@@ -28,11 +28,13 @@ from metis_core.models.memory import (
     MemSceneRow,
     ProfileRow,
 )
+from metis_core.models.sources import ConnectorRunRow, SourceConfigRow, SourceCursorRow
 from metis_core.models.wiki import WikiPageRow, WikiPatchReviewRow, WikiPatchRow
 
 __all__ = [
     "AuditEventRow",
     "ClaimRow",
+    "ConnectorRunRow",
     "ContradictionRow",
     "EntityRow",
     "EventRow",
@@ -49,6 +51,8 @@ __all__ = [
     "RawArtifactRow",
     "SegmentRow",
     "SkillApprovalRow",
+    "SourceConfigRow",
+    "SourceCursorRow",
     "SourceSpanRow",
     "UserRow",
     "WikiPageRow",

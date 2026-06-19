@@ -29,6 +29,7 @@ from metis_protocol.ids import (
     ParsedDocId,
     ProfileId,
     SegmentId,
+    SourceId,
     UserId,
     WikiPageId,
     WorkspaceId,
@@ -43,6 +44,7 @@ from metis_protocol.memory import (
 )
 from metis_protocol.query import ClaimFilter, MemoryScope
 from metis_protocol.refs import ArtifactRef
+from metis_protocol.sources import ConnectorRun, SourceConfig, SourceCursor
 from metis_protocol.wiki import WikiPage, WikiPatch
 
 
@@ -144,3 +146,27 @@ class IdentityStore(Protocol):
     async def get_model_policy(self, workspace_id: WorkspaceId) -> WorkspaceModelPolicy: ...
 
     async def set_model_policy(self, policy: WorkspaceModelPolicy) -> WorkspaceModelPolicy: ...
+
+
+@runtime_checkable
+class SourceStore(Protocol):
+    """Connector-backed source configs, their resume cursors, and connector-run history — the
+    durable substrate the ingest worker polls and the operator source dashboard reads. Writes are
+    idempotent by id; cursors and runs upsert (a cursor advances, a run opens then closes).
+    """
+
+    async def register(self, config: SourceConfig) -> SourceConfig: ...
+
+    async def get(self, source_id: SourceId) -> SourceConfig | None: ...
+
+    async def list(self, workspace_id: WorkspaceId) -> Sequence[SourceConfig]: ...
+
+    async def list_all(self) -> Sequence[SourceConfig]: ...
+
+    async def get_cursor(self, source_id: SourceId) -> SourceCursor | None: ...
+
+    async def set_cursor(self, cursor: SourceCursor) -> SourceCursor: ...
+
+    async def record_run(self, run: ConnectorRun) -> ConnectorRun: ...
+
+    async def runs_for(self, source_id: SourceId, *, limit: int = 50) -> Sequence[ConnectorRun]: ...

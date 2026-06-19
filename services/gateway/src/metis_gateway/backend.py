@@ -34,6 +34,7 @@ from metis_core.stores import (
     PostgresIdentityStore,
     PostgresMemoryStore,
     PostgresMinioArtifactStore,
+    PostgresSourceStore,
 )
 from metis_core.wiki import PostgresWikiReviewInbox
 from metis_core.wiki.approval import WikiPatchReview, WikiPatchStatus
@@ -63,6 +64,7 @@ from metis_protocol import (
     AuditId,
     Claim,
     ClaimRef,
+    ConnectorRun,
     ContextBundle,
     ContextBundleId,
     ContextSection,
@@ -78,7 +80,10 @@ from metis_protocol import (
     Role,
     Sensitivity,
     SkillInput,
+    SourceConfig,
+    SourceCursor,
     SourceId,
+    SourceStore,
     User,
     UserId,
     WorkspaceId,
@@ -356,44 +361,45 @@ class InMemoryWorkspace:
         return rows
 
 
-@dataclass(frozen=True)
-class SourceConfig:
-    id: str
-    name: str
-    connector: str
-    sensitivity: Sensitivity
-    auth_method: str
+class InMemorySourceStore:
+    """An in-process ``SourceStore`` for the default backend and tests (no Postgres).
 
+    Conforms structurally to the protocol ``SourceStore``; ``PostgresSourceStore`` is the durable
+    sibling. Writes are idempotent by id (config) / upsert by key (cursor, run), matching it.
+    """
 
-class SourceRegistry:
-    """Configured sources, validated against the Stage 11 connector registry."""
+    def __init__(self) -> None:
+        self._configs: dict[str, SourceConfig] = {}
+        self._cursors: dict[str, SourceCursor] = {}
+        self._runs: dict[str, ConnectorRun] = {}
 
-    def __init__(self, connectors: ConnectorRegistry) -> None:
-        self._connectors = connectors
-        self._sources: dict[str, SourceConfig] = {}
+    async def register(self, config: SourceConfig) -> SourceConfig:
+        return self._configs.setdefault(str(config.id), config)
 
-    def register(self, *, name: str, connector: str, sensitivity: Sensitivity) -> SourceConfig:
-        spec = self._connectors.get(connector)
-        if spec is None:
-            raise ConflictError(f"unknown connector {connector!r}")
-        config = SourceConfig(
-            id=new_id(SourceId),
-            name=name,
-            connector=connector,
-            sensitivity=sensitivity,
-            auth_method=spec.auth.method.value,
-        )
-        self._sources[config.id] = config
-        return config
+    async def get(self, source_id: SourceId) -> SourceConfig | None:
+        return self._configs.get(str(source_id))
 
-    def list(self) -> list[SourceConfig]:
-        return list(self._sources.values())
+    async def list(self, workspace_id: WorkspaceId) -> Sequence[SourceConfig]:
+        return [c for c in self._configs.values() if c.workspace_id == workspace_id]
 
-    def get(self, source_id: str) -> SourceConfig:
-        config = self._sources.get(source_id)
-        if config is None:
-            raise NotFoundError(f"no source {source_id!r}")
-        return config
+    async def list_all(self) -> Sequence[SourceConfig]:
+        return list(self._configs.values())
+
+    async def get_cursor(self, source_id: SourceId) -> SourceCursor | None:
+        return self._cursors.get(str(source_id))
+
+    async def set_cursor(self, cursor: SourceCursor) -> SourceCursor:
+        self._cursors[str(cursor.source_id)] = cursor
+        return cursor
+
+    async def record_run(self, run: ConnectorRun) -> ConnectorRun:
+        self._runs[str(run.id)] = run
+        return run
+
+    async def runs_for(self, source_id: SourceId, *, limit: int = 50) -> Sequence[ConnectorRun]:
+        runs = [r for r in self._runs.values() if r.source_id == source_id]
+        runs.sort(key=lambda r: r.started_at, reverse=True)
+        return runs[:limit]
 
 
 class WikiInbox:
@@ -729,10 +735,11 @@ class Backend:
     skill_runner: SkillRunner
     jobs: JobOps
     audit: AuditLog
-    sources: SourceRegistry
+    sources: SourceStore
     wiki: WikiReviewInbox
     inbox: ApprovalInbox
     identity: IdentityStore = field(default_factory=InMemoryIdentityStore)
+    connectors: ConnectorRegistry = field(default_factory=ConnectorRegistry.with_defaults)
     object_store: ObjectStore = field(default_factory=InMemoryObjectStore)
     engine: AsyncEngine | None = None  # set for the Postgres backend; disposed at shutdown
     http_client: httpx.AsyncClient | None = (
@@ -815,7 +822,7 @@ def build_backend(settings: GatewaySettings) -> Backend:
         skill_runner=skill_runner,
         jobs=InMemoryJobQueue(),
         audit=audit,
-        sources=SourceRegistry(ConnectorRegistry.with_defaults()),
+        sources=InMemorySourceStore(),
         wiki=wiki,
         inbox=inbox,
         object_store=object_store,
@@ -907,7 +914,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         skill_runner=skill_runner,
         jobs=PostgresJobQueue(sessionmaker),  # durable: jobs survive restart; workers lease over it
         audit=audit,
-        sources=SourceRegistry(ConnectorRegistry.with_defaults()),
+        sources=PostgresSourceStore(sessionmaker),  # durable: source configs/cursors/runs persist
         wiki=wiki,
         inbox=inbox,
         identity=PostgresIdentityStore(sessionmaker),

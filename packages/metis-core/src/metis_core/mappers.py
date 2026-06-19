@@ -12,6 +12,7 @@ from typing import Any
 from metis_core.db.mixins import BodyMixin
 from metis_core.models import (
     ClaimRow,
+    ConnectorRunRow,
     ContradictionRow,
     EntityRow,
     EventRow,
@@ -27,6 +28,8 @@ from metis_core.models import (
     ProfileRow,
     RawArtifactRow,
     SegmentRow,
+    SourceConfigRow,
+    SourceCursorRow,
     SourceSpanRow,
     UserRow,
     WikiPageRow,
@@ -40,6 +43,7 @@ from metis_protocol import (
 )
 from metis_protocol import (
     Claim,
+    ConnectorRun,
     Contradiction,
     Entity,
     Event,
@@ -55,6 +59,8 @@ from metis_protocol import (
     Profile,
     RawArtifact,
     Segment,
+    SourceConfig,
+    SourceCursor,
     SourceSpan,
     User,
     VersionedModel,
@@ -266,5 +272,38 @@ def model_policy_to_row(m: WorkspaceModelPolicy) -> WorkspaceModelPolicyRow:
         schema_version=m.schema_version,
         allow_external_models=m.allow_external_models,
         daily_cost_cap_usd=m.daily_cost_cap_usd,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def source_config_to_row(m: SourceConfig) -> SourceConfigRow:
+    return SourceConfigRow(
+        id=str(m.id),
+        workspace_id=str(m.workspace_id),
+        schema_version=m.schema_version,
+        connector=m.connector,
+        active=m.active,
+        created_at=m.created_at,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def source_cursor_to_row(m: SourceCursor) -> SourceCursorRow:
+    return SourceCursorRow(
+        source_id=str(m.source_id),
+        schema_version=m.schema_version,
+        updated_at=m.updated_at,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def connector_run_to_row(m: ConnectorRun) -> ConnectorRunRow:
+    return ConnectorRunRow(
+        id=str(m.id),
+        workspace_id=str(m.workspace_id),
+        source_id=str(m.source_id),
+        schema_version=m.schema_version,
+        status=m.status.value,
+        started_at=m.started_at,
         body=m.model_dump(mode="json"),
     )
