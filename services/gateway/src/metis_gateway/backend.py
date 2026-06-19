@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from metis_core import CoreSettings, make_engine, make_sessionmaker
 from metis_core.audit import PostgresAuditSink, recent_audit_events
+from metis_core.jobs import PostgresJobQueue
 from metis_core.llm import ModelCaller
 from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup, stub_router
 from metis_core.objectstore import S3ObjectStore
@@ -112,6 +113,27 @@ class AuditLog(Protocol):
     async def emit(self, event: AuditEvent) -> None: ...
 
     async def recent(self, *, action: str | None = None, limit: int = 100) -> list[AuditEvent]: ...
+
+
+@runtime_checkable
+class JobOps(Protocol):
+    """The job queue + the operator inspect/retry surface — in-memory or Postgres-backed."""
+
+    async def enqueue(self, job: Job) -> JobId: ...
+
+    async def lease(self, kinds: Sequence[str], limit: int) -> Sequence[Job]: ...
+
+    async def complete(self, job_id: JobId) -> None: ...
+
+    async def fail(self, job_id: JobId, error: str, *, retry: bool) -> None: ...
+
+    async def list(self, workspace_id: WorkspaceId) -> Sequence[Job]: ...
+
+    async def get(self, job_id: JobId) -> Job | None: ...
+
+    async def error_for(self, job_id: JobId) -> str | None: ...
+
+    async def retry(self, job_id: JobId) -> Job | None: ...
 
 
 class InMemoryObjectStore:
@@ -394,30 +416,28 @@ class InMemoryJobQueue:
         self._errors[str(job_id)] = error
         self._set_state(str(job_id), JobState.RETRYING if retry else JobState.FAILED)
 
-    def list(self) -> list[Job]:
-        return list(self._jobs.values())
+    async def list(self, workspace_id: WorkspaceId) -> Sequence[Job]:
+        return [j for j in self._jobs.values() if j.workspace_id == workspace_id]
 
-    def get(self, job_id: str) -> Job:
-        job = self._jobs.get(job_id)
-        if job is None:
-            raise NotFoundError(f"no job {job_id!r}")
-        return job
+    async def get(self, job_id: JobId) -> Job | None:
+        return self._jobs.get(str(job_id))
 
-    def error_for(self, job_id: str) -> str | None:
-        return self._errors.get(job_id)
+    async def error_for(self, job_id: JobId) -> str | None:
+        return self._errors.get(str(job_id))
 
-    def retry(self, job_id: str) -> Job:
-        job = self.get(job_id)
-        if job.state not in (JobState.FAILED, JobState.RETRYING):
-            raise ConflictError(f"job {job_id!r} is {job.state.value}, not retryable")
-        self._errors.pop(job_id, None)
+    async def retry(self, job_id: JobId) -> Job | None:
+        job = self._jobs.get(str(job_id))
+        if job is None or job.state not in (JobState.FAILED, JobState.RETRYING):
+            return None
+        self._errors.pop(str(job_id), None)
         revived = job.model_copy(update={"state": JobState.PENDING, "attempts": job.attempts + 1})
-        self._jobs[job_id] = revived
+        self._jobs[str(job_id)] = revived
         return revived
 
     def _set_state(self, job_id: str, state: JobState) -> None:
-        job = self.get(job_id)
-        self._jobs[job_id] = job.model_copy(update={"state": state})
+        job = self._jobs.get(job_id)
+        if job is not None:
+            self._jobs[job_id] = job.model_copy(update={"state": state})
 
 
 @dataclass(frozen=True)
@@ -606,7 +626,7 @@ class Backend:
     agent: AgentLoop
     skills: SkillRegistry
     skill_runner: SkillRunner
-    jobs: InMemoryJobQueue
+    jobs: JobOps
     audit: AuditLog
     sources: SourceRegistry
     wiki: WikiInbox
@@ -780,7 +800,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         agent=agent,
         skills=skills,
         skill_runner=skill_runner,
-        jobs=InMemoryJobQueue(),  # jobs originate in the workers (their loops are a follow-up)
+        jobs=PostgresJobQueue(sessionmaker),  # durable: jobs survive restart; workers lease over it
         audit=audit,
         sources=SourceRegistry(ConnectorRegistry.with_defaults()),
         wiki=wiki,

@@ -16,7 +16,7 @@ from metis_core._util import now_utc
 from metis_core.db.session import unit_of_work
 from metis_core.mappers import job_to_row, to_model
 from metis_core.models import JobRow
-from metis_protocol import Job, JobId, JobState
+from metis_protocol import Job, JobId, JobState, WorkspaceId
 
 _LEASABLE = (JobState.PENDING.value, JobState.RETRYING.value)
 _MAX_BACKOFF_SECONDS = 300
@@ -93,3 +93,41 @@ class PostgresJobQueue:
             else:
                 row.state = JobState.FAILED.value
             _sync_body(row)
+
+    # --- operator inspect/retry surface ------------------------------------------------------
+
+    async def list(self, workspace_id: WorkspaceId, *, limit: int = 200) -> Sequence[Job]:
+        """Recent jobs in the workspace, newest first (the operator's inspect surface)."""
+        stmt = (
+            select(JobRow)
+            .where(JobRow.workspace_id == str(workspace_id))
+            .order_by(JobRow.created_at.desc())
+            .limit(limit)
+        )
+        async with unit_of_work(self._sessionmaker) as session:
+            rows = (await session.scalars(stmt)).all()
+        return [to_model(row, Job) for row in rows]
+
+    async def get(self, job_id: JobId) -> Job | None:
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(JobRow, str(job_id))
+        return to_model(row, Job) if row is not None else None
+
+    async def error_for(self, job_id: JobId) -> str | None:
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(JobRow, str(job_id))
+        return row.last_error if row is not None else None
+
+    async def retry(self, job_id: JobId) -> Job | None:
+        """Revive a FAILED/RETRYING job to PENDING (attempts+1, error cleared). Returns ``None`` if
+        the job is missing or not in a retryable state."""
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(JobRow, str(job_id))
+            if row is None or row.state not in (JobState.FAILED.value, JobState.RETRYING.value):
+                return None
+            row.state = JobState.PENDING.value
+            row.attempts = row.attempts + 1
+            row.last_error = None
+            row.scheduled_at = None
+            _sync_body(row)
+            return to_model(row, Job)
