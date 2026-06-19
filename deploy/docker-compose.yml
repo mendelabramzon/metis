@@ -15,7 +15,9 @@ x-app-env: &app-env
 
 services:
   postgres:
-    image: postgres:16
+    # pgvector image so the initial migration's `CREATE EXTENSION vector` succeeds (the
+    # testcontainers suite uses the same image); stock postgres:16 lacks the extension.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: metis
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-metis}
