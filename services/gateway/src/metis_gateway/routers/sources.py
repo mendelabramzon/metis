@@ -12,8 +12,9 @@ from datetime import UTC, datetime
 from fastapi import APIRouter
 
 from metis_gateway.deps import BackendDep, OperatorDep, UserDep
-from metis_gateway.errors import ConflictError
-from metis_gateway.schemas import SourceCreate, SourceView
+from metis_gateway.errors import ConflictError, NotFoundError
+from metis_gateway.schemas import SourceCreate, SourceView, SyncResponse
+from metis_ingestion import ConnectorScheduler
 from metis_protocol import SourceConfig, SourceId, WorkspaceId, new_id
 
 router = APIRouter(prefix="/sources", tags=["sources"])
@@ -53,3 +54,20 @@ async def create_source(
 @router.get("", response_model=list[SourceView])
 async def list_sources(backend: BackendDep, _principal: UserDep) -> list[SourceView]:
     return [_view(config) for config in await backend.sources.list_all()]
+
+
+@router.post("/{source_id}/sync", response_model=SyncResponse, status_code=202)
+async def sync_source(source_id: str, backend: BackendDep, _principal: OperatorDep) -> SyncResponse:
+    """Enqueue a connector-sync job for the source — the ingest worker leases and runs it, so the
+    source ingests end-to-end via a durable *queued* job rather than an inline call."""
+    source = await backend.sources.get(SourceId(source_id))
+    if source is None:
+        raise NotFoundError(f"no source {source_id!r}")
+    cursor = await backend.sources.get_cursor(source.id)
+    job_id = await ConnectorScheduler(backend.jobs).schedule_poll(
+        workspace_id=source.workspace_id,
+        connector=source.connector,
+        source_id=source.id,
+        cursor=cursor.cursor if cursor is not None else None,
+    )
+    return SyncResponse(job_id=str(job_id), source_id=source_id)

@@ -42,6 +42,13 @@ class SourceView(BaseModel):
     auth_method: str
 
 
+class SyncResponse(BaseModel):
+    """The queued connector-sync job: the source ingests via this job, not an inline POST."""
+
+    job_id: str
+    source_id: str
+
+
 class IngestRequest(BaseModel):
     filename: str
     content: str

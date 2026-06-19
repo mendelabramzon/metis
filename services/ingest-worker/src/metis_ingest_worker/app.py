@@ -17,6 +17,7 @@ import logging
 from metis_core.audit import PostgresAuditSink
 from metis_core.config import CoreSettings
 from metis_core.db.engine import make_engine, make_sessionmaker
+from metis_core.jobs import PostgresJobQueue
 from metis_core.objectstore import S3ObjectStore
 from metis_core.stores import (
     PostgresClaimStore,
@@ -25,6 +26,7 @@ from metis_core.stores import (
     PostgresSourceStore,
 )
 from metis_ingestion import (
+    ConnectorSyncWorker,
     DurableIngestPoller,
     ImapConfig,
     ImapConnector,
@@ -34,16 +36,24 @@ from metis_ingestion import (
     LocalFolderConnector,
 )
 from metis_ingestion.connectors import FetchingConnector
-from metis_protocol import SourceId, WorkspaceId
+from metis_ingestion.poller import Pipeline
+from metis_protocol import SourceConfig, SourceId, WorkspaceId
 
 from .settings import IngestWorkerSettings
 
 logger = logging.getLogger("metis_ingest_worker")
 
 
-def build_connector(settings: IngestWorkerSettings, workspace_id: WorkspaceId) -> FetchingConnector:
-    """The connector the worker polls, selected by ``settings.connector``."""
-    if settings.connector == "imap":
+def build_connector(
+    settings: IngestWorkerSettings, workspace_id: WorkspaceId, *, connector: str | None = None
+) -> FetchingConnector:
+    """The connector to run, selected by ``connector`` (a source's type) or ``settings.connector``.
+
+    Connector-specific params (mailbox host/credentials, the local root) still come from settings;
+    wiring them fully from the SourceConfig + the credential store is a later slice.
+    """
+    connector = connector if connector is not None else settings.connector
+    if connector == "imap":
         config = ImapConfig(
             host=settings.imap_host,
             username=settings.imap_username,
@@ -102,20 +112,65 @@ async def _poll(settings: IngestWorkerSettings, core: CoreSettings) -> None:
         await engine.dispose()
 
 
+async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> None:
+    """Lease ``ingest.poll`` jobs from the durable queue and run each source's sync (server path).
+
+    Mirrors the maintainer worker: drain the queue, sleeping only when idle. ``ConnectorSyncWorker``
+    completes a job on success and reschedules it with backoff on failure, and the durable cursor
+    means a retry resumes where the sync left off rather than re-scanning.
+    """
+    engine = make_engine(core.database_url)
+    sessionmaker = make_sessionmaker(engine)
+    object_store = S3ObjectStore(
+        bucket=core.object_store_bucket,
+        endpoint_url=core.object_store_endpoint_url,
+        region=core.object_store_region,
+        access_key=core.object_store_access_key,
+        secret_key=core.object_store_secret_key,
+    )
+    await object_store.ensure_bucket()
+    sources = PostgresSourceStore(sessionmaker)
+    artifact_store = PostgresMinioArtifactStore(sessionmaker, object_store)
+    document_store = PostgresDocumentStore(sessionmaker)
+    claim_store = PostgresClaimStore(sessionmaker)
+    audit_sink = PostgresAuditSink(sessionmaker)
+
+    def pipeline_factory(source: SourceConfig) -> Pipeline:
+        return IngestionPipeline(
+            connector=build_connector(settings, source.workspace_id, connector=source.connector),
+            artifact_store=artifact_store,
+            document_store=document_store,
+            claim_store=claim_store,
+            audit_sink=audit_sink,
+        )
+
+    worker = ConnectorSyncWorker(
+        PostgresJobQueue(sessionmaker), sources=sources, pipeline_factory=pipeline_factory
+    )
+    try:
+        while True:
+            if await worker.run_once() == 0:
+                await asyncio.sleep(settings.poll_interval_seconds)
+    finally:
+        await engine.dispose()
+
+
 def run(
     *, dry_run: bool = False, settings: IngestWorkerSettings | None = None
 ) -> IngestWorkerSettings:
     settings = settings if settings is not None else IngestWorkerSettings()
     logging.basicConfig(level=settings.log_level)
     logger.info(
-        "metis-ingest-worker wiring (connector=%s, poll_interval_seconds=%s)",
+        "metis-ingest-worker wiring (mode=%s, connector=%s, poll_interval_seconds=%s)",
+        settings.mode,
         settings.connector,
         settings.poll_interval_seconds,
     )
     if dry_run:
         logger.info("dry run complete; not polling")
         return settings
-    asyncio.run(_poll(settings, CoreSettings()))
+    runner = _poll if settings.mode == "poll" else _drain_jobs
+    asyncio.run(runner(settings, CoreSettings()))
     return settings
 
 

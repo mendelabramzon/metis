@@ -18,6 +18,9 @@ class IngestWorkerSettings(BaseSettings):
     service_name: str = "ingest-worker"
     poll_interval_seconds: float = 5.0
     log_level: str = "INFO"
+    # "queue": lease durable ingest.poll jobs and run each source's sync (the server path); "poll":
+    # continuously poll one configured connector directly (the local-folder dev path).
+    mode: str = "queue"
     # The source to poll and the workspace it belongs to. Database and object-store
     # configuration come from metis-core's CoreSettings (METIS_CORE_* env).
     # When set, ``source_id`` names a registered SourceConfig: the worker resumes from that
