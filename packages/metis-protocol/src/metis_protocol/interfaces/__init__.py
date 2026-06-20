@@ -9,6 +9,7 @@ from metis_protocol.interfaces.audit import AuditSink
 from metis_protocol.interfaces.connectors import Connector, Extractor, Parser
 from metis_protocol.interfaces.infra import JobQueue, ObjectStore
 from metis_protocol.interfaces.models import (
+    ImagePart,
     ModelMessage,
     ModelProvider,
     ModelRequest,
@@ -44,6 +45,7 @@ __all__ = [
     "Extractor",
     "ForesightBuilder",
     "IdentityStore",
+    "ImagePart",
     "JobQueue",
     "MemoryStore",
     "ModelMessage",

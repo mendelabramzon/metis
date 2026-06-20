@@ -12,6 +12,7 @@ All return a protocol ``ModelResponse`` carrying a fully-populated ``ModelRun``.
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Mapping
 from datetime import datetime
@@ -24,6 +25,7 @@ from metis_core.llm.errors import ModelError, ModelRefusalError
 from metis_core.llm.pricing import cost_usd
 from metis_core.llm.routing_config import DEFAULT_TIER_MODELS, task_tier
 from metis_protocol import (
+    ModelMessage,
     ModelRequest,
     ModelResponse,
     ModelRun,
@@ -35,6 +37,42 @@ from metis_protocol import (
 )
 
 _DEFAULT_EFFORT = "high"
+
+
+def _anthropic_content(message: ModelMessage) -> Any:
+    """A message's content for the Anthropic SDK: a plain string, or text + base64 image blocks."""
+    if not message.images:
+        return message.content
+    blocks: list[dict[str, Any]] = []
+    if message.content:
+        blocks.append({"type": "text", "text": message.content})
+    for image in message.images:
+        blocks.append(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": image.media_type,
+                    "data": base64.standard_b64encode(image.data).decode(),
+                },
+            }
+        )
+    return blocks
+
+
+def _openai_content(message: ModelMessage) -> Any:
+    """A message's content for OpenAI-style endpoints: a plain string, or text + image_url parts."""
+    if not message.images:
+        return message.content
+    parts: list[dict[str, Any]] = []
+    if message.content:
+        parts.append({"type": "text", "text": message.content})
+    for image in message.images:
+        data = base64.standard_b64encode(image.data).decode()
+        parts.append(
+            {"type": "image_url", "image_url": {"url": f"data:{image.media_type};base64,{data}"}}
+        )
+    return parts
 
 
 def _run(
@@ -77,11 +115,13 @@ class StubProvider:
         name: str = "stub-local",
         model: str = "local-stub",
         responses: Mapping[str, tuple[str, JsonValue | None]] | None = None,
+        supports_vision: bool = False,
     ) -> None:
         self._name = name
         self._model = model
         # task_class value -> (text, structured payload)
         self._responses = dict(responses or {})
+        self._supports_vision = supports_vision
 
     @property
     def name(self) -> str:
@@ -90,6 +130,10 @@ class StubProvider:
     @property
     def is_external(self) -> bool:
         return False
+
+    @property
+    def supports_vision(self) -> bool:
+        return self._supports_vision
 
     def supports(self, tier: ModelTier, sensitivity: Sensitivity) -> bool:
         return True  # a local stand-in serves every tier and sensitivity
@@ -126,12 +170,14 @@ class AnthropicProvider:
         tiers: tuple[ModelTier, ...] = (ModelTier.STANDARD, ModelTier.FRONTIER),
         tier_models: Mapping[ModelTier, str] | None = None,
         effort: str = _DEFAULT_EFFORT,
+        supports_vision: bool = True,
     ) -> None:
         self._client = client
         self._name = name
         self._tiers = frozenset(tiers)
         self._tier_models = dict(tier_models or DEFAULT_TIER_MODELS)
         self._effort = effort
+        self._supports_vision = supports_vision  # Claude models accept image blocks
 
     @property
     def name(self) -> str:
@@ -140,6 +186,10 @@ class AnthropicProvider:
     @property
     def is_external(self) -> bool:
         return True
+
+    @property
+    def supports_vision(self) -> bool:
+        return self._supports_vision
 
     def supports(self, tier: ModelTier, sensitivity: Sensitivity) -> bool:
         # External provider: never for restricted data, and only its served tiers.
@@ -158,7 +208,7 @@ class AnthropicProvider:
             "model": model,
             "max_tokens": request.max_tokens or 4096,
             "messages": [
-                {"role": m.role, "content": m.content}
+                {"role": m.role, "content": _anthropic_content(m)}
                 for m in request.messages
                 if m.role != "system"
             ],
@@ -225,6 +275,7 @@ class OpenAICompatProvider:
         tiers: tuple[ModelTier, ...] = (ModelTier.LOCAL,),
         base_url: str = "",
         json_object_mode: bool | None = None,
+        supports_vision: bool = False,
     ) -> None:
         self._client = client
         self._name = name
@@ -234,6 +285,7 @@ class OpenAICompatProvider:
         self._base_url = base_url.rstrip("/")
         # Default: looser json_object mode for local runtimes, strict json_schema for external.
         self._json_object_mode = (not is_external) if json_object_mode is None else json_object_mode
+        self._supports_vision = supports_vision  # set when the configured model accepts images
 
     @property
     def name(self) -> str:
@@ -243,13 +295,19 @@ class OpenAICompatProvider:
     def is_external(self) -> bool:
         return self._is_external
 
+    @property
+    def supports_vision(self) -> bool:
+        return self._supports_vision
+
     def supports(self, tier: ModelTier, sensitivity: Sensitivity) -> bool:
         if tier not in self._tiers:
             return False
         return self._is_external is False or not is_at_least(sensitivity, Sensitivity.RESTRICTED)
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
-        messages = [{"role": m.role, "content": m.content} for m in request.messages]
+        messages: list[dict[str, Any]] = [
+            {"role": m.role, "content": _openai_content(m)} for m in request.messages
+        ]
         payload: dict[str, Any] = {"model": self._model, "max_tokens": request.max_tokens or 4096}
         if request.response_schema is not None:
             if self._json_object_mode:

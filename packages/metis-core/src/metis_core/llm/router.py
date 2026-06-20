@@ -21,13 +21,16 @@ from metis_protocol import (
 
 @runtime_checkable
 class RoutableProvider(Protocol):
-    """A ``ModelProvider`` the router can reason about (adds externality)."""
+    """A ``ModelProvider`` the router can reason about (adds externality + vision capability)."""
 
     @property
     def name(self) -> str: ...
 
     @property
     def is_external(self) -> bool: ...
+
+    @property
+    def supports_vision(self) -> bool: ...
 
     def supports(self, tier: ModelTier, sensitivity: Sensitivity) -> bool: ...
 
@@ -46,16 +49,21 @@ class MetisModelRouter:
         self._config = config if config is not None else RoutingConfig()
 
     def route(self, request: ModelRequest) -> RoutableProvider:
-        tier = task_tier(request.task_class)
         external_blocked = is_at_least(request.sensitivity, self._config.external_block_floor)
         for provider in self._providers:
             if provider.is_external and external_blocked:
                 continue  # allowlist enforced before any prompt construction
-            if provider.supports(tier, request.sensitivity):
+            # A vision/OCR request needs a vision-capable provider regardless of the task's quality
+            # tier (PARSE_ASSIST is LOCAL-tier, which no cloud model serves otherwise); other
+            # requests route by the task's tier as usual.
+            if request.requires_vision:
+                if provider.supports_vision:
+                    return provider
+            elif provider.supports(task_tier(request.task_class), request.sensitivity):
                 return provider
         raise NoEligibleProviderError(
             f"no provider for task={request.task_class.value} "
-            f"sensitivity={request.sensitivity.value}"
+            f"sensitivity={request.sensitivity.value} vision={request.requires_vision}"
         )
 
     async def generate(self, request: ModelRequest) -> ModelResponse:

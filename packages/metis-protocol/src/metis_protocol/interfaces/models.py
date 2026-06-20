@@ -17,9 +17,17 @@ from metis_protocol.provenance import ModelRun
 from metis_protocol.tasks import ModelTaskClass
 
 
+class ImagePart(ProtocolModel):
+    """An inline image accompanying a message — base64'd in JSON, for vision/OCR calls."""
+
+    media_type: str  # e.g. "image/png", "image/jpeg"
+    data: bytes
+
+
 class ModelMessage(ProtocolModel):
     role: str
     content: str
+    images: tuple[ImagePart, ...] = ()  # present only for vision/OCR; text-only callers leave empty
 
 
 class ModelRequest(ProtocolModel):
@@ -30,6 +38,9 @@ class ModelRequest(ProtocolModel):
     temperature: float | None = Field(default=None, ge=0.0)
     response_schema: JsonValue | None = None  # JSON Schema for structured output
     prompt_version: str | None = None
+    # Route to a vision-capable provider (superseding the task's quality tier); the external
+    # allowlist still applies, so restricted data needs a local vision model or the call is refused.
+    requires_vision: bool = False
 
 
 class ModelResponse(ProtocolModel):

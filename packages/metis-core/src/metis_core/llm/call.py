@@ -7,6 +7,8 @@ emit a model-call audit event -> return the validated protocol object.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from metis_core.llm.audit_fields import build_model_audit_event
 from metis_core.llm.budget import enforce_budget, estimate
 from metis_core.llm.prompts import PromptRegistry, default_registry
@@ -16,6 +18,7 @@ from metis_core.llm.routing_config import RoutingConfig
 from metis_core.llm.structured import schema_for
 from metis_protocol import (
     AuditSink,
+    ImagePart,
     ModelMessage,
     ModelRequest,
     ModelResponse,
@@ -84,6 +87,34 @@ class ModelCaller:
         )
         await self._emit_audit(response, workspace_id)
         return result
+
+    async def call_vision_text(
+        self,
+        *,
+        task_class: ModelTaskClass,
+        workspace_id: WorkspaceId,
+        user_content: str,
+        images: Sequence[ImagePart],
+        sensitivity: Sensitivity = Sensitivity.INTERNAL,
+        max_tokens: int = 4096,
+    ) -> str:
+        """Route an image (vision/OCR) call to a vision-capable provider; return its plain text.
+
+        Routes on flags only (task class, sensitivity, vision) before the request is built, so the
+        provider allowlist still holds. No structured output / repair — OCR just transcribes.
+        """
+        request = ModelRequest(
+            task_class=task_class,
+            messages=(ModelMessage(role="user", content=user_content, images=tuple(images)),),
+            sensitivity=sensitivity,
+            max_tokens=max_tokens,
+            requires_vision=True,
+        )
+        provider = self._router.route(request)
+        enforce_budget(estimate(request, charge_external=provider.is_external), self._config.budget)
+        response = await provider.generate(request)
+        await self._emit_audit(response, workspace_id)
+        return response.text
 
     async def _emit_audit(self, response: ModelResponse, workspace_id: WorkspaceId) -> None:
         await self._audit.emit(
