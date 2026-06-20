@@ -29,6 +29,7 @@ from metis_core.models.memory import (
     MemSceneRow,
     ProfileRow,
 )
+from metis_core.models.secrets import ConnectorSecretRow
 from metis_core.models.sources import (
     ConnectorRunRow,
     SourceConfigRow,
@@ -41,6 +42,7 @@ __all__ = [
     "AuditEventRow",
     "ClaimRow",
     "ConnectorRunRow",
+    "ConnectorSecretRow",
     "ContradictionRow",
     "EntityRow",
     "EventRow",

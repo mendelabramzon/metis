@@ -15,6 +15,8 @@ dependencies = [
     "ddgs>=6",
     "pydantic-settings>=2.4",
     "python-multipart>=0.0.9",
+    # Sync Postgres driver for the durable connector secret store (PostgresSecretStore).
+    "psycopg2-binary>=2.9",
 ]
 
 [project.scripts]

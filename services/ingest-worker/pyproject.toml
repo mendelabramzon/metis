@@ -7,6 +7,8 @@ dependencies = [
     "pydantic-settings>=2.4",
     "metis-core",
     "metis-ingestion",
+    # Sync Postgres driver for the durable connector secret store (PostgresSecretStore).
+    "psycopg2-binary>=2.9",
 ]
 
 [project.scripts]

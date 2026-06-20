@@ -14,6 +14,7 @@ from metis_core.security.crypto import Cryptobox, DecryptionError, derive_key, g
 from metis_core.security.deletion import ErasureResult, erase_artifact
 from metis_core.security.secrets import (
     EncryptedSecretStore,
+    PostgresSecretStore,
     SecretNotFoundError,
     SecretStore,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "DecryptionError",
     "EncryptedSecretStore",
     "ErasureResult",
+    "PostgresSecretStore",
     "SecretNotFoundError",
     "SecretStore",
     "assert_intact",
