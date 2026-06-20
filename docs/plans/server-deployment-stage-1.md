@@ -39,11 +39,16 @@ execution dispatch (1.5), and the opt-in Telegram TDLib path (1.4). Status by wo
   - **TODO:** execution *dispatch* — an approved effectful action actually running against the engines
     (start a sync, apply a memory/wiki patch, …). Today the lifecycle is recorded and only read-only
     ANSWER runs (via the console's run-answer shortcut).
-- **1.6 UI — STARTED.** The single-file context-exoskeleton console at `/` (command → proposed-action
-  cards with risk badges + a status-filtered inbox, Telegram chat discovery, and sources / jobs /
-  approvals / audit / ask). **TODO:** login + workspace switcher, source-setup forms (Telegram bot
-  connect, OAuth, upload), contradictions + spend tabs, evidence drill-down — and a real SPA if a
-  richer UX is wanted.
+- **1.6 UI — MOSTLY DONE.** The single-file context-exoskeleton console at `/` now covers:
+  command → proposed-action cards (risk badges + status-filtered inbox); **identity login** (user-id
+  bearer) + a **workspace switcher** from `GET /workspaces`; workspace-scoped **ask**
+  (`/workspaces/{ws}/query`) and **file upload** (`/workspaces/{ws}/upload`) with per-file parse
+  status; **source-setup forms** driven by a new `GET /sources/connectors` catalog (connector picker,
+  config JSON, OAuth connect for oauth2 connectors, and one-click "add as source" from a discovered
+  Telegram chat); and **contradictions / spend / providers** tabs. The console models both gateway
+  principals (operator/scope token for operator surfaces; user-id bearer for the membership-gated
+  per-workspace surfaces). **TODO:** evidence drill-down (raw→spans→claims→mem cells→wiki), and a
+  real SPA if a richer UX is wanted.
 
 **Key decisions (settled — do not relitigate):**
 
@@ -55,9 +60,10 @@ execution dispatch (1.5), and the opt-in Telegram TDLib path (1.4). Status by wo
   and fanned out to every active chat source — not per-source jobs (one queue per bot token).
 - **The command interpreter is LLM-based**, via the model plane's structured-output path.
 
-**Suggested next steps (in order):** 1.6 source-setup forms + workspace switcher → 1.6
-contradictions/spend tabs → 1.5 execution dispatch (map each approved `ActionKind` to its engine,
-gated by risk) → 1.4 Telegram TDLib opt-in.
+**Suggested next steps (in order):** 1.5 execution dispatch (map each approved `ActionKind` to its
+engine, gated by risk — read-only + `START_SYNC` first; `CREATE_MEMORY`/`CREATE_WIKI_PATCH` must
+respect the truth hierarchy, so route them through the pipeline / wiki inbox, never a direct write;
+`EXTERNAL` stays blocked) → 1.6 evidence drill-down → 1.4 Telegram TDLib opt-in.
 
 ## Objective
 
