@@ -22,6 +22,25 @@ SyncSource = Callable[[SourceConfig, Sequence[Mapping[str, Any]]], Awaitable[Non
 #: Record the chats a batch surfaced (discovery), so an operator can pick which to ingest.
 RecordChats = Callable[[Sequence[Mapping[str, Any]]], Awaitable[None]]
 
+#: Handle the connection ids a batch reported revoked (pause their sources).
+HandleRevoked = Callable[[set[str]], Awaitable[None]]
+
+
+def revoked_connection_ids(updates: Sequence[Mapping[str, Any]]) -> set[str]:
+    """Business-connection ids a batch reports as disabled — the owner unplugged the bot.
+
+    Telegram sends a ``business_connection`` update with ``is_enabled: false`` when the user removes
+    or disables the connected bot; its sources can no longer sync and should be paused.
+    """
+    revoked: set[str] = set()
+    for update in updates:
+        connection = update.get("business_connection")
+        if isinstance(connection, Mapping) and connection.get("is_enabled") is False:
+            cid = connection.get("id")
+            if isinstance(cid, str):
+                revoked.add(cid)
+    return revoked
+
 
 def extract_discovered_chats(updates: Sequence[Mapping[str, Any]]) -> list[TelegramDiscoveredChat]:
     """The distinct chats seen across a getUpdates batch, as discovery records to upsert.
@@ -63,19 +82,25 @@ async def drain_telegram_once(
     sources: Sequence[SourceConfig],
     sync_source: SyncSource,
     record_chats: RecordChats | None = None,
+    on_revoked: HandleRevoked | None = None,
 ) -> int:
     """Drain one getUpdates batch into every active source; return the offset for the next call.
 
     Returns ``offset`` unchanged when nothing new arrived, else ``max(update_id) + 1`` so the next
     call confirms (drops) this batch. ``record_chats`` (when given) records the batch's discovered
-    chats first. The offset advances only after the whole batch is processed, so if anything raises
-    the batch is re-fetched and the per-source cursors dedup it.
+    chats first; ``on_revoked`` (when given) is handed any connection ids the batch reports revoked,
+    so their sources are paused. The offset advances only after the whole batch is processed, so if
+    anything raises the batch is re-fetched and the per-source cursors dedup it.
     """
     updates = client.get_updates(offset=offset)
     if not updates:
         return offset
     if record_chats is not None:
         await record_chats(updates)
+    if on_revoked is not None:
+        revoked = revoked_connection_ids(updates)
+        if revoked:
+            await on_revoked(revoked)
     for source in sources:
         await sync_source(source, updates)
     return max(int(update["update_id"]) for update in updates) + 1

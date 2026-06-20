@@ -70,6 +70,23 @@ async def test_get_unknown_source_is_none(sessionmaker):
     assert await store.get_cursor(new_id(SourceId)) is None
 
 
+async def test_set_active_pauses_and_resumes_durably(sessionmaker):
+    store = PostgresSourceStore(sessionmaker)
+    source = await store.register(_config(new_id(WorkspaceId)))
+
+    paused = await store.set_active(source.id, False)  # e.g. a revoked Telegram connection
+    assert paused is not None
+    assert paused.active is False
+    refetched = await store.get(source.id)
+    assert refetched is not None
+    assert refetched.active is False  # the change persisted
+
+    resumed = await store.set_active(source.id, True)
+    assert resumed is not None
+    assert resumed.active is True
+    assert await store.set_active(new_id(SourceId), False) is None  # unknown source -> None
+
+
 async def test_cursor_upserts_to_resume_a_sync(sessionmaker):
     store = PostgresSourceStore(sessionmaker)
     source = await store.register(_config(new_id(WorkspaceId)))

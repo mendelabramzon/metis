@@ -678,6 +678,14 @@ class InMemorySourceStore:
     async def get(self, source_id: SourceId) -> SourceConfig | None:
         return self._configs.get(str(source_id))
 
+    async def set_active(self, source_id: SourceId, active: bool) -> SourceConfig | None:
+        config = self._configs.get(str(source_id))
+        if config is None:
+            return None
+        updated = config.model_copy(update={"active": active})
+        self._configs[str(source_id)] = updated
+        return updated
+
     async def list(self, workspace_id: WorkspaceId) -> Sequence[SourceConfig]:
         return [c for c in self._configs.values() if c.workspace_id == workspace_id]
 
