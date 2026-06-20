@@ -154,4 +154,5 @@ async def execute(action_id: str, backend: BackendDep, principal: UserDep) -> Ac
         job_id=outcome.job_id,
         doc_id=outcome.doc_id,
         patch_id=outcome.patch_id,
+        source_id=outcome.source_id,
     )

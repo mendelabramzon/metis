@@ -8,15 +8,18 @@ typed :class:`ProposedAction` is one step; *executing* it is a separate, gated o
 - ``EXTERNAL`` side effects stay out of Stage 1.
 
 Writes that would touch memory or the wiki must flow through the claim pipeline / review inboxes,
-not a direct write (the truth-hierarchy invariant), so ``CREATE_MEMORY`` / ``CREATE_WIKI_PATCH`` /
-``PROPOSE_SOURCE_CHANGE`` are deferred here rather than shortcut. Every execution emits an
-``action.executed`` audit event, so a run is always on the record with its actor.
+not a direct write (the truth-hierarchy invariant), so ``CREATE_MEMORY`` / ``CREATE_WIKI_PATCH``
+build a doc / a review rather than shortcut; ``PROPOSE_SOURCE_CHANGE`` registers a source (validated
+through the connector registry) only once approved. Every execution emits an ``action.executed``
+audit event, so a run is always on the record with its actor.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+
+from pydantic import ValidationError
 
 from metis_core.wiki.approval import WikiPatchReview
 from metis_gateway.backend import Backend
@@ -35,6 +38,7 @@ from metis_protocol import (
     ProposedAction,
     Provenance,
     Sensitivity,
+    SourceConfig,
     SourceId,
     WikiOp,
     WikiPatch,
@@ -60,6 +64,7 @@ class ExecutionOutcome:
     job_id: str | None = None  # for START_SYNC: the queued connector-sync job
     doc_id: str | None = None  # for CREATE_MEMORY: the doc the assertion was ingested as
     patch_id: str | None = None  # for CREATE_WIKI_PATCH: the patch queued for review
+    source_id: str | None = None  # for PROPOSE_SOURCE_CHANGE: the registered source
 
 
 def guard_executable(action: ProposedAction) -> None:
@@ -92,8 +97,8 @@ async def execute_action(
         outcome = await _create_memory(action, backend=backend)
     elif action.kind is ActionKind.CREATE_WIKI_PATCH:
         outcome = await _create_wiki_patch(action, backend=backend, actor=actor)
-    else:  # PROPOSE_SOURCE_CHANGE — a connector/source change is itself an approval, deferred
-        raise ConflictError(f"execution for {action.kind.value} actions is not implemented yet")
+    else:  # PROPOSE_SOURCE_CHANGE — register the source change (approval-gated above)
+        outcome = await _propose_source_change(action, backend=backend)
     await _audit(action, backend=backend, actor=actor, detail=outcome.detail)
     return outcome
 
@@ -225,6 +230,40 @@ async def _create_wiki_patch(
     return ExecutionOutcome(
         detail=f"proposed wiki patch {patch.id} for review (not yet committed)",
         patch_id=str(patch.id),
+    )
+
+
+async def _propose_source_change(action: ProposedAction, *, backend: Backend) -> ExecutionOutcome:
+    """Register a connector-backed source from the command — the POST /sources path, but gated as an
+    approval (a source change is itself an approval). The connector-specific config is validated
+    through the registry, so a bad config is rejected here, not mid-sync on the worker."""
+    connector = _first_str(action, ("connector",))
+    if connector is None:
+        raise ConflictError("propose_source_change requires a 'connector' parameter")
+    spec = backend.connectors.get(connector)
+    if spec is None:
+        raise ConflictError(f"unknown connector {connector!r}")
+    raw_config = action.parameters.get("config")
+    config = raw_config if isinstance(raw_config, dict) else {}
+    try:
+        backend.connectors.validate_config(connector, config)
+    except ValidationError as exc:
+        raise ConflictError(f"invalid config for {connector!r} source") from exc
+    source = await backend.sources.register(
+        SourceConfig(
+            id=new_id(SourceId),
+            workspace_id=action.workspace_id,
+            name=_first_str(action, ("name", "source_name")) or connector,
+            connector=connector,
+            sensitivity=action.sensitivity,
+            auth_method=spec.auth.method.value,
+            created_at=datetime.now(UTC),
+            config=config,
+        )
+    )
+    return ExecutionOutcome(
+        detail=f"registered {source.connector} source {source.name} ({source.id})",
+        source_id=str(source.id),
     )
 
 

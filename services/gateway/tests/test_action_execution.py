@@ -190,16 +190,52 @@ def test_create_wiki_patch_proposes_for_review(client: TestClient, op: dict[str,
     assert any(p["id"] == patch_id and p["status"] == "proposed" for p in patches)
 
 
-def test_propose_source_change_is_deferred(client: TestClient, op: dict[str, str]) -> None:
+def test_propose_source_change_registers_a_source(client: TestClient, op: dict[str, str]) -> None:
+    """An approved PROPOSE_SOURCE_CHANGE registers the source — the POST /sources path, gated as an
+    approval (a source change is itself an approval)."""
     action_id = _inject(
         client,
         kind=ActionKind.PROPOSE_SOURCE_CHANGE,
-        risk=ActionRisk.REVERSIBLE,  # not external, so it reaches the (unimplemented) dispatch
+        risk=ActionRisk.REVERSIBLE,
+        parameters={"connector": "web_clip", "name": "FromCommand", "config": {}},
         status=ActionStatus.APPROVED,
     )
     resp = client.post(f"/actions/{action_id}/execute", headers=op)
+    assert resp.status_code == 200, resp.text
+    source_id = resp.json()["source_id"]
+    assert source_id
+    assert resp.json()["action"]["status"] == "executed"
+    # the source is really registered — it shows up on the source dashboard the worker polls.
+    sources = client.get("/sources", headers=op).json()
+    assert any(s["id"] == source_id and s["name"] == "FromCommand" for s in sources)
+
+
+def test_propose_source_change_validates_the_config(client: TestClient, op: dict[str, str]) -> None:
+    action_id = _inject(
+        client,
+        kind=ActionKind.PROPOSE_SOURCE_CHANGE,
+        risk=ActionRisk.REVERSIBLE,
+        parameters={
+            "connector": "telegram",
+            "config": {"business_connection_id": "bc-1"},
+        },  # no chat
+        status=ActionStatus.APPROVED,
+    )
+    resp = client.post(f"/actions/{action_id}/execute", headers=op)
+    assert resp.status_code == 409  # rejected at setup, not failing mid-sync on the worker
+    assert "invalid config" in resp.json()["error"]["message"].lower()
+
+
+def test_propose_source_change_requires_a_connector(client: TestClient, op: dict[str, str]) -> None:
+    action_id = _inject(
+        client,
+        kind=ActionKind.PROPOSE_SOURCE_CHANGE,
+        risk=ActionRisk.REVERSIBLE,
+        status=ActionStatus.APPROVED,  # approved, but no connector named
+    )
+    resp = client.post(f"/actions/{action_id}/execute", headers=op)
     assert resp.status_code == 409
-    assert "not implemented" in resp.json()["error"]["message"].lower()
+    assert "connector" in resp.json()["error"]["message"].lower()
 
 
 def test_executing_emits_an_audit_event(client: TestClient, op: dict[str, str]) -> None:
