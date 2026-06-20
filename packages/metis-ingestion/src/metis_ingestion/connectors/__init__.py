@@ -72,6 +72,13 @@ from metis_ingestion.connectors.telegram_bot_transport import (
     TelegramBotTransport,
     build_telegram_connector,
 )
+from metis_ingestion.connectors.telegram_session import (
+    AuthState,
+    TdjsonClient,
+    TdlibParameters,
+    TelegramSession,
+    TelegramTdlibClient,
+)
 from metis_ingestion.connectors.telegram_tdlib_transport import (
     TelegramTdlibConfig,
     TelegramTdlibTransport,
@@ -85,6 +92,7 @@ __all__ = [
     "WEBHOOK_JOB_KIND",
     "AuthError",
     "AuthMethod",
+    "AuthState",
     "BaseConnector",
     "CalendarConnector",
     "ConnectorAuth",
@@ -113,11 +121,15 @@ __all__ = [
     "RenderedPayload",
     "SecretResolver",
     "SlackConnector",
+    "TdjsonClient",
+    "TdlibParameters",
     "TelegramBotClient",
     "TelegramBotConfig",
     "TelegramBotTransport",
     "TelegramConnector",
+    "TelegramSession",
     "TelegramSourceConfig",
+    "TelegramTdlibClient",
     "TelegramTdlibConfig",
     "TelegramTdlibTransport",
     "TokenProvider",
