@@ -3,48 +3,82 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Metis — operator console</title>
+  <title>Metis — context exoskeleton</title>
   <style>
-    :root { color-scheme: light dark; --bd: #8884; }
-    body { font: 14px/1.5 system-ui, sans-serif; margin: 0; }
+    :root { color-scheme: light dark; --bd: #8884; --mut: #888; }
+    * { box-sizing: border-box; }
+    body { font: 14px/1.55 system-ui, sans-serif; margin: 0; }
     header { padding: .6rem 1rem; border-bottom: 1px solid var(--bd); display: flex; gap: .6rem; align-items: center; }
     header b { font-size: 1.05rem; }
-    header input { flex: 0 0 22rem; }
+    header .grow { flex: 1; }
+    header input { flex: 0 0 20rem; padding: .3rem .5rem; }
     nav { display: flex; gap: .25rem; padding: .5rem 1rem 0; flex-wrap: wrap; }
-    nav button { border: 1px solid var(--bd); background: transparent; padding: .35rem .7rem; border-radius: 6px 6px 0 0; cursor: pointer; }
+    nav button { border: 1px solid var(--bd); background: transparent; padding: .35rem .8rem; border-radius: 6px 6px 0 0; cursor: pointer; }
     nav button.on { font-weight: 600; border-bottom-color: transparent; }
-    main { padding: 1rem; }
+    main { padding: 1rem; max-width: 60rem; }
     section { display: none; }
     section.on { display: block; }
     input, textarea, button { font: inherit; }
-    textarea { width: 100%; box-sizing: border-box; }
-    .row { display: flex; gap: .5rem; margin-bottom: .6rem; }
-    .row > input { flex: 1; }
+    textarea { width: 100%; }
+    .row { display: flex; gap: .5rem; margin-bottom: .8rem; }
+    .row > input, .row > textarea { flex: 1; padding: .4rem .5rem; }
+    .act { border: 1px solid var(--bd); background: transparent; border-radius: 5px; padding: .25rem .6rem; cursor: pointer; }
+    .act.primary { background: #2a72e6; color: #fff; border-color: #2a72e6; }
     pre { background: #8881; padding: .6rem; border-radius: 6px; overflow: auto; white-space: pre-wrap; }
     table { border-collapse: collapse; width: 100%; }
-    th, td { text-align: left; border-bottom: 1px solid var(--bd); padding: .3rem .5rem; vertical-align: top; }
-    .cite { font-size: .85em; color: #888; }
-    button.act { border: 1px solid var(--bd); background: transparent; border-radius: 5px; padding: .2rem .5rem; cursor: pointer; }
+    th, td { text-align: left; border-bottom: 1px solid var(--bd); padding: .35rem .5rem; vertical-align: top; }
+    .mut { color: var(--mut); font-size: .85em; }
+    .card { border: 1px solid var(--bd); border-radius: 8px; padding: .7rem .9rem; margin-bottom: .7rem; }
+    .card h4 { margin: 0 0 .2rem; display: flex; gap: .5rem; align-items: center; }
+    .badge { font-size: .72em; font-weight: 600; padding: .1rem .45rem; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; }
+    .read_only { background: #2e7d3222; color: #2e7d32; }
+    .reversible { background: #1565c022; color: #1565c0; }
+    .memory_write, .wiki_write { background: #b9770022; color: #b97700; }
+    .external { background: #c62a2a22; color: #c62a2a; }
+    .pill { font-size: .72em; padding: .1rem .45rem; border: 1px solid var(--bd); border-radius: 999px; }
+    .meta { margin: .35rem 0; }
+    .meta span { margin-right: .9rem; }
+    .cardactions { display: flex; gap: .4rem; margin-top: .5rem; }
   </style>
 </head>
 <body>
   <header>
-    <b>Metis</b><span>operator console</span>
-    <input id="token" placeholder="Bearer token (operator-dev-token)" />
+    <b>Metis</b><span class="mut">context exoskeleton</span>
+    <span class="grow"></span>
+    <input id="token" placeholder="Bearer token" />
   </header>
   <nav id="tabs"></nav>
   <main>
-    <section id="chat">
-      <div class="row"><input id="q" placeholder="Ask the workspace…" /><button onclick="ask()">Ask</button></div>
+    <section id="command">
+      <p class="mut">Type a request. The system proposes a typed action — shown before anything runs.</p>
+      <div class="row">
+        <input id="cmd" placeholder="e.g. what did we decide about pricing?  ·  sync the Acme mailbox" />
+        <button class="act primary" onclick="propose()">Interpret</button>
+      </div>
+      <div class="row"><span class="mut">Inbox:</span>
+        <button class="act" onclick="loadActions()">all</button>
+        <button class="act" onclick="loadActions('proposed')">proposed</button>
+        <button class="act" onclick="loadActions('approved')">approved</button>
+        <button class="act" onclick="loadActions('rejected')">rejected</button>
+      </div>
+      <div id="cmd-out"></div>
+    </section>
+    <section id="ask">
+      <div class="row"><input id="q" placeholder="Ask the workspace for a grounded answer…" /><button class="act primary" onclick="ask()">Ask</button></div>
       <div id="answer"></div>
     </section>
     <section id="sources"><button class="act" onclick="load('sources')">Refresh</button><div id="sources-out"></div></section>
-    <section id="approvals"><button class="act" onclick="load('approvals')">Refresh</button><div id="approvals-out"></div></section>
+    <section id="telegram">
+      <p class="mut">Chats the bot has seen on a connection — pick one to ingest as a source.</p>
+      <button class="act" onclick="load('telegram')">Refresh</button><div id="telegram-out"></div>
+    </section>
     <section id="jobs"><button class="act" onclick="load('jobs')">Refresh</button><div id="jobs-out"></div></section>
+    <section id="approvals"><button class="act" onclick="load('approvals')">Refresh</button><div id="approvals-out"></div></section>
     <section id="audit"><button class="act" onclick="load('audit')">Refresh</button><div id="audit-out"></div></section>
   </main>
   <script>
-    const TABS = ["chat", "sources", "approvals", "jobs", "audit"];
+    const TABS = ["command", "ask", "sources", "telegram", "jobs", "approvals", "audit"];
+    const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     const tok = () => document.getElementById("token").value.trim();
     const hdr = () => ({ "Authorization": "Bearer " + tok(), "Content-Type": "application/json" });
     const api = (p, opts = {}) => fetch(p, { headers: hdr(), ...opts }).then(r => r.json());
@@ -54,41 +88,90 @@
         document.getElementById(t).classList.toggle("on", t === tab);
         document.querySelector(`[data-tab="${t}"]`).classList.toggle("on", t === tab);
       }
-      if (tab !== "chat") load(tab);
+      if (["sources", "telegram", "jobs", "approvals", "audit"].includes(tab)) load(tab);
+      if (tab === "command") loadActions();
     }
+
+    // --- command / proposed actions -------------------------------------------------------------
+    function actionCard(a) {
+      const decided = a.decided_by ? `<span class="mut">· ${esc(a.status)} by ${esc(a.decided_by)}${a.decision_note ? " — " + esc(a.decision_note) : ""}</span>` : "";
+      const params = Object.keys(a.parameters || {}).length ? `<pre>${esc(JSON.stringify(a.parameters, null, 2))}</pre>` : "";
+      let buttons = "";
+      if (a.status === "proposed" && a.risk === "read_only" && a.kind === "answer") {
+        buttons = `<button class="act primary" onclick="runAnswer('${a.id}', ${JSON.stringify(esc(a.parameters?.query || a.command))})">Run answer</button>`;
+      } else if (a.status === "proposed") {
+        buttons = `<button class="act primary" onclick="decide('${a.id}','approve')">Approve</button>
+                   <button class="act" onclick="decide('${a.id}','reject')">Reject</button>`;
+      }
+      return `<div class="card">
+        <h4><span class="pill">${esc(a.kind)}</span><span class="badge ${esc(a.risk)}">${esc(a.risk.replace("_", " "))}</span> ${esc(a.summary)} ${decided}</h4>
+        <div class="mut">“${esc(a.command)}”</div>
+        <div class="meta mut"><span>sensitivity: ${esc(a.sensitivity)}</span><span>audit: ${esc(a.audit_target)}</span><span>status: ${esc(a.status)}</span></div>
+        ${params}
+        <div id="ans-${a.id}"></div>
+        <div class="cardactions">${buttons}</div>
+      </div>`;
+    }
+    async function propose() {
+      const command = document.getElementById("cmd").value.trim();
+      if (!command) return;
+      const a = await api("/actions", { method: "POST", body: JSON.stringify({ command }) });
+      document.getElementById("cmd-out").innerHTML = actionCard(a) + document.getElementById("cmd-out").innerHTML;
+    }
+    async function loadActions(status) {
+      const items = await api("/actions" + (status ? "?status=" + status : ""));
+      document.getElementById("cmd-out").innerHTML = (items || []).map(actionCard).join("") || "<i class='mut'>no proposed actions</i>";
+    }
+    async function decide(id, verb) {
+      await api(`/actions/${id}/${verb}`, { method: "POST", body: JSON.stringify({ note: verb + "ed via console" }) });
+      loadActions();
+    }
+    async function runAnswer(id, text) {
+      const r = await api("/query", { method: "POST", body: JSON.stringify({ text }) });
+      const cites = (r.citations || []).map(c => `claim ${esc((c.claim_id || "").slice(0, 12))}…`).join(" · ");
+      document.getElementById("ans-" + id).innerHTML = `<pre>${esc(r.answer || "")}</pre><div class="mut">${r.sufficient ? cites : "no grounded evidence"}</div>`;
+    }
+
+    // --- ask (direct grounded query) ------------------------------------------------------------
     async function ask() {
       const text = document.getElementById("q").value;
       const r = await api("/query", { method: "POST", body: JSON.stringify({ text }) });
-      const cites = (r.citations || []).map(c => `claim ${c.claim_id?.slice(0, 12)}… · span ${(c.source_span_id || "—").slice(0, 12)}`).join("<br>");
-      document.getElementById("answer").innerHTML =
-        `<pre>${r.answer || ""}</pre><div class="cite">${r.sufficient ? cites : "no grounded evidence"}</div>`;
+      const cites = (r.citations || []).map(c => `claim ${esc((c.claim_id || "").slice(0, 12))}… · span ${esc((c.source_span_id || "—").slice(0, 12))}`).join("<br>");
+      document.getElementById("answer").innerHTML = `<pre>${esc(r.answer || "")}</pre><div class="mut">${r.sufficient ? cites : "no grounded evidence"}</div>`;
+    }
+
+    // --- dashboards -----------------------------------------------------------------------------
+    function table(rows, cols) {
+      const head = cols.map(c => `<th>${c}</th>`).join("");
+      const body = (rows || []).map(r => "<tr>" + cols.map(c => `<td>${esc(r[c])}</td>`).join("") + "</tr>").join("");
+      return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
     }
     async function approve(kind, id) {
       await api(`/approvals/${kind}/${id}/approve`, { method: "POST", body: JSON.stringify({ note: "approved via console" }) });
       load("approvals");
     }
+    async function syncSource(id) { await api(`/sources/${id}/sync`, { method: "POST" }); load("jobs"); }
     async function retry(id) { await api(`/jobs/${id}/retry`, { method: "POST" }); load("jobs"); }
-
-    function table(rows, cols) {
-      const head = cols.map(c => `<th>${c}</th>`).join("");
-      const body = rows.map(r => "<tr>" + cols.map(c => `<td>${r[c] ?? ""}</td>`).join("") + "</tr>").join("");
-      return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
-    }
     async function load(tab) {
       const out = document.getElementById(tab + "-out");
-      if (tab === "sources") out.innerHTML = table(await api("/sources"), ["name", "connector", "sensitivity", "auth_method"]);
+      if (tab === "sources") {
+        const rows = await api("/sources");
+        out.innerHTML = (rows || []).map(s => `<div class="card"><b>${esc(s.name)}</b> <span class="pill">${esc(s.connector)}</span> <span class="mut">${esc(s.sensitivity)} · ${esc(s.auth_method)}</span> <button class="act" onclick="syncSource('${s.id}')">sync</button></div>`).join("") || "<i class='mut'>no sources</i>";
+      }
+      if (tab === "telegram") out.innerHTML = table(await api("/telegram/chats"), ["title", "chat_type", "chat_id", "business_connection_id", "last_message_id"]);
       if (tab === "audit") out.innerHTML = table(await api("/audit"), ["occurred_at", "action", "actor", "target_kind"]);
       if (tab === "jobs") {
         const jobs = await api("/jobs");
-        out.innerHTML = jobs.map(j => `<div>${j.kind} — <b>${j.state}</b> (attempts ${j.attempts}) ${j.error ? "· " + j.error : ""} ${j.state === "failed" ? `<button class="act" onclick="retry('${j.id}')">retry</button>` : ""}</div>`).join("") || "<i>no jobs</i>";
+        out.innerHTML = (jobs || []).map(j => `<div>${esc(j.kind)} — <b>${esc(j.state)}</b> <span class="mut">(attempts ${esc(j.attempts)})</span> ${j.error ? "· " + esc(j.error) : ""} ${j.state === "failed" ? `<button class="act" onclick="retry('${j.id}')">retry</button>` : ""}</div>`).join("") || "<i class='mut'>no jobs</i>";
       }
       if (tab === "approvals") {
         const items = await api("/approvals");
-        out.innerHTML = items.map(i => `<div>[${i.kind}] ${i.summary} — ${i.status} <button class="act" onclick="approve('${i.kind}','${i.id}')">approve</button></div>`).join("") || "<i>inbox empty</i>";
+        out.innerHTML = (items || []).map(i => `<div>[${esc(i.kind)}] ${esc(i.summary)} — ${esc(i.status)} <button class="act" onclick="approve('${i.kind}','${i.id}')">approve</button></div>`).join("") || "<i class='mut'>inbox empty</i>";
       }
     }
+
     document.getElementById("tabs").innerHTML = TABS.map(t => `<button data-tab="${t}" onclick="show('${t}')">${t}</button>`).join("");
-    show("chat");
+    show("command");
   </script>
 </body>
 </html>
