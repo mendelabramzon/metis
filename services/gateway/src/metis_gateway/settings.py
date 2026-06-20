@@ -64,3 +64,12 @@ class GatewaySettings(BaseServiceSettings):
     google_redirect_uri: str = ""
     google_scopes: str = "https://www.googleapis.com/auth/drive.readonly"
     cred_store_key: str = ""  # Fernet key for the encrypted credential store (tokens at rest)
+
+    # Opt-in Telegram TDLib personal-account login (history backfill + followed channels). With an
+    # api id/hash set (and a cred store), POST /telegram/tdlib/connect drives the per-user QR/2FA
+    # login and stores only the TDLib database-encryption key. Empty api id = the flow is disabled.
+    telegram_api_id: int = 0  # a Telegram app api_id (https://my.telegram.org); 0 = disabled
+    telegram_api_hash: str = ""
+    telegram_tdlib_data_root: str = "/var/lib/metis/tdlib"  # per-user TDLib database dirs live here
+    telegram_tdlib_library: str = ""  # path to libtdjson; empty = platform library discovery
+    telegram_tdlib_poll_seconds: float = 1.0  # the login pump's per-update receive timeout
