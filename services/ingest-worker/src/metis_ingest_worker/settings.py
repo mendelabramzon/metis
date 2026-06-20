@@ -48,6 +48,12 @@ class IngestWorkerSettings(BaseSettings):
     google_token_url: str = "https://oauth2.googleapis.com/token"
     google_client_id: str = ""
     cred_store_key: str = ""  # Fernet key for the encrypted credential store (tokens at rest)
+    # Telegram source (mode == "telegram"): the Business connected-bot's token (a deployment secret)
+    # + API base. getUpdates is one global queue per token, so it is drained once per cycle and
+    # fanned out to every active Telegram source. telegram_timeout_seconds is the long-poll timeout.
+    telegram_bot_token: str = ""
+    telegram_base_url: str = "https://api.telegram.org"
+    telegram_timeout_seconds: float = 0.0
     # OCR for scanned PDFs (optional): a vision model for the parse-quality escalation. Either an
     # Anthropic key (cloud Claude vision) and/or a self-hosted OpenAI-compatible vision endpoint.
     # Absent both, ingestion stays deterministic + layout-only (no OCR).

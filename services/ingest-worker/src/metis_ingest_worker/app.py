@@ -13,7 +13,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from typing import Any
 
 import httpx
 
@@ -49,8 +50,12 @@ from metis_ingestion import (
     LocalFolderConnector,
     OAuth2Client,
     OAuthTokens,
+    TelegramBotClient,
+    TelegramSourceConfig,
     build_gmail_connector,
     build_google_drive_connector,
+    build_telegram_connector,
+    drain_telegram_once,
 )
 from metis_ingestion.connectors import FetchingConnector
 from metis_ingestion.poller import Pipeline
@@ -203,6 +208,10 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
     )
 
     async def connector_for(source: SourceConfig) -> FetchingConnector:
+        if source.connector == "telegram":
+            raise ValueError(
+                "telegram sources sync via the telegram drain (mode=telegram), not poll jobs"
+            )
         if source.connector not in ("gdrive", "gmail"):
             return build_connector(settings, source.workspace_id, connector=source.connector)
         if credentials is None:
@@ -275,6 +284,78 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
         await engine.dispose()
 
 
+async def _drain_telegram(settings: IngestWorkerSettings, core: CoreSettings) -> None:
+    """Drain the Telegram bot's getUpdates queue and ingest each active Telegram source's chat.
+
+    getUpdates is one global queue per bot token, so this drains once per cycle and fans the batch
+    out to every active Telegram source — a per-source poll job can't, as the chats would steal each
+    other's updates. Each source resumes from its durable message-id cursor, so a re-fetched backlog
+    (after a restart, before the offset re-advances) is deduped rather than re-ingested.
+    """
+    if not settings.telegram_bot_token:
+        raise ValueError("telegram mode needs METIS_INGEST_WORKER_TELEGRAM_BOT_TOKEN set")
+    engine = make_engine(core.database_url)
+    sessionmaker = make_sessionmaker(engine)
+    object_store = S3ObjectStore(
+        bucket=core.object_store_bucket,
+        endpoint_url=core.object_store_endpoint_url,
+        region=core.object_store_region,
+        access_key=core.object_store_access_key,
+        secret_key=core.object_store_secret_key,
+    )
+    await object_store.ensure_bucket()
+    sources = PostgresSourceStore(sessionmaker)
+    artifact_store = PostgresMinioArtifactStore(sessionmaker, object_store)
+    document_store = PostgresDocumentStore(sessionmaker)
+    claim_store = PostgresClaimStore(sessionmaker)
+    audit_sink = PostgresAuditSink(sessionmaker)
+    ocr_caller, ocr_closers = _vision_caller(settings, audit_sink)
+    http = httpx.Client(timeout=httpx.Timeout(settings.telegram_timeout_seconds + 30.0))
+    client = TelegramBotClient(
+        token=settings.telegram_bot_token,
+        http_client=http,
+        base_url=settings.telegram_base_url,
+        timeout=int(settings.telegram_timeout_seconds),
+    )
+
+    async def sync_source(source: SourceConfig, updates: Sequence[Mapping[str, Any]]) -> None:
+        config = TelegramSourceConfig.model_validate(source.config)
+        transcribe = (
+            model_transcriber(ocr_caller, source.workspace_id) if ocr_caller is not None else None
+        )
+        pipeline = IngestionPipeline(
+            connector=build_telegram_connector(
+                workspace_id=source.workspace_id,
+                config=config,
+                sensitivity=source.sensitivity,
+                updates=updates,
+            ),
+            artifact_store=artifact_store,
+            document_store=document_store,
+            claim_store=claim_store,
+            audit_sink=audit_sink,
+            source_id=source.id,
+            transcribe=transcribe,
+        )
+        poller = await DurableIngestPoller.resume(pipeline, source=source, store=sources)
+        await poller.poll_once()
+
+    offset = 0
+    try:
+        while True:
+            active = [s for s in await sources.list_all() if s.connector == "telegram" and s.active]
+            offset = await drain_telegram_once(
+                client=client, offset=offset, sources=active, sync_source=sync_source
+            )
+            logger.info("telegram drain: %d active source(s), next offset=%d", len(active), offset)
+            await asyncio.sleep(settings.poll_interval_seconds)
+    finally:
+        http.close()
+        for close in ocr_closers:
+            await close()
+        await engine.dispose()
+
+
 def run(
     *, dry_run: bool = False, settings: IngestWorkerSettings | None = None
 ) -> IngestWorkerSettings:
@@ -290,7 +371,8 @@ def run(
     if dry_run:
         logger.info("dry run complete; not polling")
         return settings
-    runner = _poll if settings.mode == "poll" else _drain_jobs
+    runners = {"poll": _poll, "telegram": _drain_telegram}
+    runner = runners.get(settings.mode, _drain_jobs)
     asyncio.run(runner(settings, CoreSettings()))
     return settings
 
