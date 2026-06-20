@@ -65,9 +65,17 @@ from metis_ingestion.connectors.scheduling import (
 )
 from metis_ingestion.connectors.slack import SlackConnector
 from metis_ingestion.connectors.telegram import TelegramConnector, TelegramSourceConfig
+from metis_ingestion.connectors.telegram_bot_transport import (
+    BUSINESS_UPDATES,
+    TelegramBotClient,
+    TelegramBotConfig,
+    TelegramBotTransport,
+    build_telegram_connector,
+)
 from metis_ingestion.connectors.web_clip import WebClipConnector
 
 __all__ = [
+    "BUSINESS_UPDATES",
     "POLL_JOB_KIND",
     "WEBHOOK_JOB_KIND",
     "AuthError",
@@ -100,6 +108,9 @@ __all__ = [
     "RenderedPayload",
     "SecretResolver",
     "SlackConnector",
+    "TelegramBotClient",
+    "TelegramBotConfig",
+    "TelegramBotTransport",
     "TelegramConnector",
     "TelegramSourceConfig",
     "TokenProvider",
@@ -112,6 +123,7 @@ __all__ = [
     "build_gmail_connector",
     "build_google_drive_connector",
     "build_poll_job",
+    "build_telegram_connector",
     "build_webhook_job",
     "no_auth",
     "oauth2",
