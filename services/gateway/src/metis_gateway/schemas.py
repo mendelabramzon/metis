@@ -474,3 +474,15 @@ class ProposedActionView(BaseModel):
     status: ActionStatus
     decided_by: str | None = None
     decision_note: str = ""
+
+
+class ActionExecutionView(BaseModel):
+    """The result of executing an action: the action at its new status plus what the run produced
+    (a grounded answer + citations for the read-only kinds, a queued job id for START_SYNC)."""
+
+    action: ProposedActionView
+    detail: str
+    answer: str | None = None
+    sufficient: bool | None = None
+    citations: list[Citation] = Field(default_factory=list)
+    job_id: str | None = None

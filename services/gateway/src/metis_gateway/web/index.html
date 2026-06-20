@@ -136,6 +136,7 @@
     const userHdr = () => ({ "Authorization": "Bearer " + uid(), "Content-Type": "application/json" });
     const api = (p, opts = {}) => fetch(p, { headers: hdr(), ...opts }).then(r => r.json());
     const userApi = (p, opts = {}) => fetch(p, { headers: userHdr(), ...opts }).then(r => r.json());
+    const emsg = (r) => (r && r.error && r.error.message) || "";  // the gateway error-body message
 
     function show(tab) {
       for (const t of TABS) {
@@ -169,11 +170,13 @@
       const decided = a.decided_by ? `<span class="mut">· ${esc(a.status)} by ${esc(a.decided_by)}${a.decision_note ? " — " + esc(a.decision_note) : ""}</span>` : "";
       const params = Object.keys(a.parameters || {}).length ? `<pre>${esc(JSON.stringify(a.parameters, null, 2))}</pre>` : "";
       let buttons = "";
-      if (a.status === "proposed" && a.risk === "read_only" && a.kind === "answer") {
-        buttons = `<button class="act primary" onclick="runAnswer('${a.id}', ${JSON.stringify(esc(a.parameters?.query || a.command))})">Run answer</button>`;
+      if (a.status === "proposed" && a.risk === "read_only") {
+        buttons = `<button class="act primary" onclick="execute('${a.id}')">Execute</button>`;
       } else if (a.status === "proposed") {
         buttons = `<button class="act primary" onclick="decide('${a.id}','approve')">Approve</button>
                    <button class="act" onclick="decide('${a.id}','reject')">Reject</button>`;
+      } else if (a.status === "approved") {
+        buttons = `<button class="act primary" onclick="execute('${a.id}')">Execute</button>`;
       }
       return `<div class="card">
         <h4><span class="pill">${esc(a.kind)}</span><span class="badge ${esc(a.risk)}">${esc(a.risk.replace("_", " "))}</span> ${esc(a.summary)} ${decided}</h4>
@@ -198,10 +201,18 @@
       await api(`/actions/${id}/${verb}`, { method: "POST", body: JSON.stringify({ note: verb + "ed via console" }) });
       loadActions();
     }
-    async function runAnswer(id, text) {
-      const r = await api("/query", { method: "POST", body: JSON.stringify({ text }) });
-      const cites = (r.citations || []).map(c => `claim ${esc((c.claim_id || "").slice(0, 12))}…`).join(" · ");
-      document.getElementById("ans-" + id).innerHTML = `<pre>${esc(r.answer || "")}</pre><div class="mut">${r.sufficient ? cites : "no grounded evidence"}</div>`;
+    // Risk-gated execution: read-only runs immediately; an approved effectful action runs here too.
+    async function execute(id) {
+      const r = await api(`/actions/${id}/execute`, { method: "POST" });
+      const el = document.getElementById("ans-" + id);
+      if (!r.action) { el.innerHTML = `<div class="mut bad">${esc(emsg(r) || "execution failed")}</div>`; return; }
+      let html = `<div class="mut ok">${esc(r.detail)}</div>`;
+      if (r.answer != null) {
+        const cites = (r.citations || []).map(c => `claim ${esc((c.claim_id || "").slice(0, 12))}…`).join(" · ");
+        html += `<pre>${esc(r.answer)}</pre><div class="mut">${r.sufficient ? cites : "no grounded evidence"}</div>`;
+      }
+      if (r.job_id) html += `<div class="mut">queued job ${esc(r.job_id.slice(0, 12))}…</div>`;
+      el.innerHTML = html;
     }
 
     // --- ask (grounded query) -------------------------------------------------------------------
@@ -231,6 +242,7 @@
       const r = await fetch(`/workspaces/${ws()}/upload`, {
         method: "POST", headers: { "Authorization": "Bearer " + uid() }, body: form,
       }).then(x => x.json());
+      if (!r.files) { out.innerHTML = `<i class='mut'>${esc(emsg(r) || "upload failed")}</i>`; return; }
       const rows = (r.files || []).map(f => ({
         file: f.filename,
         status: f.status,
@@ -244,7 +256,7 @@
       }));
       out.innerHTML = rows.length
         ? table(rows, ["file", "status", "doc", "segments", "claims", "coverage", "pages", "path", "note"])
-        : `<i class='mut'>${esc(r.detail || "upload failed")}</i>`;
+        : "<i class='mut'>no files in the response</i>";
     }
 
     // --- contradictions + spend (workspace-scoped, identity bearer) -----------------------------
@@ -267,7 +279,7 @@
       const items = await userApi(`/workspaces/${ws()}/contradictions?status=${status || "open"}`);
       out.innerHTML = Array.isArray(items)
         ? (items.map(contradictionCard).join("") || "<i class='mut'>none at this status</i>")
-        : `<i class='mut'>${esc(items.detail || "could not load contradictions")}</i>`;
+        : `<i class='mut'>${esc(emsg(items) || "could not load contradictions")}</i>`;
     }
     async function reviewContradiction(id, status) {
       await userApi(`/workspaces/${ws()}/contradictions/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
@@ -277,7 +289,7 @@
       const out = document.getElementById("spend-out");
       if (!uid() || !ws()) { out.innerHTML = "<i class='mut'>sign in and pick a workspace first</i>"; return; }
       const s = await userApi(`/workspaces/${ws()}/spend`);
-      if (typeof s.today_total_usd !== "number") { out.innerHTML = `<i class='mut'>${esc(s.detail || "no spend data")}</i>`; return; }
+      if (typeof s.today_total_usd !== "number") { out.innerHTML = `<i class='mut'>${esc(emsg(s) || "no spend data")}</i>`; return; }
       const rows = Object.entries(s.today_by_task || {}).map(([task, usd]) => ({ task, usd: Number(usd).toFixed(4) }));
       out.innerHTML = `<div class="card"><b>$${s.today_total_usd.toFixed(4)}</b> <span class="mut">today, total</span></div>`
         + (rows.length ? table(rows, ["task", "usd"]) : "<i class='mut'>no per-task spend yet</i>");
@@ -308,7 +320,7 @@
       const name = document.getElementById("src-connector").value;
       const r = await api(`/oauth/${name}/authorize`);
       if (r.authorize_url) window.open(r.authorize_url, "_blank");
-      else document.getElementById("src-msg").innerHTML = `<span class="bad">${esc(r.detail || "OAuth is not configured")}</span>`;
+      else document.getElementById("src-msg").innerHTML = `<span class="bad">${esc(emsg(r) || "OAuth is not configured")}</span>`;
     }
     async function createSource() {
       const msg = document.getElementById("src-msg");
@@ -326,7 +338,7 @@
       if (ws()) body.workspace_id = ws();  // target the active workspace, else the deployment default
       const r = await api("/sources", { method: "POST", body: JSON.stringify(body) });
       if (r.id) { msg.innerHTML = `<span class="ok">created “${esc(r.name)}” (${esc(r.connector)})</span>`; document.getElementById("src-name").value = ""; load("sources"); }
-      else { msg.innerHTML = `<span class="bad">${esc(r.detail || "could not create source")}</span>`; }
+      else { msg.innerHTML = `<span class="bad">${esc(emsg(r) || "could not create source")}</span>`; }
     }
     let TG_CHATS = [];
     async function addTelegramSource(i) {

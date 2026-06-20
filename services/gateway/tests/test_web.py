@@ -23,3 +23,4 @@ def test_root_serves_the_console(client) -> None:
     assert "/contradictions" in body  # the contradiction inbox (resolve / dismiss)
     assert "/spend" in body  # the per-workspace model-spend view
     assert "/providers" in body  # the enabled-models (capability manifest) view
+    assert "/execute" in body  # proposed actions can be executed (risk-gated) from the card

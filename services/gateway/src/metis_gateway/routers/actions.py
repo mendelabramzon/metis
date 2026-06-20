@@ -15,8 +15,15 @@ from fastapi import APIRouter
 
 from metis_gateway.actions import interpret_command
 from metis_gateway.deps import BackendDep, UserDep
-from metis_gateway.errors import ConflictError, NotFoundError
-from metis_gateway.schemas import CommandRequest, DecisionRequest, ProposedActionView
+from metis_gateway.errors import ConflictError, NotFoundError, TooManyRequestsError
+from metis_gateway.execution import execute_action, guard_executable
+from metis_gateway.schemas import (
+    ActionExecutionView,
+    Citation,
+    CommandRequest,
+    DecisionRequest,
+    ProposedActionView,
+)
 from metis_protocol import ActionId, ActionStatus, ProposedAction, Sensitivity, WorkspaceId
 
 router = APIRouter(prefix="/actions", tags=["actions"])
@@ -110,4 +117,39 @@ async def reject_action(
 ) -> ProposedActionView:
     return _view(
         await _decide(action_id, backend, principal.subject, approved=False, note=body.note)
+    )
+
+
+@router.post("/{action_id}/execute", response_model=ActionExecutionView)
+async def execute(action_id: str, backend: BackendDep, principal: UserDep) -> ActionExecutionView:
+    """Run an action against the engines, risk-gated: read-only runs immediately, effectful needs
+    prior approval, external is blocked. Records EXECUTED (or FAILED on an engine error)."""
+    action = await backend.actions.get(ActionId(action_id))
+    if action is None:
+        raise NotFoundError(f"no action {action_id!r}")
+    guard_executable(action)  # ConflictError on a precondition; status left unchanged
+    try:
+        outcome = await execute_action(
+            action,
+            backend=backend,
+            actor=principal.subject,
+            max_sensitivity=principal.max_sensitivity,
+        )
+    except (ConflictError, NotFoundError, TooManyRequestsError):
+        raise  # a bad request / precondition (e.g. missing source) — the action is unchanged
+    except Exception as exc:  # a genuine engine failure: record FAILED, then surface it
+        await backend.actions.update(action.model_copy(update={"status": ActionStatus.FAILED}))
+        raise ConflictError(f"execution failed: {exc}") from exc
+    executed = await backend.actions.update(
+        action.model_copy(update={"status": ActionStatus.EXECUTED})
+    )
+    return ActionExecutionView(
+        action=_view(executed),
+        detail=outcome.detail,
+        answer=outcome.answer,
+        sufficient=outcome.sufficient,
+        citations=[
+            Citation(claim_id=c, source_span_id=s, artifact_id=a) for c, s, a in outcome.citations
+        ],
+        job_id=outcome.job_id,
     )
