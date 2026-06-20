@@ -13,8 +13,9 @@ roadmap's workstreams 1.1–1.6.
 
 ## Implementation Status (2026-06-20)
 
-Most of Stage 1 is built and on `main`; what remains is the bulk of the UI (1.6), per-action
-execution dispatch (1.5), and the opt-in Telegram TDLib path (1.4). Status by workstream:
+Most of Stage 1 is built and on `main`; what remains is 1.6 evidence drill-down, the opt-in Telegram
+TDLib path (1.4), and `PROPOSE_SOURCE_CHANGE` execution dispatch (1.5, low priority). Status by
+workstream:
 
 - **1.1 Deployment foundation — DONE.** Caddy TLS proxy, OTel spine + dashboards/alerts, scheduled
   restore drill, resource budgets.
@@ -36,15 +37,15 @@ execution dispatch (1.5), and the opt-in Telegram TDLib path (1.4). Status by wo
     / `ActionKind` / `ActionStatus`), the durable `ActionStore`, the LLM interpreter
     (`INTERPRET_COMMAND` task class + prompt → typed action, structured output, read-only ANSWER
     fallback), and `routers/actions.py` (interpret → propose → risk-gated approve/reject).
-  - **Execution dispatch — STARTED** (`execution.py` + `POST /actions/{id}/execute`, risk-gated):
+  - **Execution dispatch — DONE** (`execution.py` + `POST /actions/{id}/execute`, risk-gated):
     read-only kinds (answer/find_evidence/draft → query engine; inspect_source → source + runs) run
-    from PROPOSED; `START_SYNC` requires APPROVED then enqueues a real connector-sync job; `EXTERNAL`
-    is blocked; each run emits an `action.executed` audit event and records EXECUTED/FAILED.
-  - **TODO:** dispatch for the write kinds — `CREATE_MEMORY` and `CREATE_WIKI_PATCH` (and
-    `PROPOSE_SOURCE_CHANGE`). These are deliberately deferred: per the truth-hierarchy invariant they
-    must flow through the claim pipeline / wiki review inbox, never a direct memory write — the exact
-    "remember X" semantics (ingest the assertion as a user-sourced doc vs. a reviewed memory patch)
-    is the open product decision to settle before implementing.
+    from PROPOSED; `START_SYNC` (APPROVED) enqueues a real connector-sync job; `CREATE_MEMORY`
+    (APPROVED) ingests the assertion through the claim pipeline as a user-sourced doc
+    (truth-hierarchy-safe — never a direct memory write); `CREATE_WIKI_PATCH` (APPROVED) proposes a
+    patch into the wiki review inbox for the existing approval to commit; `EXTERNAL` is blocked. Each
+    run emits an `action.executed` audit event and records EXECUTED/FAILED.
+  - **TODO:** only `PROPOSE_SOURCE_CHANGE` dispatch remains (a connector/source change is itself an
+    approval) — low priority.
 - **1.6 UI — MOSTLY DONE.** The single-file context-exoskeleton console at `/` now covers:
   command → proposed-action cards (risk badges + status-filtered inbox); **identity login** (user-id
   bearer) + a **workspace switcher** from `GET /workspaces`; workspace-scoped **ask**
@@ -66,11 +67,10 @@ execution dispatch (1.5), and the opt-in Telegram TDLib path (1.4). Status by wo
   and fanned out to every active chat source — not per-source jobs (one queue per bot token).
 - **The command interpreter is LLM-based**, via the model plane's structured-output path.
 
-**Suggested next steps (in order):** settle the `CREATE_MEMORY`/`CREATE_WIKI_PATCH` execution
-semantics (truth-hierarchy-safe: pipeline ingest / wiki review inbox) then implement that dispatch →
-1.6 evidence drill-down (the `evidence.py` endpoints exist; wire raw→spans→claims→mem cells into the
-console) → 1.4 Telegram TDLib opt-in (backfill + followed channels + `business_connection`
-revocation). Read-only + `START_SYNC` execution dispatch is already done.
+**Suggested next steps (in order):** 1.6 evidence drill-down (the `evidence.py` endpoints exist; wire
+raw→spans→claims→mem cells into the console) → 1.4 Telegram TDLib opt-in (backfill + followed
+channels + `business_connection` revocation). 1.5 execution dispatch is done except
+`PROPOSE_SOURCE_CHANGE` (low priority).
 
 ## Objective
 
