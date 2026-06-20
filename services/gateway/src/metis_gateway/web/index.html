@@ -105,12 +105,29 @@
       <p class="mut">Chats the bot has seen on a connection — “add as source” turns one into a source.</p>
       <button class="act" onclick="load('telegram')">Refresh</button><div id="telegram-out"></div>
     </section>
+    <section id="contradictions">
+      <p class="mut">Conflicting evidence in the active workspace — resolve or dismiss; never silently merged. Sign in and pick a workspace.</p>
+      <div class="row"><span class="mut">Status:</span>
+        <button class="act" onclick="loadContradictions('open')">open</button>
+        <button class="act" onclick="loadContradictions('resolved')">resolved</button>
+        <button class="act" onclick="loadContradictions('dismissed')">dismissed</button>
+      </div>
+      <div id="contradictions-out"></div>
+    </section>
+    <section id="spend">
+      <p class="mut">Model spend for the active workspace today (workspace admin). Sign in and pick a workspace.</p>
+      <button class="act" onclick="loadSpend()">Refresh</button><div id="spend-out"></div>
+    </section>
+    <section id="providers">
+      <p class="mut">Models enabled by a capability manifest (operator token).</p>
+      <button class="act" onclick="load('providers')">Refresh</button><div id="providers-out"></div>
+    </section>
     <section id="jobs"><button class="act" onclick="load('jobs')">Refresh</button><div id="jobs-out"></div></section>
     <section id="approvals"><button class="act" onclick="load('approvals')">Refresh</button><div id="approvals-out"></div></section>
     <section id="audit"><button class="act" onclick="load('audit')">Refresh</button><div id="audit-out"></div></section>
   </main>
   <script>
-    const TABS = ["command", "ask", "upload", "sources", "telegram", "jobs", "approvals", "audit"];
+    const TABS = ["command", "ask", "upload", "sources", "telegram", "contradictions", "spend", "providers", "jobs", "approvals", "audit"];
     const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     const tok = () => document.getElementById("token").value.trim();   // operator / scope token
     const uid = () => document.getElementById("user").value.trim();    // signed-in user id (identity bearer)
@@ -125,9 +142,11 @@
         document.getElementById(t).classList.toggle("on", t === tab);
         document.querySelector(`[data-tab="${t}"]`).classList.toggle("on", t === tab);
       }
-      if (["sources", "telegram", "jobs", "approvals", "audit"].includes(tab)) load(tab);
+      if (["sources", "telegram", "providers", "jobs", "approvals", "audit"].includes(tab)) load(tab);
       if (tab === "command") loadActions();
       if (tab === "sources") loadConnectors();  // (re)populate the new-source form's catalog
+      if (tab === "contradictions") loadContradictions("open");
+      if (tab === "spend") loadSpend();
     }
 
     // --- identity: sign in as a user, then switch the active workspace --------------------------
@@ -228,6 +247,42 @@
         : `<i class='mut'>${esc(r.detail || "upload failed")}</i>`;
     }
 
+    // --- contradictions + spend (workspace-scoped, identity bearer) -----------------------------
+    function contradictionCard(c) {
+      const claims = (c.claim_ids || []).map(id => `claim ${esc(id.slice(0, 12))}…`).join(" · ");
+      const buttons = c.status === "open"
+        ? `<button class="act primary" onclick="reviewContradiction('${c.contradiction_id}','resolved')">Resolve</button>
+           <button class="act" onclick="reviewContradiction('${c.contradiction_id}','dismissed')">Dismiss</button>`
+        : "";
+      return `<div class="card">
+        <h4><span class="badge external">${esc(c.status)}</span> ${esc(c.summary)}</h4>
+        <div class="mut">${esc(c.explanation)}</div>
+        <div class="meta mut"><span>sensitivity: ${esc(c.sensitivity)}</span><span>${claims}</span></div>
+        <div class="cardactions">${buttons}</div>
+      </div>`;
+    }
+    async function loadContradictions(status) {
+      const out = document.getElementById("contradictions-out");
+      if (!uid() || !ws()) { out.innerHTML = "<i class='mut'>sign in and pick a workspace first</i>"; return; }
+      const items = await userApi(`/workspaces/${ws()}/contradictions?status=${status || "open"}`);
+      out.innerHTML = Array.isArray(items)
+        ? (items.map(contradictionCard).join("") || "<i class='mut'>none at this status</i>")
+        : `<i class='mut'>${esc(items.detail || "could not load contradictions")}</i>`;
+    }
+    async function reviewContradiction(id, status) {
+      await userApi(`/workspaces/${ws()}/contradictions/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+      loadContradictions("open");
+    }
+    async function loadSpend() {
+      const out = document.getElementById("spend-out");
+      if (!uid() || !ws()) { out.innerHTML = "<i class='mut'>sign in and pick a workspace first</i>"; return; }
+      const s = await userApi(`/workspaces/${ws()}/spend`);
+      if (typeof s.today_total_usd !== "number") { out.innerHTML = `<i class='mut'>${esc(s.detail || "no spend data")}</i>`; return; }
+      const rows = Object.entries(s.today_by_task || {}).map(([task, usd]) => ({ task, usd: Number(usd).toFixed(4) }));
+      out.innerHTML = `<div class="card"><b>$${s.today_total_usd.toFixed(4)}</b> <span class="mut">today, total</span></div>`
+        + (rows.length ? table(rows, ["task", "usd"]) : "<i class='mut'>no per-task spend yet</i>");
+    }
+
     // --- source setup ---------------------------------------------------------------------------
     // Operator-scoped: the new-source form is built from the connector catalog; an oauth2 connector
     // (Gmail/Drive/Calendar) offers a Google connect first. A new source targets the active
@@ -309,6 +364,7 @@
         out.innerHTML = TG_CHATS.map((c, i) => `<div class="card"><b>${esc(c.title || "(untitled)")}</b> <span class="pill">${esc(c.chat_type)}</span> <span class="mut">chat ${esc(c.chat_id)} · conn ${esc(c.business_connection_id)} · last ${esc(c.last_message_id)}</span> <button class="act" onclick="addTelegramSource(${i})">add as source</button></div>`).join("") || "<i class='mut'>no chats seen yet</i>";
       }
       if (tab === "audit") out.innerHTML = table(await api("/audit"), ["occurred_at", "action", "actor", "target_kind"]);
+      if (tab === "providers") out.innerHTML = table(await api("/providers"), ["provider", "model_id", "kind", "privacy_tier", "context_window", "supports_tools", "supports_json", "embedding_dim"]);
       if (tab === "jobs") {
         const jobs = await api("/jobs");
         out.innerHTML = (jobs || []).map(j => `<div>${esc(j.kind)} — <b>${esc(j.state)}</b> <span class="mut">(attempts ${esc(j.attempts)})</span> ${j.error ? "· " + esc(j.error) : ""} ${j.state === "failed" ? `<button class="act" onclick="retry('${j.id}')">retry</button>` : ""}</div>`).join("") || "<i class='mut'>no jobs</i>";

@@ -20,3 +20,6 @@ def test_root_serves_the_console(client) -> None:
     assert "/sources/connectors" in body  # the source-setup form's connector catalog
     assert "New source" in body  # the source-setup form itself
     assert "add as source" in body  # a discovered Telegram chat can be turned into a source
+    assert "/contradictions" in body  # the contradiction inbox (resolve / dismiss)
+    assert "/spend" in body  # the per-workspace model-spend view
+    assert "/providers" in body  # the enabled-models (capability manifest) view
