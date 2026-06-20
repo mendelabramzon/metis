@@ -5,11 +5,11 @@ Builds on the completed engineering stages 0–15 (see [high-level-implementatio
 
 This stage turns the engine into a multi-user server for ~10 people in one organization:
 personal and shared workspaces, production auth, a configurable cloud-first model plane, live
-email/document ingestion driven by durable jobs, and an evidence-rich product UI. It is
-extension work, not greenfield — most of it wires product surfaces and live transports onto
-seams that already exist (the model router, the connector `Transport` interface, the durable
-Postgres backend, the hybrid memory index). The numbering below mirrors the roadmap's
-workstreams 1.1–1.6.
+email/document/Telegram ingestion driven by durable jobs, and an evidence-rich context-exoskeleton
+UI. It is extension work, not greenfield — most of it wires product surfaces and live transports
+onto seams that already exist (the model router, the connector `Transport` interface, durable
+source/job state, the Postgres backend, the hybrid memory index). The numbering below mirrors the
+roadmap's workstreams 1.1–1.6.
 
 ## Objective
 
@@ -17,16 +17,21 @@ workstreams 1.1–1.6.
   enforced above the existing `workspace_id` storage filter.
 - Promote the existing `MetisModelRouter` into a configurable provider registry (cloud, local,
   and self-hosted HF) with per-workspace policy, capability manifests, and per-task-class spend.
-- Write live connector transports (IMAP, Gmail/Drive over OAuth) behind the existing
-  `Transport` seam, with attachment extraction and durable cursors/runs.
+- Write live connector transports (IMAP, Gmail/Drive over OAuth, and Telegram) behind the existing
+  connector spine, with attachment/media handling, durable cursors/runs, and replay fixtures.
+  Telegram defaults to a sanctioned Business connected-bot ("secretary mode") for forward sync of
+  owner-authorized chats; an opt-in TDLib personal-account path adds history backfill and followed
+  channels where required.
 - Replace the in-memory job queue with a durable queue and turn the ingest/runtime worker stubs
   into real lease-and-dispatch loops.
-- Make job, wiki, and approval state durable in both gateway backends.
-- Ship a real product UI (workspace switcher, source dashboard, evidence browser, chat with
-  citations, contradiction/approval inboxes, erasure).
+- Make job, proposed-action, approval, and wiki state durable in both gateway backends.
+- Ship a real context-exoskeleton UI: workspace switcher, source dashboard, evidence browser,
+  command/chat entry, contextual answer cards with citations, proposed-action cards with
+  confirmation, contradiction/approval inboxes, and erasure.
 
-Non-goals (deferred to Stage 2/3): new official connectors beyond email/Drive, browser-driven
-skills, the deep-research workflow, signed cross-company exchange. GPU serving is optional here.
+Non-goals (deferred to Stage 2/3): new official connectors beyond email/Drive/Telegram,
+browser-driven skills, outbound connector actions such as sending Telegram/email messages,
+the deep-research workflow, signed cross-company exchange. GPU serving is optional here.
 
 ## Invariants Preserved
 
@@ -40,20 +45,23 @@ The load-bearing ones for Stage 1:
   external-provider allowlist before any prompt is built. The config surface feeds the router; it
   does not add per-call branching that could bypass it.
 - **New product concepts enter as `metis-protocol` schemas + `metis-core` stores + migrations** —
-  identity and provider config are not gateway-local dicts.
+  identity, source config, proposed actions, and provider config are not gateway-local dicts.
 - **Citation + truth hierarchy.** Live connectors and the upload path still emit
   `RawArtifact`/`NormalizedDoc` and flow through the unchanged Stage 3 pipeline; no surface writes
   memory directly.
+- **Human agency over side effects.** Natural-language UI may interpret intent and propose typed
+  actions, but write/side-effectful actions execute only through explicit approval, with visible
+  consequences and audit records.
 
 ## Package Ownership
 
-- `metis-protocol`: new identity, source-config, and model-capability schemas.
+- `metis-protocol`: new identity, source-config, model-capability, and proposed-action schemas.
 - `metis-core`: identity/provider stores + migrations, provider registry, spend accounting,
-  durable job queue, capability-aware router config.
+  durable job/action/approval/wiki stores, capability-aware router config.
 - `metis-ingestion` (+ `services/ingest-worker`): live transports, OAuth connectors, attachment
-  extraction, parser-quality path, the worker dispatch loop.
+  extraction, Telegram account/chat ingestion, parser-quality path, the worker dispatch loop.
 - `services/gateway`: auth/RBAC, request-scoped workspace resolution, provider/spend/source/upload
-  routers, durable wiki/approval inboxes, the UI app.
+  routers, Telegram account connection, durable wiki/approval/action inboxes, the UI app.
 - `deploy`: TLS/routing, backups/restore drills, OTel dashboards, resource budgets.
 
 ## Workstream 1.1 — Production Deployment Foundation
@@ -92,11 +100,13 @@ deploy/src/metis_deploy/
 ```text
 packages/metis-protocol/src/metis_protocol/
   identity.py           # Organization, User, WorkspaceMembership, Role, WorkspaceKind
-  sources.py            # SourceConfig, SourceCredentialRef, SourceCursor, ConnectorRun
+  sources.py            # SourceConfig (+ typed config payload), SourceCredentialRef,
+                        # SourceCursor, ConnectorRun
+  actions.py            # ProposedAction, ActionRisk, ApprovalDecision
 packages/metis-core/src/metis_core/
   stores/identity_store.py      # CRUD + membership resolution (workspace_id already on every row)
   stores/source_store.py        # source configs, cursors, connector runs
-  migrations/versions/0003_identity_and_sources.py
+  migrations/versions/0003_identity_sources_actions.py
 services/gateway/src/metis_gateway/
   auth.py               # (rewrite) sessions/tokens → user; RBAC by Role
   deps.py               # (extend) request-scoped workspace resolution + membership gate
@@ -107,7 +117,11 @@ services/gateway/src/metis_gateway/
 
 **Schemas/interfaces:** `Workspace` already exists in the substrate; add `Organization`, `User`,
 `WorkspaceMembership`, `Role` (owner/admin/member/viewer/auditor), `WorkspaceKind`
-(personal/shared/external-later). Audit events (existing `AuditEvent`) gain a real actor identity.
+(personal/shared/external-later). Extend `SourceConfig` with a connector-specific config payload
+validated by the registry: email mailbox/labels, Drive folder/shared-drive selection, and Telegram
+account/chat/channel selection. Add `ProposedAction`/`ActionRisk` so the UI can persist "the LLM
+understood this request as this concrete action" before any effectful execution. Audit events
+(existing `AuditEvent`) gain a real actor identity.
 
 **Steps:**
 
@@ -117,7 +131,9 @@ services/gateway/src/metis_gateway/
    *before* any retrieval; bind the real actor onto emitted audit events.
 4. Auto-provision a personal workspace per user; make shared workspaces explicit (no
    organization-wide implicit sharing).
-5. Map source ACL → sensitivity as a floor (unknown/private ⇒ more restrictive).
+5. Map source ACL → sensitivity as a floor (unknown/private ⇒ more restrictive). Telegram private
+   chats and private groups default to `CONFIDENTIAL`; sensitive personal chats may be upgraded to
+   `RESTRICTED` by the user or policy.
 6. **Gate:** live connectors (1.4) stay disabled until the isolation suite passes, including a
    negative test that user A cannot retrieve user B's personal context through any router/store.
 
@@ -158,7 +174,7 @@ services/gateway/src/metis_gateway/
 
 **Anti-goals:** per-model-repo adapters; name-based auto-selection; fine-tuning on private data.
 
-## Workstream 1.4 — Live Ingestion for Email and Documents
+## Workstream 1.4 — Live Ingestion for Email, Documents, and Telegram
 
 **Files:**
 
@@ -166,10 +182,14 @@ services/gateway/src/metis_gateway/
 packages/metis-ingestion/src/metis_ingestion/connectors/
   transports/imap_transport.py   # live Transport over imaplib (LOGIN/SELECT/SEARCH/FETCH → bytes)
   transports/http_transport.py   # live Transport for HTTP/API connectors
+  transports/telegram_bot_transport.py   # default: Business connected-bot updates (forward sync) + replay
+  transports/telegram_tdlib_transport.py # opt-in: TDLib adapter for backfill + followed channels + replay
   oauth.py                       # OAuth flows + token refresh (secrets via Stage 14 cred store)
   gmail.py                       # Google API email connector (labels, shared mailboxes)
   gdrive.py                      # Drive: shared drives, folder selection, Docs/Sheets export
   imap.py                        # (extend) attachment extraction; currently text/plain body only
+  telegram.py                    # selected chats/groups/channels → chat_message docs (bot default, TDLib opt-in)
+  telegram_session.py            # opt-in TDLib account sessions; encrypted; QR/phone/code/2FA states
 packages/metis-ingestion/src/metis_ingestion/parsers/
   layout_pdf.py                  # layout-aware path for complex PDFs (tables, columns)
   ocr.py                         # OCR/VLM fallback when deterministic coverage is low
@@ -179,6 +199,7 @@ services/ingest-worker/src/metis_ingest_worker/
 services/gateway/src/metis_gateway/routers/
   upload.py                      # file upload (batch, progress, parse status, retry)
   oauth.py                       # OAuth callback endpoints
+  telegram.py                    # bot connect + authorized-chat selection (default); TDLib account connect (opt-in)
 ```
 
 **Steps:**
@@ -189,10 +210,34 @@ services/gateway/src/metis_gateway/routers/
 2. Add attachment extraction to `imap.py` (parse non-text parts through the parser registry).
 3. Implement `gmail.py` and `gdrive.py` over OAuth (`oauth.py` + the encrypted cred store); persist
    `SourceCursor`/`ConnectorRun` rows.
-4. Replace `InMemoryJobQueue` usage with the durable queue (1.5) and rewrite the ingest worker into
+4. Implement the **default Telegram transport** as a Business connected-bot ("secretary mode"): the
+   account owner connects the deployment bot and authorizes specific chats; the bot then receives
+   normal Bot API updates for those chats (including private DMs), excluding bot/self messages. Each
+   authorized private chat, group, or supergroup becomes its own `SourceConfig` so sensitivity,
+   cursoring, and erasure stay per conversation. No Premium subscription and no encrypted account
+   session are required; the bot token is a deployment secret and the per-user link is just a
+   `business_connection_id` + authorized chat ids.
+5. Add Telegram bot setup: connect the bot to a user's account, let the owner authorize chats in
+   Telegram's own (revocable) UI, enumerate the authorized chats, take explicit user selection, and
+   set per-chat default sensitivity. Persist only the business-connection id and source config;
+   never store login codes or 2FA secrets.
+6. Add forward incremental sync over the bot: process `business_message` / `edited_business_message`
+   / `deleted_business_messages` updates (webhook or polled `getUpdates`), persist an opaque cursor
+   such as `{chat_id,last_message_id,last_date}`, and reconcile on schedule. Edits create a new
+   artifact version; deletions tombstone the raw artifact and derived claims.
+7. Add the **opt-in TDLib personal-account transport** behind the same `Transport` seam, enabled
+   explicitly per user, for the two things the bot cannot do: history backfill (page message history
+   for selected sources) and followed channels the user does not administer. It carries QR/phone/2FA
+   authorization state and an encrypted local session/database; store only encrypted session keys —
+   never login codes or 2FA secrets — poll conservatively, and handle flood waits and revocation.
+8. Render Telegram messages (from either transport) as canonical JSON raw artifacts plus readable
+   markdown `NormalizedDoc`s with `ArtifactKind.CHAT_MESSAGE`; include sender, timestamp, reply/thread
+   context, forward/edit/delete metadata, and attachment/media references. Download media only when
+   selected and within budgets; otherwise preserve metadata and a source locator.
+9. Replace `InMemoryJobQueue` usage with the durable queue (1.5) and rewrite the ingest worker into
    a real lease/execute loop; keep the inline POST path for single-doc upload.
-5. Add the file-upload API/UI path for PDF/DOCX/XLSX/CSV/TXT/MD/HTML/EML with visible parse status.
-6. Add the layout-aware + OCR parser paths and the parse-quality report; keep
+10. Add the file-upload API/UI path for PDF/DOCX/XLSX/CSV/TXT/MD/HTML/EML with visible parse status.
+11. Add the layout-aware + OCR parser paths and the parse-quality report; keep
    `raw → parsed → segment → claim → memory` intact (parsers never write memory).
 
 ## Workstream 1.5 — Context Exoskeleton Product Surface + Durable State
@@ -202,24 +247,35 @@ services/gateway/src/metis_gateway/routers/
 ```text
 packages/metis-core/src/metis_core/
   stores/job_store.py        # durable job queue (replaces InMemoryJobQueue for the server)
-  stores/approval_store.py   # durable approval inbox
+  stores/action_store.py     # durable proposed actions + approval decisions
+  stores/approval_store.py   # durable approval inbox (memory/wiki/action approvals)
   stores/wiki_inbox_store.py # durable wiki patch inbox
 services/gateway/src/metis_gateway/
-  backend.py                 # (extend) wire durable job/approval/wiki stores into both backends
-  routers/{contradictions,memory_review,wiki,erasure}.py
+  backend.py                 # (extend) wire durable job/action/approval/wiki stores into backends
+  routers/{actions,contradictions,memory_review,wiki,erasure}.py
 ```
 
 **Steps:**
 
-1. Make the job queue, approval inbox, and wiki inbox durable; `build_backend` and
+1. Make the job queue, proposed-action/approval inbox, and wiki inbox durable; `build_backend` and
    `build_postgres_backend` both stop using in-memory versions for server deployment.
-2. Expose the product surfaces over the durable state: source dashboard, evidence browser
+2. Add a command/chat surface that turns free-text requests into typed intent: answer a question,
+   find evidence, inspect a source, draft a response, create a memory/wiki patch, start a sync, or
+   propose a connector/source change. The UI must display the interpreted action before execution
+   when the request is ambiguous or effectful.
+3. Implement proposed-action cards with risk tiers:
+   read-only answers run without confirmation; internal reversible changes require undo or inbox
+   approval; memory/wiki changes show a diff; external side effects are approval-only and stay out
+   of Stage 1 unless implemented as a later skill. Every card shows inputs used, expected effect,
+   sensitivity, and audit target.
+4. Expose the product surfaces over durable state: source dashboard (email, Drive, upload,
+   Telegram accounts and selected chats/channels), evidence browser
    (`raw → spans → claims → mem cells → wiki`), contradiction inbox, memory review
    (accept/retract/mark-stale), wiki projection, erasure (propagate tombstones to derived
    artifacts).
-3. Treat memory as a write/manage/read loop in the UI: review and supersession are first-class,
+5. Treat memory as a write/manage/read loop in the UI: review and supersession are first-class,
    not hidden behind a vector store.
-4. Keep execution/task state separate from semantic memory (groundwork for Stage 2 research).
+6. Keep execution/task state separate from semantic memory (groundwork for Stage 2 research).
 
 ## Workstream 1.6 — API and UI Deliverables
 
@@ -227,12 +283,15 @@ services/gateway/src/metis_gateway/
 replace the 94-line `web/index.html` debug console with a real frontend app (`services/gateway/web/`
 or a separate SPA served behind the proxy).
 
-**API:** user/session; workspace CRUD + membership; source config + OAuth callback; file upload +
-connector sync; query/chat with workspace selection + citations; job inspect/retry/cancel; audit;
-provider config + spend (operators).
+**API:** user/session; workspace CRUD + membership; source config + OAuth callback; Telegram
+account connection + chat/channel selection; file upload + connector sync; query/command/chat with
+workspace selection + citations; proposed-action inspect/approve/reject; job inspect/retry/cancel;
+audit; provider config + spend (operators).
 
-**UI:** login + workspace switcher; source setup (email/Drive/upload); chat with citations +
-evidence drilldown; jobs/errors dashboard; approval + contradiction inbox; provider/spend dashboard.
+**UI:** login + workspace switcher; source setup (email/Drive/upload/Telegram selected chats and
+channels); quiet context panel; command/chat with citations + evidence drilldown; proposed-action
+cards with confirmation; jobs/errors dashboard; approval + contradiction inbox; provider/spend
+dashboard.
 
 ## Tests And Fixtures
 
@@ -244,8 +303,17 @@ evidence drilldown; jobs/errors dashboard; approval + contradiction inbox; provi
 - **Live transports (recorded):** `ImapTransport`/Gmail/Drive run against recorded fixtures with no
   live credentials (extend the existing replay suite); cursor replay deterministic; attachments
   extracted.
+- **Telegram connector replay (both transports):** recorded fixtures with no live credentials —
+  bot path: business-connection authorization, forward `business_message`/edit/delete updates,
+  cursor replay, media metadata; opt-in TDLib path: chat/channel enumeration and selected-chat
+  backfill cursor replay; plus per-chat source erasure for both.
 - **Durable job/approval/wiki:** survive a gateway restart; ingest worker leases and completes a
   queued job; a held approval resumes after restart.
+- **Action proposals:** natural-language commands produce typed proposed actions; read-only actions
+  do not require confirmation; memory/wiki changes show diffs; external side effects are blocked or
+  held for explicit approval.
+- **UI source flows:** source setup selects email mailboxes/labels, Drive folders, upload batches,
+  and Telegram chats/channels without exposing credentials or unselected conversation content.
 - **Parser quality:** complex-PDF and scanned-PDF fixtures produce coverage/table/OCR reports;
   low-coverage triggers OCR fallback.
 - **Upload flow:** every supported format ingests with visible parse status.
@@ -256,9 +324,13 @@ evidence drilldown; jobs/errors dashboard; approval + contradiction inbox; provi
 Traces to the roadmap's Stage 1 acceptance list:
 
 - 10 users log in; each has a personal workspace; users can join a shared workspace.
-- A shared Drive folder and a personal email source ingest end-to-end via a *queued* connector job.
+- A shared Drive folder, a personal email source, and selected Telegram chats/channels ingest
+  end-to-end via *queued* connector jobs.
 - PDF/DOCX/XLSX/CSV/TXT/MD/HTML/EML ingest with visible parse status.
 - Queries target personal/shared/mixed context and cite source-backed evidence.
+- The UI can interpret a free-text request into a visible proposed action, show the evidence or
+  source scope it will use, and require approval before any memory/wiki write or external side
+  effect.
 - A user cannot retrieve another user's personal context (enforced and tested).
 - Cloud LLM + embedding providers are configurable without code edits.
 - An HF model behind TGI/vLLM/TEI registers via its capability manifest.
@@ -270,15 +342,28 @@ Traces to the roadmap's Stage 1 acceptance list:
   test is the gate, not a nicety.
 - **OAuth/token lifecycle** (refresh, expiry, revocation) will cost more than parser work;
   centralize in `oauth.py` + the encrypted cred store.
+- **Telegram transport choice.** Default to the sanctioned Business connected-bot: it reaches
+  owner-authorized chats (including private DMs) for forward sync with no account-ban risk and no
+  encrypted-session subsystem, but cannot backfill pre-connection history or read followed channels.
+  The opt-in TDLib path covers exactly those two gaps at the cost of QR/phone/2FA sessions, local
+  encrypted state, flood waits, and userbot risk — enable it per user, conservatively polled, never
+  as the default. Both sit behind the same `Transport` seam, so per-chat `SourceConfig`, cursoring,
+  and erasure are identical. Store only the business-connection id (bot) or encrypted session keys
+  (TDLib); never login codes or 2FA secrets.
 - **In-memory → durable migration** of job/approval/wiki state touches both backends; sequence it
   before live ingestion so nothing important lives only in memory on a server.
 - **Embedding-dimension lock-in:** switching the production embedding model is a re-index by design
   (version-gating); make that an explicit operator action, not a silent config flip.
 - **Spend blowups:** caps must be enforced at the router, not just reported.
 - **OCR/VLM cost and latency:** gate strictly on low deterministic coverage.
+- **Approval fatigue and overreliance:** a chat-like UI can feel authoritative even when retrieval
+  is wrong. Keep the interface calm: cite evidence, expose uncertainty, make dismissal/correction
+  cheap, and reserve blocking confirmations for meaningful risk boundaries.
 
 ## Sequencing
 
 Follow roadmap Milestones A→C: 1.2 identity → 1.5 durable state + 1.3 provider plane → 1.4 file
-upload then live ingestion + worker loops → 1.6 UI → 1.4 parser-quality upgrades. Identity is the
-hard gate; live connectors do not turn on until isolation tests are green.
+upload then live ingestion + worker loops (email/Drive first, then the Telegram bot connector; the
+opt-in TDLib backfill path lands after per-chat erasure is in place) → 1.6 UI → 1.4 parser-quality
+upgrades. Identity is the hard gate;
+live connectors do not turn on until isolation tests are green.
