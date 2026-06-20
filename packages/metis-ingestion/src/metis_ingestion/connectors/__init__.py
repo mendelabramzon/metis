@@ -79,6 +79,11 @@ from metis_ingestion.connectors.telegram_session import (
     TelegramSession,
     TelegramTdlibClient,
 )
+from metis_ingestion.connectors.telegram_tdjson import (
+    NativeTdjsonClient,
+    TdjsonLibrary,
+    load_tdjson_library,
+)
 from metis_ingestion.connectors.telegram_tdlib_transport import (
     TelegramTdlibConfig,
     TelegramTdlibTransport,
@@ -112,6 +117,7 @@ __all__ = [
     "ImapTransport",
     "InMemorySecretResolver",
     "LocalFolderConnector",
+    "NativeTdjsonClient",
     "OAuth2Client",
     "OAuthTokens",
     "RateLimitError",
@@ -122,6 +128,7 @@ __all__ = [
     "SecretResolver",
     "SlackConnector",
     "TdjsonClient",
+    "TdjsonLibrary",
     "TdlibParameters",
     "TelegramBotClient",
     "TelegramBotConfig",
@@ -145,6 +152,7 @@ __all__ = [
     "build_tdlib_connector",
     "build_telegram_connector",
     "build_webhook_job",
+    "load_tdjson_library",
     "no_auth",
     "oauth2",
     "poll_due",
