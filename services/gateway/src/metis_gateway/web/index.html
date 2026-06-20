@@ -78,9 +78,31 @@
       <div class="row"><input type="file" id="files" multiple /><button class="act primary" onclick="upload()">Upload</button></div>
       <div id="upload-out"></div>
     </section>
-    <section id="sources"><button class="act" onclick="load('sources')">Refresh</button><div id="sources-out"></div></section>
+    <section id="sources">
+      <div class="card">
+        <h4>New source</h4>
+        <div class="row">
+          <select id="src-connector" onchange="onConnector()"></select>
+          <input id="src-name" placeholder="source name" />
+          <select id="src-sensitivity">
+            <option value="public">public</option>
+            <option value="internal">internal</option>
+            <option value="confidential">confidential</option>
+            <option value="restricted">restricted</option>
+          </select>
+        </div>
+        <div class="row"><textarea id="src-config" rows="3" placeholder='connector config JSON — e.g. {"chat_id": 123, "business_connection_id": "abc"}'></textarea></div>
+        <div class="row">
+          <span id="src-hint" class="mut"></span><span class="grow"></span>
+          <button id="src-connect" class="act" style="display:none" onclick="connectOAuth()">Connect</button>
+          <button class="act primary" onclick="createSource()">Create source</button>
+        </div>
+        <div id="src-msg" class="mut"></div>
+      </div>
+      <button class="act" onclick="load('sources')">Refresh</button><div id="sources-out"></div>
+    </section>
     <section id="telegram">
-      <p class="mut">Chats the bot has seen on a connection — pick one to ingest as a source.</p>
+      <p class="mut">Chats the bot has seen on a connection — “add as source” turns one into a source.</p>
       <button class="act" onclick="load('telegram')">Refresh</button><div id="telegram-out"></div>
     </section>
     <section id="jobs"><button class="act" onclick="load('jobs')">Refresh</button><div id="jobs-out"></div></section>
@@ -105,6 +127,7 @@
       }
       if (["sources", "telegram", "jobs", "approvals", "audit"].includes(tab)) load(tab);
       if (tab === "command") loadActions();
+      if (tab === "sources") loadConnectors();  // (re)populate the new-source form's catalog
     }
 
     // --- identity: sign in as a user, then switch the active workspace --------------------------
@@ -205,6 +228,64 @@
         : `<i class='mut'>${esc(r.detail || "upload failed")}</i>`;
     }
 
+    // --- source setup ---------------------------------------------------------------------------
+    // Operator-scoped: the new-source form is built from the connector catalog; an oauth2 connector
+    // (Gmail/Drive/Calendar) offers a Google connect first. A new source targets the active
+    // workspace when signed in, else the deployment's default workspace.
+    let CONNECTORS = [];
+    async function loadConnectors() {
+      CONNECTORS = await api("/sources/connectors") || [];
+      document.getElementById("src-connector").innerHTML =
+        CONNECTORS.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("");
+      onConnector();
+    }
+    function onConnector() {
+      const c = CONNECTORS.find(x => x.name === document.getElementById("src-connector").value);
+      const hint = document.getElementById("src-hint");
+      const connect = document.getElementById("src-connect");
+      if (!c) { hint.textContent = ""; connect.style.display = "none"; return; }
+      hint.textContent = `auth: ${c.auth_method} · floor: ${c.default_sensitivity}` + (c.requires_config ? " · config required" : "");
+      document.getElementById("src-sensitivity").value = c.default_sensitivity;  // start at the floor
+      connect.style.display = c.auth_method === "oauth2" ? "" : "none";
+      connect.textContent = "Connect " + c.name;
+    }
+    async function connectOAuth() {
+      const name = document.getElementById("src-connector").value;
+      const r = await api(`/oauth/${name}/authorize`);
+      if (r.authorize_url) window.open(r.authorize_url, "_blank");
+      else document.getElementById("src-msg").innerHTML = `<span class="bad">${esc(r.detail || "OAuth is not configured")}</span>`;
+    }
+    async function createSource() {
+      const msg = document.getElementById("src-msg");
+      const name = document.getElementById("src-name").value.trim();
+      if (!name) { msg.innerHTML = `<span class="bad">name is required</span>`; return; }
+      const raw = document.getElementById("src-config").value.trim();
+      let config = {};
+      if (raw) { try { config = JSON.parse(raw); } catch (e) { msg.innerHTML = `<span class="bad">config is not valid JSON</span>`; return; } }
+      const body = {
+        name,
+        connector: document.getElementById("src-connector").value,
+        sensitivity: document.getElementById("src-sensitivity").value,
+        config,
+      };
+      if (ws()) body.workspace_id = ws();  // target the active workspace, else the deployment default
+      const r = await api("/sources", { method: "POST", body: JSON.stringify(body) });
+      if (r.id) { msg.innerHTML = `<span class="ok">created “${esc(r.name)}” (${esc(r.connector)})</span>`; document.getElementById("src-name").value = ""; load("sources"); }
+      else { msg.innerHTML = `<span class="bad">${esc(r.detail || "could not create source")}</span>`; }
+    }
+    let TG_CHATS = [];
+    async function addTelegramSource(i) {
+      const c = TG_CHATS[i];
+      if (!c) return;
+      show("sources");
+      if (!CONNECTORS.length) await loadConnectors();
+      document.getElementById("src-connector").value = "telegram";
+      onConnector();
+      document.getElementById("src-name").value = c.title || ("telegram " + c.chat_id);
+      document.getElementById("src-config").value = JSON.stringify(
+        { business_connection_id: c.business_connection_id, chat_id: c.chat_id, chat_type: c.chat_type }, null, 2);
+    }
+
     // --- dashboards -----------------------------------------------------------------------------
     function table(rows, cols) {
       const head = cols.map(c => `<th>${c}</th>`).join("");
@@ -223,7 +304,10 @@
         const rows = await api("/sources");
         out.innerHTML = (rows || []).map(s => `<div class="card"><b>${esc(s.name)}</b> <span class="pill">${esc(s.connector)}</span> <span class="mut">${esc(s.sensitivity)} · ${esc(s.auth_method)}</span> <button class="act" onclick="syncSource('${s.id}')">sync</button></div>`).join("") || "<i class='mut'>no sources</i>";
       }
-      if (tab === "telegram") out.innerHTML = table(await api("/telegram/chats"), ["title", "chat_type", "chat_id", "business_connection_id", "last_message_id"]);
+      if (tab === "telegram") {
+        TG_CHATS = await api("/telegram/chats") || [];
+        out.innerHTML = TG_CHATS.map((c, i) => `<div class="card"><b>${esc(c.title || "(untitled)")}</b> <span class="pill">${esc(c.chat_type)}</span> <span class="mut">chat ${esc(c.chat_id)} · conn ${esc(c.business_connection_id)} · last ${esc(c.last_message_id)}</span> <button class="act" onclick="addTelegramSource(${i})">add as source</button></div>`).join("") || "<i class='mut'>no chats seen yet</i>";
+      }
       if (tab === "audit") out.innerHTML = table(await api("/audit"), ["occurred_at", "action", "actor", "target_kind"]);
       if (tab === "jobs") {
         const jobs = await api("/jobs");

@@ -14,7 +14,13 @@ from pydantic import ValidationError
 
 from metis_gateway.deps import BackendDep, OperatorDep, UserDep
 from metis_gateway.errors import ConflictError, NotFoundError
-from metis_gateway.schemas import SourceCreate, SourceErasureView, SourceView, SyncResponse
+from metis_gateway.schemas import (
+    ConnectorView,
+    SourceCreate,
+    SourceErasureView,
+    SourceView,
+    SyncResponse,
+)
 from metis_ingestion import ConnectorScheduler
 from metis_protocol import SourceConfig, SourceId, WorkspaceId, new_id
 
@@ -62,6 +68,25 @@ async def create_source(
 @router.get("", response_model=list[SourceView])
 async def list_sources(backend: BackendDep, _principal: UserDep) -> list[SourceView]:
     return [_view(config) for config in await backend.sources.list_all()]
+
+
+@router.get("/connectors", response_model=list[ConnectorView])
+async def list_connectors(backend: BackendDep, _principal: UserDep) -> list[ConnectorView]:
+    """The connectors a source can be configured for — the catalog the setup form is built from."""
+    catalog: list[ConnectorView] = []
+    for name in backend.connectors.names():
+        spec = backend.connectors.get(name)
+        if spec is None:  # names() and get() are consistent; the guard satisfies the type checker
+            continue
+        catalog.append(
+            ConnectorView(
+                name=spec.name,
+                auth_method=spec.auth.method.value,
+                default_sensitivity=spec.default_sensitivity,
+                requires_config=spec.config_model is not None,
+            )
+        )
+    return catalog
 
 
 @router.post("/{source_id}/sync", response_model=SyncResponse, status_code=202)

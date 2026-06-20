@@ -57,6 +57,19 @@ class SourceView(BaseModel):
     auth_method: str
 
 
+class ConnectorView(BaseModel):
+    """A connector a source can be configured for — the source-setup form's catalog.
+
+    ``auth_method`` tells the UI how the connector is authorized (so an ``oauth2`` one prompts the
+    Google connect flow first); ``requires_config`` flags that it validates a connector-specific
+    config payload (e.g. a Telegram chat selection)."""
+
+    name: str
+    auth_method: str
+    default_sensitivity: Sensitivity
+    requires_config: bool
+
+
 class SyncResponse(BaseModel):
     """The queued connector-sync job: the source ingests via this job, not an inline POST."""
 

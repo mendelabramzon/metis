@@ -17,3 +17,6 @@ def test_root_serves_the_console(client) -> None:
     assert "/users/me" in body  # whoami validates the signed-in user
     assert "/workspaces" in body  # the workspace switcher + workspace-scoped query
     assert "/upload" in body  # file upload with a visible per-file parse status
+    assert "/sources/connectors" in body  # the source-setup form's connector catalog
+    assert "New source" in body  # the source-setup form itself
+    assert "add as source" in body  # a discovered Telegram chat can be turned into a source
