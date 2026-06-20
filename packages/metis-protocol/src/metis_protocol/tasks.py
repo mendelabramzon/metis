@@ -26,3 +26,4 @@ class ModelTaskClass(StrEnum):
     QUERY_VERIFY = "query_verify"
     SKILL_PLAN = "skill_plan"
     SKILL_EXECUTE = "skill_execute"
+    INTERPRET_COMMAND = "interpret_command"

@@ -262,7 +262,8 @@
         "query_answer",
         "query_verify",
         "skill_plan",
-        "skill_execute"
+        "skill_execute",
+        "interpret_command"
       ],
       "title": "ModelTaskClass",
       "type": "string"

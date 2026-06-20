@@ -25,6 +25,7 @@ _TASK_TIER: dict[ModelTaskClass, ModelTier] = {
     ModelTaskClass.QUERY_VERIFY: ModelTier.STANDARD,
     ModelTaskClass.SKILL_PLAN: ModelTier.FRONTIER,
     ModelTaskClass.SKILL_EXECUTE: ModelTier.STANDARD,
+    ModelTaskClass.INTERPRET_COMMAND: ModelTier.STANDARD,
 }
 
 #: Default Anthropic model per tier (LOCAL is served by a local provider).

@@ -66,4 +66,20 @@ def default_registry() -> PromptRegistry:
             ),
         )
     )
+    registry.register(
+        PromptTemplate(
+            task_class=ModelTaskClass.INTERPRET_COMMAND,
+            version="1",
+            system=(
+                "Interpret the user's request as one typed action for a context-management "
+                "assistant. Choose the single best 'kind' (answer, find_evidence, inspect_source, "
+                "draft_response, create_memory, create_wiki_patch, start_sync, "
+                "propose_source_change) and its 'risk': read_only for answers/inspection; "
+                "reversible for internal reversible changes; memory_write or wiki_write for those "
+                "writes; external for outbound side effects. Write a one-line 'summary' of what "
+                "will happen, and put any typed arguments (e.g. a query, a source_id) in "
+                "'parameters'. Do not perform the action. Return JSON matching the schema."
+            ),
+        )
+    )
     return registry
