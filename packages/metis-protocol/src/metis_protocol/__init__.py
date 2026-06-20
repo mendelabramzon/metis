@@ -114,6 +114,7 @@ from metis_protocol.ids import (
     uuid7,
 )
 from metis_protocol.interfaces import (
+    ActionStore,
     ArtifactStore,
     AuditSink,
     ClaimStore,
@@ -215,6 +216,7 @@ __all__ = [
     "ActionKind",
     "ActionRisk",
     "ActionStatus",
+    "ActionStore",
     "AgentKind",
     "ApprovalDecision",
     "Artifact",

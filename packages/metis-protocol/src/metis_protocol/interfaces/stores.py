@@ -9,9 +9,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
+from metis_protocol.actions import ProposedAction
 from metis_protocol.artifacts import NormalizedDoc, ParsedDoc, RawArtifact, Segment
 from metis_protocol.claims import Claim, ClaimWriteResult, ExtractionBatch
-from metis_protocol.enums import Role
+from metis_protocol.enums import ActionStatus, Role
 from metis_protocol.identity import (
     Organization,
     User,
@@ -20,6 +21,7 @@ from metis_protocol.identity import (
     WorkspaceModelPolicy,
 )
 from metis_protocol.ids import (
+    ActionId,
     ClaimId,
     ContradictionId,
     DocId,
@@ -193,3 +195,20 @@ class SourceStore(Protocol):
     async def list_discovered_chats(
         self, business_connection_id: str | None = None
     ) -> Sequence[TelegramDiscoveredChat]: ...
+
+
+class ActionStore(Protocol):
+    """Durable proposed actions: the typed intent the system understood a request as, persisted
+    before execution with the human decision recorded. ``propose`` is idempotent by id; ``update``
+    replaces the action as it is decided then executed.
+    """
+
+    async def propose(self, action: ProposedAction) -> ProposedAction: ...
+
+    async def get(self, action_id: ActionId) -> ProposedAction | None: ...
+
+    async def list(
+        self, workspace_id: WorkspaceId, *, status: ActionStatus | None = None
+    ) -> Sequence[ProposedAction]: ...
+
+    async def update(self, action: ProposedAction) -> ProposedAction: ...

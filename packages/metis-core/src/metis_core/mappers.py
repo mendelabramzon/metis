@@ -26,6 +26,7 @@ from metis_core.models import (
     OrganizationRow,
     ParsedDocRow,
     ProfileRow,
+    ProposedActionRow,
     RawArtifactRow,
     SegmentRow,
     SourceConfigRow,
@@ -58,6 +59,7 @@ from metis_protocol import (
     Organization,
     ParsedDoc,
     Profile,
+    ProposedAction,
     RawArtifact,
     Segment,
     SourceConfig,
@@ -286,6 +288,18 @@ def source_config_to_row(m: SourceConfig) -> SourceConfigRow:
         schema_version=m.schema_version,
         connector=m.connector,
         active=m.active,
+        created_at=m.created_at,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def proposed_action_to_row(m: ProposedAction) -> ProposedActionRow:
+    return ProposedActionRow(
+        id=str(m.id),
+        workspace_id=str(m.workspace_id),
+        schema_version=m.schema_version,
+        kind=m.kind.value,
+        status=m.status.value,
         created_at=m.created_at,
         body=m.model_dump(mode="json"),
     )

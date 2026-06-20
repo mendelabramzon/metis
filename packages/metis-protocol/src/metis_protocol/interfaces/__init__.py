@@ -24,6 +24,7 @@ from metis_protocol.interfaces.processing import (
 from metis_protocol.interfaces.retrieval import ContextPacker, Retriever
 from metis_protocol.interfaces.skills import Skill, SkillRunner
 from metis_protocol.interfaces.stores import (
+    ActionStore,
     ArtifactStore,
     ClaimStore,
     DocumentStore,
@@ -34,6 +35,7 @@ from metis_protocol.interfaces.stores import (
 )
 
 __all__ = [
+    "ActionStore",
     "ArtifactStore",
     "AuditSink",
     "ClaimStore",
