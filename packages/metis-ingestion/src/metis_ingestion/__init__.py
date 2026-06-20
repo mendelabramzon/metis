@@ -63,6 +63,7 @@ from metis_ingestion.raw import build_raw_artifact
 from metis_ingestion.segment import parse_document
 from metis_ingestion.sync_worker import ConnectorSyncWorker
 from metis_ingestion.telegram_drain import drain_telegram_once, extract_discovered_chats
+from metis_ingestion.telegram_tdlib_drain import drain_tdlib_once
 
 __version__ = "0.0.0"
 
@@ -116,6 +117,7 @@ __all__ = [
     "build_raw_artifact",
     "build_tdlib_connector",
     "build_telegram_connector",
+    "drain_tdlib_once",
     "drain_telegram_once",
     "extract_discovered_chats",
     "get_format",

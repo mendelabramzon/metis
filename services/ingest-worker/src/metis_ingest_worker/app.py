@@ -13,7 +13,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -34,6 +36,7 @@ from metis_core.objectstore import S3ObjectStore
 from metis_core.observability import setup_telemetry
 from metis_core.security import Cryptobox
 from metis_core.security.deletion import erase_artifacts_by_filename
+from metis_core.security.secrets import SecretNotFoundError
 from metis_core.stores import (
     PostgresClaimStore,
     PostgresDocumentStore,
@@ -49,17 +52,27 @@ from metis_ingestion import (
     IngestionPipeline,
     IngestPoller,
     LocalFolderConnector,
+    NativeTdjsonClient,
     OAuth2Client,
     OAuthTokens,
     TelegramBotClient,
     TelegramSourceConfig,
     build_gmail_connector,
     build_google_drive_connector,
+    build_tdlib_connector,
     build_telegram_connector,
+    drain_tdlib_once,
     drain_telegram_once,
     extract_discovered_chats,
 )
-from metis_ingestion.connectors import FetchingConnector
+from metis_ingestion.connectors import (
+    AuthState,
+    FetchingConnector,
+    TdlibParameters,
+    TelegramSession,
+    TelegramTdlibClient,
+    load_tdjson_library,
+)
 from metis_ingestion.poller import Pipeline
 from metis_ingestion.security.cred_store import EncryptedCredentialStore
 from metis_protocol import AuditSink, ModelTier, SourceConfig, SourceId, WorkspaceId
@@ -359,7 +372,15 @@ async def _drain_telegram(settings: IngestWorkerSettings, core: CoreSettings) ->
     offset = 0
     try:
         while True:
-            active = [s for s in await sources.list_all() if s.connector == "telegram" and s.active]
+            # Bot sources carry a business connection; TDLib sources (a tdlib_user_id, no
+            # connection) are backfilled by the telegram_tdlib drain, not the bot's getUpdates.
+            active = [
+                s
+                for s in await sources.list_all()
+                if s.connector == "telegram"
+                and s.active
+                and TelegramSourceConfig.model_validate(s.config).business_connection_id
+            ]
             offset = await drain_telegram_once(
                 client=client,
                 offset=offset,
@@ -371,6 +392,111 @@ async def _drain_telegram(settings: IngestWorkerSettings, core: CoreSettings) ->
             await asyncio.sleep(settings.poll_interval_seconds)
     finally:
         http.close()
+        for close in ocr_closers:
+            await close()
+        await engine.dispose()
+
+
+async def _drain_tdlib(settings: IngestWorkerSettings, core: CoreSettings) -> None:
+    """Backfill the opt-in TDLib sources: per account, reopen its authorized session + page history.
+
+    TDLib sources are the Telegram sources carrying a ``tdlib_user_id`` (vs. the bot path's business
+    connection). Each account's db-encryption key comes from the cred store; the worker reopens that
+    authorized TDLib database (a shared volume the gateway login created), drives the session to
+    READY, and backfills each chat through the same per-chat connector/cursor as the bot path.
+    Backfill is read-only history, so there are no deletions to tombstone.
+    """
+    if not settings.telegram_api_id or not settings.telegram_api_hash:
+        raise ValueError("telegram_tdlib mode needs METIS_INGEST_WORKER_TELEGRAM_API_ID/HASH set")
+    if not settings.cred_store_key:
+        raise ValueError("telegram_tdlib mode needs METIS_INGEST_WORKER_CRED_STORE_KEY set")
+    engine = make_engine(core.database_url)
+    sessionmaker = make_sessionmaker(engine)
+    object_store = S3ObjectStore(
+        bucket=core.object_store_bucket,
+        endpoint_url=core.object_store_endpoint_url,
+        region=core.object_store_region,
+        access_key=core.object_store_access_key,
+        secret_key=core.object_store_secret_key,
+    )
+    await object_store.ensure_bucket()
+    sources = PostgresSourceStore(sessionmaker)
+    artifact_store = PostgresMinioArtifactStore(sessionmaker, object_store)
+    document_store = PostgresDocumentStore(sessionmaker)
+    claim_store = PostgresClaimStore(sessionmaker)
+    audit_sink = PostgresAuditSink(sessionmaker)
+    ocr_caller, ocr_closers = _vision_caller(settings, audit_sink)
+    credentials = EncryptedCredentialStore(Cryptobox(settings.cred_store_key))
+
+    @contextmanager
+    def account_sessions(user_id: str) -> Iterator[TelegramTdlibClient | None]:
+        """Open one account's authorized backfill client (None if missing or unauthorized)."""
+        try:
+            db_key = credentials.for_connector("telegram_tdlib").resolve(f"db_key:{user_id}")
+        except SecretNotFoundError:
+            logger.warning("telegram_tdlib: no stored db key for account %s; skipping", user_id)
+            yield None
+            return
+        params = TdlibParameters(
+            api_id=settings.telegram_api_id,
+            api_hash=settings.telegram_api_hash,
+            database_directory=str(Path(settings.telegram_tdlib_data_root) / user_id),
+            database_encryption_key=db_key,
+        )
+        client = NativeTdjsonClient(load_tdjson_library(settings.telegram_tdlib_library or None))
+        session = TelegramSession(client=client, parameters=params)
+        if session.pump(poll_timeout=settings.telegram_tdlib_poll_seconds) is not AuthState.READY:
+            logger.warning("telegram_tdlib: account %s did not authorize; skipping", user_id)
+            client.close()
+            yield None
+            return
+        try:
+            yield TelegramTdlibClient(client)
+        finally:
+            client.close()  # release the handle so the account's database is free next cycle
+
+    async def sync_source(
+        source: SourceConfig,
+        messages: Sequence[Mapping[str, Any]],
+        users: Mapping[int, Mapping[str, Any]],
+        chats: Mapping[int, Mapping[str, Any]],
+    ) -> None:
+        config = TelegramSourceConfig.model_validate(source.config)
+        transcribe = (
+            model_transcriber(ocr_caller, source.workspace_id) if ocr_caller is not None else None
+        )
+        connector = build_tdlib_connector(
+            workspace_id=source.workspace_id,
+            config=config,
+            sensitivity=source.sensitivity,
+            messages=messages,
+            users=users,
+            chats=chats,
+        )
+        pipeline = IngestionPipeline(
+            connector=connector,
+            artifact_store=artifact_store,
+            document_store=document_store,
+            claim_store=claim_store,
+            audit_sink=audit_sink,
+            source_id=source.id,
+            transcribe=transcribe,
+        )
+        poller = await DurableIngestPoller.resume(pipeline, source=source, store=sources)
+        await poller.poll_once()
+
+    try:
+        while True:
+            synced = await drain_tdlib_once(
+                sources=await sources.list_all(),
+                account_sessions=account_sessions,
+                sync_source=sync_source,
+                page_size=settings.telegram_tdlib_page_size,
+                max_pages=settings.telegram_tdlib_max_pages,
+            )
+            logger.info("telegram_tdlib backfill: %d source(s) synced", synced)
+            await asyncio.sleep(settings.poll_interval_seconds)
+    finally:
         for close in ocr_closers:
             await close()
         await engine.dispose()
@@ -391,7 +517,7 @@ def run(
     if dry_run:
         logger.info("dry run complete; not polling")
         return settings
-    runners = {"poll": _poll, "telegram": _drain_telegram}
+    runners = {"poll": _poll, "telegram": _drain_telegram, "telegram_tdlib": _drain_tdlib}
     runner = runners.get(settings.mode, _drain_jobs)
     asyncio.run(runner(settings, CoreSettings()))
     return settings

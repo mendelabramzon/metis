@@ -46,6 +46,21 @@ class AuthState(StrEnum):
     CLOSED = "closed"  # logged out / revoked / session closed
 
 
+#: States the pump stops on: terminal (READY/CLOSED) or waiting on user input. TDLib will not leave
+#: one without fresh input, so an empty receive while in one means "nothing more right now" — unlike
+#: the transient WAIT_PARAMETERS, where TDLib is still working and more updates are coming.
+_SETTLED = frozenset(
+    {
+        AuthState.WAIT_PHONE,
+        AuthState.WAIT_QR,
+        AuthState.WAIT_CODE,
+        AuthState.WAIT_PASSWORD,
+        AuthState.READY,
+        AuthState.CLOSED,
+    }
+)
+
+
 @runtime_checkable
 class TdjsonClient(Protocol):
     """The low-level tdjson transport: send a request, receive the next update/response.
@@ -159,6 +174,29 @@ class TelegramSession:
             self._submit_code()
         elif self.state is AuthState.WAIT_PASSWORD:
             self._submit_password()
+        return self.state
+
+    def pump(
+        self, *, poll_timeout: float = 1.0, max_updates: int = 100, max_empty_polls: int = 2
+    ) -> AuthState:
+        """Receive updates from the client and :meth:`handle` them until the flow settles.
+
+        Stops at a terminal state (READY/CLOSED) or a wait-for-input state, using an empty receive
+        as the signal that TDLib has nothing more to say for now. Both drivers use it: the gateway
+        surfaces the settled state to the user; the worker (reopening an already-authorized db,
+        which advances straight to READY) treats anything but READY as a failure to authorize."""
+        empty = 0
+        for _ in range(max_updates):
+            update = self.client.receive(poll_timeout)
+            if update is None:
+                empty += 1
+                if self.state in _SETTLED or empty >= max_empty_polls:
+                    break
+                continue
+            empty = 0
+            self.handle(update)
+            if self.state in (AuthState.READY, AuthState.CLOSED):
+                break
         return self.state
 
     def _begin_login(self) -> None:
@@ -295,3 +333,16 @@ class TelegramTdlibClient:
         users = {uid: self.get_user(uid) for uid in sorted(user_ids)}
         chats = {cid: self.get_chat(cid) for cid in sorted(chat_ids)}
         return users, chats
+
+    def backfill_chat(
+        self, chat_id: int, *, page_size: int = 50, max_pages: int = 20
+    ) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]], dict[int, dict[str, Any]]]:
+        """A chat's history plus the lookups :func:`build_tdlib_connector` needs to render it.
+
+        Pages the history, resolves the sender users/chats, and adds the chat's own object so the
+        transport renders a real title/kind rather than the config fallback. The one call the worker
+        backfill drain makes per source."""
+        messages = self.backfill(chat_id, page_size=page_size, max_pages=max_pages)
+        users, chats = self.resolve_lookups(messages)
+        chats[chat_id] = self.get_chat(chat_id)
+        return messages, users, chats

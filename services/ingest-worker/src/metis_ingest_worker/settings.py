@@ -54,6 +54,17 @@ class IngestWorkerSettings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_base_url: str = "https://api.telegram.org"
     telegram_timeout_seconds: float = 0.0
+    # Opt-in Telegram TDLib backfill (mode == "telegram_tdlib"): page history for the per-account
+    # sources whose authorized session the gateway login created. Needs a Telegram app api id/hash,
+    # the shared TDLib data root + libtdjson, and the cred store key (the db-encryption key is read
+    # from it per account). 0 api id = disabled. Poll/page sizes are conservative by default.
+    telegram_api_id: int = 0
+    telegram_api_hash: str = ""
+    telegram_tdlib_data_root: str = "/var/lib/metis/tdlib"  # per-account TDLib database dirs
+    telegram_tdlib_library: str = ""  # path to libtdjson; empty = platform library discovery
+    telegram_tdlib_poll_seconds: float = 1.0  # the session pump's per-update receive timeout
+    telegram_tdlib_page_size: int = 50  # getChatHistory page size
+    telegram_tdlib_max_pages: int = 20  # history pages per chat per cycle (a conservative bound)
     # OCR for scanned PDFs (optional): a vision model for the parse-quality escalation. Either an
     # Anthropic key (cloud Claude vision) and/or a self-hosted OpenAI-compatible vision endpoint.
     # Absent both, ingestion stays deterministic + layout-only (no OCR).

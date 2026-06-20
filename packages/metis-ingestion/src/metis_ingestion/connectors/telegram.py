@@ -39,12 +39,17 @@ class TelegramSourceConfig(BaseModel):
 
     One selected chat per source: the Business connection that authorizes the bot to see it, the
     chat id, and its kind (which sets the sensitivity floor). The opt-in TDLib path fills the same
-    shape with ``business_connection_id`` left empty.
+    shape with ``business_connection_id`` left empty and ``tdlib_user_id`` set to the account whose
+    authorized session backfills the chat — the discriminator the worker drains dispatch on (bot
+    sources carry a connection id; TDLib sources carry an account id).
     """
 
     business_connection_id: str = ""
     chat_id: int
     chat_type: str = "private"
+    tdlib_user_id: str = (
+        ""  # the account that backfills this chat (TDLib path); empty on the bot path
+    )
 
 
 class _Sender(BaseModel):
