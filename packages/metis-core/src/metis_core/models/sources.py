@@ -9,7 +9,7 @@ which need not be an identity-table row.
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean
+from sqlalchemy import BigInteger, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
 
 from metis_core.db.base import Base
@@ -40,3 +40,14 @@ class ConnectorRunRow(Base, IdMixin, WorkspaceMixin, VersionMixin, BodyMixin):
     source_id: Mapped[Id] = mapped_column(index=True)
     status: Mapped[str] = mapped_column(index=True)
     started_at: Mapped[TZDateTime] = mapped_column(index=True)
+
+
+class TelegramChatRow(Base, VersionMixin, BodyMixin):
+    """One chat discovered on a Business connection (keyed by connection + chat), upserted as
+    messages arrive — the operator's source-selection candidates. Operational state, no envelope."""
+
+    __tablename__ = "telegram_chats"
+
+    business_connection_id: Mapped[str] = mapped_column(primary_key=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    last_seen_at: Mapped[TZDateTime] = mapped_column(index=True)

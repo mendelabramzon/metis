@@ -112,6 +112,7 @@ from metis_protocol import (
     SourceSpan,
     SourceSpanRef,
     SourceStore,
+    TelegramDiscoveredChat,
     User,
     UserId,
     WorkspaceId,
@@ -662,6 +663,7 @@ class InMemorySourceStore:
         self._configs: dict[str, SourceConfig] = {}
         self._cursors: dict[str, SourceCursor] = {}
         self._runs: dict[str, ConnectorRun] = {}
+        self._chats: dict[tuple[str, int], TelegramDiscoveredChat] = {}
 
     async def register(self, config: SourceConfig) -> SourceConfig:
         return self._configs.setdefault(str(config.id), config)
@@ -696,6 +698,21 @@ class InMemorySourceStore:
         self._configs.pop(sid, None)
         self._cursors.pop(sid, None)
         self._runs = {k: v for k, v in self._runs.items() if str(v.source_id) != sid}
+
+    async def upsert_discovered_chat(self, chat: TelegramDiscoveredChat) -> TelegramDiscoveredChat:
+        self._chats[(chat.business_connection_id, chat.chat_id)] = chat
+        return chat
+
+    async def list_discovered_chats(
+        self, business_connection_id: str | None = None
+    ) -> Sequence[TelegramDiscoveredChat]:
+        chats = [
+            c
+            for c in self._chats.values()
+            if business_connection_id is None or c.business_connection_id == business_connection_id
+        ]
+        chats.sort(key=lambda c: c.last_seen_at, reverse=True)
+        return chats
 
 
 class WikiInbox:

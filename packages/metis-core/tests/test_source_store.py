@@ -19,6 +19,7 @@ from metis_protocol import (
     SourceConfig,
     SourceCursor,
     SourceId,
+    TelegramDiscoveredChat,
     WorkspaceId,
     new_id,
 )
@@ -147,3 +148,45 @@ async def test_config_payload_round_trips(sessionmaker):
 
     assert fetched is not None
     assert fetched.config == payload  # the connector-specific selection survives the JSON body
+
+
+async def test_discovered_chats_upsert_in_place_and_list(sessionmaker):
+    store = PostgresSourceStore(sessionmaker)
+    chat = TelegramDiscoveredChat(
+        business_connection_id="bc-1",
+        chat_id=7001,
+        chat_type="private",
+        title="Ada",
+        last_message_id=5,
+        last_seen_at=_T,
+    )
+    await store.upsert_discovered_chat(chat)
+    await store.upsert_discovered_chat(  # same (connection, chat): newer title + message, in place
+        chat.model_copy(
+            update={
+                "title": "Ada Lovelace",
+                "last_message_id": 9,
+                "last_seen_at": _T + timedelta(minutes=1),
+            }
+        )
+    )
+    await store.upsert_discovered_chat(
+        TelegramDiscoveredChat(
+            business_connection_id="bc-2",
+            chat_id=42,
+            chat_type="channel",
+            title="Acme",
+            last_seen_at=_T,
+        )
+    )
+
+    everything = await store.list_discovered_chats()
+    assert {(c.business_connection_id, c.chat_id) for c in everything} == {
+        ("bc-1", 7001),
+        ("bc-2", 42),
+    }
+
+    bc1 = await store.list_discovered_chats(business_connection_id="bc-1")
+    assert len(bc1) == 1  # upserted in place, not appended
+    assert bc1[0].title == "Ada Lovelace"
+    assert bc1[0].last_message_id == 9

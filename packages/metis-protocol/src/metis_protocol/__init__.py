@@ -185,6 +185,7 @@ from metis_protocol.sources import (
     SourceConfig,
     SourceCredentialRef,
     SourceCursor,
+    TelegramDiscoveredChat,
 )
 from metis_protocol.tasks import ModelTaskClass
 from metis_protocol.versioning import (
@@ -338,6 +339,7 @@ __all__ = [
     "SourceSpanId",
     "SourceSpanRef",
     "SourceStore",
+    "TelegramDiscoveredChat",
     "UnknownEventError",
     "User",
     "UserId",

@@ -28,7 +28,12 @@ from metis_core.models.memory import (
     MemSceneRow,
     ProfileRow,
 )
-from metis_core.models.sources import ConnectorRunRow, SourceConfigRow, SourceCursorRow
+from metis_core.models.sources import (
+    ConnectorRunRow,
+    SourceConfigRow,
+    SourceCursorRow,
+    TelegramChatRow,
+)
 from metis_core.models.wiki import WikiPageRow, WikiPatchReviewRow, WikiPatchRow
 
 __all__ = [
@@ -54,6 +59,7 @@ __all__ = [
     "SourceConfigRow",
     "SourceCursorRow",
     "SourceSpanRow",
+    "TelegramChatRow",
     "UserRow",
     "WikiPageRow",
     "WikiPatchReviewRow",

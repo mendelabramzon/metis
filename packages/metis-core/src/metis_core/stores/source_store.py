@@ -20,10 +20,23 @@ from metis_core.mappers import (
     connector_run_to_row,
     source_config_to_row,
     source_cursor_to_row,
+    telegram_chat_to_row,
     to_model,
 )
-from metis_core.models import ConnectorRunRow, SourceConfigRow, SourceCursorRow
-from metis_protocol import ConnectorRun, SourceConfig, SourceCursor, SourceId, WorkspaceId
+from metis_core.models import (
+    ConnectorRunRow,
+    SourceConfigRow,
+    SourceCursorRow,
+    TelegramChatRow,
+)
+from metis_protocol import (
+    ConnectorRun,
+    SourceConfig,
+    SourceCursor,
+    SourceId,
+    TelegramDiscoveredChat,
+    WorkspaceId,
+)
 
 
 class PostgresSourceStore:
@@ -80,6 +93,32 @@ class PostgresSourceStore:
                 existing.updated_at = cursor.updated_at
                 existing.body = cursor.model_dump(mode="json")
         return cursor
+
+    # --- Telegram discovered chats (per connection+chat, upserted as messages arrive) -----
+
+    async def upsert_discovered_chat(self, chat: TelegramDiscoveredChat) -> TelegramDiscoveredChat:
+        async with unit_of_work(self._sessionmaker) as session:
+            existing = await session.get(
+                TelegramChatRow, (chat.business_connection_id, chat.chat_id)
+            )
+            if existing is None:
+                session.add(telegram_chat_to_row(chat))
+            else:
+                existing.schema_version = chat.schema_version
+                existing.last_seen_at = chat.last_seen_at
+                existing.body = chat.model_dump(mode="json")
+        return chat
+
+    async def list_discovered_chats(
+        self, business_connection_id: str | None = None
+    ) -> Sequence[TelegramDiscoveredChat]:
+        """Discovered chats, most-recently-seen first; filtered to one connection when given."""
+        stmt = select(TelegramChatRow).order_by(TelegramChatRow.last_seen_at.desc())
+        if business_connection_id is not None:
+            stmt = stmt.where(TelegramChatRow.business_connection_id == business_connection_id)
+        async with unit_of_work(self._sessionmaker) as session:
+            rows = (await session.scalars(stmt)).all()
+        return [to_model(row, TelegramDiscoveredChat) for row in rows]
 
     # --- connector-run history (upserted by id: open then close) ------------------------
 

@@ -31,6 +31,7 @@ from metis_core.models import (
     SourceConfigRow,
     SourceCursorRow,
     SourceSpanRow,
+    TelegramChatRow,
     UserRow,
     WikiPageRow,
     WikiPatchRow,
@@ -62,6 +63,7 @@ from metis_protocol import (
     SourceConfig,
     SourceCursor,
     SourceSpan,
+    TelegramDiscoveredChat,
     User,
     VersionedModel,
     WikiPage,
@@ -285,6 +287,16 @@ def source_config_to_row(m: SourceConfig) -> SourceConfigRow:
         connector=m.connector,
         active=m.active,
         created_at=m.created_at,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def telegram_chat_to_row(m: TelegramDiscoveredChat) -> TelegramChatRow:
+    return TelegramChatRow(
+        business_connection_id=m.business_connection_id,
+        chat_id=m.chat_id,
+        schema_version=m.schema_version,
+        last_seen_at=m.last_seen_at,
         body=m.model_dump(mode="json"),
     )
 

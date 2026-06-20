@@ -57,6 +57,7 @@ from metis_ingestion import (
     build_google_drive_connector,
     build_telegram_connector,
     drain_telegram_once,
+    extract_discovered_chats,
 )
 from metis_ingestion.connectors import FetchingConnector
 from metis_ingestion.poller import Pipeline
@@ -351,12 +352,20 @@ async def _drain_telegram(settings: IngestWorkerSettings, core: CoreSettings) ->
                 filenames=connector.deleted_message_ids,
             )
 
+    async def record_chats(updates: Sequence[Mapping[str, Any]]) -> None:
+        for chat in extract_discovered_chats(updates):
+            await sources.upsert_discovered_chat(chat)
+
     offset = 0
     try:
         while True:
             active = [s for s in await sources.list_all() if s.connector == "telegram" and s.active]
             offset = await drain_telegram_once(
-                client=client, offset=offset, sources=active, sync_source=sync_source
+                client=client,
+                offset=offset,
+                sources=active,
+                sync_source=sync_source,
+                record_chats=record_chats,
             )
             logger.info("telegram drain: %d active source(s), next offset=%d", len(active), offset)
             await asyncio.sleep(settings.poll_interval_seconds)

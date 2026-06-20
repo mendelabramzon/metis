@@ -44,7 +44,12 @@ from metis_protocol.memory import (
 )
 from metis_protocol.query import ClaimFilter, MemoryScope
 from metis_protocol.refs import ArtifactRef
-from metis_protocol.sources import ConnectorRun, SourceConfig, SourceCursor
+from metis_protocol.sources import (
+    ConnectorRun,
+    SourceConfig,
+    SourceCursor,
+    TelegramDiscoveredChat,
+)
 from metis_protocol.wiki import WikiPage, WikiPatch
 
 
@@ -180,3 +185,11 @@ class SourceStore(Protocol):
 
     # Remove the source registration (config + cursor + run history). The artifacts it produced are
     # erased separately (right-to-erasure), not here.
+
+    async def upsert_discovered_chat(
+        self, chat: TelegramDiscoveredChat
+    ) -> TelegramDiscoveredChat: ...
+
+    async def list_discovered_chats(
+        self, business_connection_id: str | None = None
+    ) -> Sequence[TelegramDiscoveredChat]: ...

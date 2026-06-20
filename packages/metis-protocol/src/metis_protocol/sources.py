@@ -84,3 +84,21 @@ class ConnectorRun(VersionedModel):
     artifacts: int = 0
     claims: int = 0
     error: str | None = None
+
+
+class TelegramDiscoveredChat(VersionedModel):
+    """A chat the bot has observed on a Business connection — surfaced for source selection.
+
+    The Bot API has no "list authorized chats" call, so chats are discovered as messages arrive:
+    one record per ``(business_connection_id, chat_id)``, upserted with the latest title + message
+    as new messages come in, so an operator can pick which chats to ingest without knowing the
+    numeric ids in advance. Operational discovery state, not evidence — like the cursors, it
+    is not in the schema snapshot set.
+    """
+
+    business_connection_id: str
+    chat_id: int
+    chat_type: str
+    title: str
+    last_message_id: int = 0
+    last_seen_at: AwareDatetime

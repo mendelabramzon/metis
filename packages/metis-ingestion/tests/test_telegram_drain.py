@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from metis_ingestion import TelegramBotClient, drain_telegram_once
+from metis_ingestion import TelegramBotClient, drain_telegram_once, extract_discovered_chats
 from metis_protocol import Sensitivity, SourceConfig, SourceId, WorkspaceId, new_id
 
 
@@ -86,3 +86,35 @@ async def test_empty_batch_keeps_the_offset_and_touches_nothing() -> None:
 
     assert offset == 42  # nothing new -> the offset holds
     assert touched is False
+
+
+def test_extract_discovered_chats_dedups_by_connection_and_chat() -> None:
+    def _msg(**over: Any) -> dict[str, Any]:
+        base = {
+            "message_id": 5,
+            "business_connection_id": "bc-1",
+            "chat": {"id": 7001, "type": "private", "first_name": "Ada"},
+            "date": 1,
+            "text": "hi",
+        }
+        base.update(over)
+        return base
+
+    updates = [
+        {"update_id": 1, "business_message": _msg(message_id=5)},
+        {"update_id": 2, "business_message": _msg(message_id=9)},  # same chat, newer message
+        {
+            "update_id": 3,
+            "business_message": _msg(
+                message_id=1,
+                business_connection_id="bc-2",
+                chat={"id": -100, "type": "channel", "title": "Acme"},
+            ),
+        },
+    ]
+    chats = {(c.business_connection_id, c.chat_id): c for c in extract_discovered_chats(updates)}
+
+    assert set(chats) == {("bc-1", 7001), ("bc-2", -100)}  # one record per (connection, chat)
+    assert chats[("bc-1", 7001)].last_message_id == 9  # the latest message in the batch wins
+    assert chats[("bc-1", 7001)].title == "Ada"
+    assert chats[("bc-2", -100)].chat_type == "channel"

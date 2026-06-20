@@ -37,6 +37,14 @@ class SourceCreate(BaseModel):
     config: dict[str, JsonValue] = Field(default_factory=dict)  # connector-specific selection
 
 
+class TelegramChatView(BaseModel):
+    business_connection_id: str
+    chat_id: int
+    chat_type: str
+    title: str
+    last_message_id: int
+
+
 class SourceView(BaseModel):
     id: str
     workspace_id: str
