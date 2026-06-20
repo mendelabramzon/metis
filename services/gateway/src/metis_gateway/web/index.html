@@ -38,6 +38,7 @@
     .external { background: #c62a2a22; color: #c62a2a; }
     .pill { font-size: .72em; padding: .1rem .45rem; border: 1px solid var(--bd); border-radius: 999px; }
     .ok { color: #2e7d32; } .bad { color: #c62a2a; }
+    a { color: #2a72e6; cursor: pointer; text-decoration: none; }
     .meta { margin: .35rem 0; }
     .meta span { margin-right: .9rem; }
     .cardactions { display: flex; gap: .4rem; margin-top: .5rem; }
@@ -114,6 +115,19 @@
       </div>
       <div id="contradictions-out"></div>
     </section>
+    <section id="evidence">
+      <p class="mut">Drill a citation back through the truth hierarchy: claim → spans (quoted) → artifact; a mem cell → its claims. Sign in and pick a workspace.</p>
+      <div class="row">
+        <select id="ev-kind">
+          <option value="claim">claim</option>
+          <option value="artifact">artifact</option>
+          <option value="memory">mem cell</option>
+        </select>
+        <input id="ev-id" placeholder="id (clm_… / art_… / mem_…)" />
+        <button class="act primary" onclick="inspectEvidence()">Inspect</button>
+      </div>
+      <div id="evidence-out"></div>
+    </section>
     <section id="spend">
       <p class="mut">Model spend for the active workspace today (workspace admin). Sign in and pick a workspace.</p>
       <button class="act" onclick="loadSpend()">Refresh</button><div id="spend-out"></div>
@@ -127,7 +141,7 @@
     <section id="audit"><button class="act" onclick="load('audit')">Refresh</button><div id="audit-out"></div></section>
   </main>
   <script>
-    const TABS = ["command", "ask", "upload", "sources", "telegram", "contradictions", "spend", "providers", "jobs", "approvals", "audit"];
+    const TABS = ["command", "ask", "upload", "sources", "telegram", "contradictions", "evidence", "spend", "providers", "jobs", "approvals", "audit"];
     const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     const tok = () => document.getElementById("token").value.trim();   // operator / scope token
     const uid = () => document.getElementById("user").value.trim();    // signed-in user id (identity bearer)
@@ -226,7 +240,9 @@
       const r = scoped
         ? await userApi(`/workspaces/${ws()}/query`, { method: "POST", body: JSON.stringify({ text }) })
         : await api("/query", { method: "POST", body: JSON.stringify({ text }) });
-      const cites = (r.citations || []).map(c => `claim ${esc((c.claim_id || "").slice(0, 12))}… · span ${esc((c.source_span_id || "—").slice(0, 12))}`).join("<br>");
+      const cites = (r.citations || []).map(c => c.claim_id
+        ? `<a href="#" onclick="evDrill('${esc(c.claim_id)}','claim');return false">claim ${esc(c.claim_id.slice(0, 12))}…</a>`
+        : "—").join("<br>");
       const where = scoped ? `workspace ${esc(ws().slice(0, 12))}…` : "default workspace (scope token)";
       document.getElementById("answer").innerHTML = `<pre>${esc(r.answer || "")}</pre><div class="mut">${r.sufficient ? cites : "no grounded evidence"} · ${where}</div>`;
     }
@@ -263,7 +279,7 @@
 
     // --- contradictions + spend (workspace-scoped, identity bearer) -----------------------------
     function contradictionCard(c) {
-      const claims = (c.claim_ids || []).map(id => `claim ${esc(id.slice(0, 12))}…`).join(" · ");
+      const claims = (c.claim_ids || []).map(id => `<a href="#" onclick="evDrill('${esc(id)}','claim');return false">claim ${esc(id.slice(0, 12))}…</a>`).join(" · ");
       const buttons = c.status === "open"
         ? `<button class="act primary" onclick="reviewContradiction('${c.contradiction_id}','resolved')">Resolve</button>
            <button class="act" onclick="reviewContradiction('${c.contradiction_id}','dismissed')">Dismiss</button>`
@@ -295,6 +311,38 @@
       const rows = Object.entries(s.today_by_task || {}).map(([task, usd]) => ({ task, usd: Number(usd).toFixed(4) }));
       out.innerHTML = `<div class="card"><b>$${s.today_total_usd.toFixed(4)}</b> <span class="mut">today, total</span></div>`
         + (rows.length ? table(rows, ["task", "usd"]) : "<i class='mut'>no per-task spend yet</i>");
+    }
+
+    // --- evidence drill-down (workspace-scoped): claim → spans → artifact; mem cell → claims -----
+    async function inspectEvidence(id, kind) {
+      const out = document.getElementById("evidence-out");
+      if (!uid() || !ws()) { out.innerHTML = "<i class='mut'>sign in and pick a workspace first</i>"; return; }
+      if (id) { document.getElementById("ev-id").value = id; if (kind) document.getElementById("ev-kind").value = kind; }
+      const k = document.getElementById("ev-kind").value;
+      const eid = document.getElementById("ev-id").value.trim();
+      if (!eid) return;
+      const path = k === "claim" ? "claims" : k === "artifact" ? "artifacts" : "memory";
+      out.innerHTML = renderEvidence(k, await userApi(`/workspaces/${ws()}/${path}/${eid}`));
+    }
+    function evDrill(id, kind) { show("evidence"); inspectEvidence(id, kind); }  // a clickable citation
+    function renderEvidence(kind, r) {
+      if (!r || r.error) return `<i class='mut bad'>${esc(emsg(r) || "not found")}</i>`;
+      if (kind === "claim") {
+        const spans = (r.spans || []).map(s => `<div class="card">
+          <div>${s.quote != null ? "“" + esc(s.quote) + "”" : "<i class='mut'>no quote resolved</i>"}</div>
+          <div class="meta mut"><span>span ${esc(s.source_span_id.slice(0, 12))}…</span><span>chars ${esc(s.char_start)}–${esc(s.char_end)}</span>${s.page != null ? `<span>page ${esc(s.page)}</span>` : ""}<button class="act" onclick="evDrill('${esc(s.artifact_id)}','artifact')">artifact</button></div>
+        </div>`).join("");
+        return `<div class="card"><h4>claim</h4><div>${esc(r.text)}</div>
+          <div class="meta mut"><span>confidence ${esc(r.confidence)}</span><span>${r.negated ? "negated" : "asserted"}</span><span>sensitivity ${esc(r.sensitivity)}</span></div></div>${spans || "<i class='mut'>no spans</i>"}`;
+      }
+      if (kind === "artifact") {
+        return `<div class="card"><h4>artifact ${r.tombstoned ? "<span class='badge external'>tombstoned</span>" : ""}</h4>
+          <div>${esc(r.filename || "(no filename)")} <span class="pill">${esc(r.kind)}</span> <span class="mut">${esc(r.media_type)} · ${esc(r.byte_size)} bytes</span></div>
+          <div class="meta mut"><span>connector ${esc(r.connector)}</span>${r.source_id ? `<span>source ${esc(r.source_id.slice(0, 12))}…</span>` : ""}<span>${esc(r.created_at)}</span></div></div>`;
+      }
+      const claims = (r.claim_ids || []).map(id => `<button class="act" onclick="evDrill('${esc(id)}','claim')">claim ${esc(id.slice(0, 12))}…</button>`).join(" ");
+      return `<div class="card"><h4>mem cell</h4><div>${esc(r.summary)}</div>
+        <div class="meta mut"><span>sensitivity ${esc(r.sensitivity)}</span></div><div class="cardactions">${claims || "<i class='mut'>no claims</i>"}</div></div>`;
     }
 
     // --- source setup ---------------------------------------------------------------------------

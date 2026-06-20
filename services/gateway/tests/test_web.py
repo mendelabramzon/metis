@@ -24,3 +24,5 @@ def test_root_serves_the_console(client) -> None:
     assert "/spend" in body  # the per-workspace model-spend view
     assert "/providers" in body  # the enabled-models (capability manifest) view
     assert "/execute" in body  # proposed actions can be executed (risk-gated) from the card
+    assert "inspectEvidence(" in body  # the evidence drill-down (claim → spans → artifact)
+    assert "evDrill(" in body  # citations / contradiction claim ids drill into the evidence browser
