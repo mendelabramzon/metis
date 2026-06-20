@@ -13,9 +13,8 @@ roadmap's workstreams 1.1–1.6.
 
 ## Implementation Status (2026-06-20)
 
-Most of Stage 1 is built and on `main`; what remains is 1.6 evidence drill-down, the opt-in Telegram
-TDLib path (1.4), and `PROPOSE_SOURCE_CHANGE` execution dispatch (1.5, low priority). Status by
-workstream:
+Most of Stage 1 is built and on `main`; what remains is the opt-in Telegram TDLib path (1.4) and
+`PROPOSE_SOURCE_CHANGE` execution dispatch (1.5, low priority). Status by workstream:
 
 - **1.1 Deployment foundation — DONE.** Caddy TLS proxy, OTel spine + dashboards/alerts, scheduled
   restore drill, resource budgets.
@@ -46,7 +45,7 @@ workstream:
     run emits an `action.executed` audit event and records EXECUTED/FAILED.
   - **TODO:** only `PROPOSE_SOURCE_CHANGE` dispatch remains (a connector/source change is itself an
     approval) — low priority.
-- **1.6 UI — MOSTLY DONE.** The single-file context-exoskeleton console at `/` now covers:
+- **1.6 UI — DONE.** The single-file context-exoskeleton console at `/` now covers:
   command → proposed-action cards (risk badges + status-filtered inbox); **identity login** (user-id
   bearer) + a **workspace switcher** from `GET /workspaces`; workspace-scoped **ask**
   (`/workspaces/{ws}/query`) and **file upload** (`/workspaces/{ws}/upload`) with per-file parse
@@ -54,8 +53,9 @@ workstream:
   config JSON, OAuth connect for oauth2 connectors, and one-click "add as source" from a discovered
   Telegram chat); and **contradictions / spend / providers** tabs. The console models both gateway
   principals (operator/scope token for operator surfaces; user-id bearer for the membership-gated
-  per-workspace surfaces). **TODO:** evidence drill-down (raw→spans→claims→mem cells→wiki), and a
-  real SPA if a richer UX is wanted.
+  per-workspace surfaces); and an **evidence drill-down** (Evidence tab + clickable citations:
+  claim → spans/quotes → artifact, mem cell → claims). **Optional only:** a real SPA if a richer UX
+  is wanted — the single-file console covers the Stage-1 surfaces.
 
 **Key decisions (settled — do not relitigate):**
 
@@ -67,10 +67,9 @@ workstream:
   and fanned out to every active chat source — not per-source jobs (one queue per bot token).
 - **The command interpreter is LLM-based**, via the model plane's structured-output path.
 
-**Suggested next steps (in order):** 1.6 evidence drill-down (the `evidence.py` endpoints exist; wire
-raw→spans→claims→mem cells into the console) → 1.4 Telegram TDLib opt-in (backfill + followed
-channels + `business_connection` revocation). 1.5 execution dispatch is done except
-`PROPOSE_SOURCE_CHANGE` (low priority).
+**Suggested next steps (in order):** 1.4 Telegram TDLib opt-in (backfill + followed channels +
+`business_connection` revocation) — the last substantial Stage-1 item → then `PROPOSE_SOURCE_CHANGE`
+execution dispatch (low priority). 1.6 UI and the rest of 1.5 execution dispatch are done.
 
 ## Objective
 
