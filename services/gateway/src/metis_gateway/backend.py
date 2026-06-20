@@ -55,9 +55,11 @@ from metis_gateway.models import (
     build_model_plane,
 )
 from metis_gateway.settings import GatewaySettings
+from metis_gateway.telegram_connect import TelegramConnectManager
 from metis_gateway.tokens import terms
 from metis_ingestion import (
     BaselineExtractor,
+    NativeTdjsonClient,
     assess,
     build_normalized_doc_rich,
     build_raw_artifact,
@@ -65,7 +67,7 @@ from metis_ingestion import (
     mime,
     parse_document,
 )
-from metis_ingestion.connectors import ConnectorRegistry
+from metis_ingestion.connectors import ConnectorRegistry, TdjsonClient, load_tdjson_library
 from metis_ingestion.parsers.ocr import Transcribe
 from metis_ingestion.security.cred_store import EncryptedCredentialStore
 from metis_maintainer.memory import MemCellBuilder
@@ -1261,6 +1263,30 @@ def _build_credentials(settings: GatewaySettings) -> EncryptedCredentialStore | 
     return EncryptedCredentialStore(Cryptobox(settings.cred_store_key))
 
 
+def _build_telegram_connect(
+    settings: GatewaySettings, credentials: EncryptedCredentialStore | None
+) -> TelegramConnectManager | None:
+    """The per-user TDLib login manager (None unless an api id/hash + the cred store are set).
+
+    The native tdjson client is built lazily per login from ``libtdjson``; the rest of the flow runs
+    in process. Disabled by default — TDLib is the opt-in path, never the deployment default.
+    """
+    if credentials is None or not settings.telegram_api_id or not settings.telegram_api_hash:
+        return None
+
+    def factory() -> TdjsonClient:
+        return NativeTdjsonClient(load_tdjson_library(settings.telegram_tdlib_library or None))
+
+    return TelegramConnectManager(
+        client_factory=factory,
+        credentials=credentials,
+        api_id=settings.telegram_api_id,
+        api_hash=settings.telegram_api_hash,
+        database_root=settings.telegram_tdlib_data_root,
+        poll_timeout=settings.telegram_tdlib_poll_seconds,
+    )
+
+
 def _build_google_oauth(settings: GatewaySettings) -> GoogleOAuthConfig | None:
     """The Google consent config (None when no client id is set, i.e. the flow is disabled)."""
     if not settings.google_client_id:
@@ -1304,6 +1330,7 @@ class Backend:
     credentials: EncryptedCredentialStore | None = None  # encrypted connector secrets at rest
     google_oauth: GoogleOAuthConfig | None = None  # the Google consent config (None = disabled)
     oauth_states: dict[str, str] = field(default_factory=dict)  # pending CSRF state -> connector
+    telegram_connect: TelegramConnectManager | None = None  # per-user TDLib login (None = disabled)
     # Builds a per-workspace engine for (workspace_id, allow_external) on demand (set by the build
     # functions); ``workspace``/``agent`` above are the configured workspace's default engine.
     workspace_factory: Callable[[WorkspaceId, bool], Workspace] | None = None
@@ -1349,6 +1376,7 @@ def build_backend(settings: GatewaySettings) -> Backend:
     workspace_id = WorkspaceId(settings.workspace_id)
     audit = RecordingAuditSink()
     object_store = InMemoryObjectStore()
+    credentials = _build_credentials(settings)  # shared by the OAuth callback + the TDLib login
 
     plane = build_model_plane(settings, audit_sink=audit)
 
@@ -1389,8 +1417,9 @@ def build_backend(settings: GatewaySettings) -> Backend:
         model_closers=plane.closers,
         spend=plane.spend,
         model_manifests=plane.manifests,
-        credentials=_build_credentials(settings),
+        credentials=credentials,
         google_oauth=_build_google_oauth(settings),
+        telegram_connect=_build_telegram_connect(settings, credentials),
         workspace_factory=_workspace_factory,
     )
 
@@ -1403,6 +1432,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
     """
     core = CoreSettings()
     workspace_id = WorkspaceId(settings.workspace_id)
+    credentials = _build_credentials(settings)  # shared by the OAuth callback + the TDLib login
 
     engine = make_engine(core.database_url)
     sessionmaker = make_sessionmaker(engine)
@@ -1494,7 +1524,8 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         model_closers=plane.closers,
         spend=plane.spend,
         model_manifests=plane.manifests,
-        credentials=_build_credentials(settings),
+        credentials=credentials,
         google_oauth=_build_google_oauth(settings),
+        telegram_connect=_build_telegram_connect(settings, credentials),
         workspace_factory=_workspace_factory,
     )

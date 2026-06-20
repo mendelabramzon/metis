@@ -7,10 +7,25 @@ id — the selection step before ``POST /sources`` with a ``telegram`` config.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Annotated
 
-from metis_gateway.deps import BackendDep, OperatorDep
-from metis_gateway.schemas import TelegramChatView
+from fastapi import APIRouter, Depends, Request
+from fastapi.concurrency import run_in_threadpool
+
+from metis_gateway.deps import BackendDep, CurrentUserDep, OperatorDep
+from metis_gateway.errors import ConflictError, NotFoundError
+from metis_gateway.schemas import (
+    TelegramChatView,
+    TelegramConnectCode,
+    TelegramConnectPassword,
+    TelegramConnectStart,
+    TelegramConnectView,
+)
+from metis_gateway.telegram_connect import (
+    ConnectStatus,
+    NoActiveConnectError,
+    TelegramConnectManager,
+)
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
 
@@ -31,3 +46,72 @@ async def list_discovered_chats(
         )
         for chat in chats
     ]
+
+
+# --- opt-in TDLib personal-account login (per user) --------------------------------------------
+#
+# Each caller connects *their own* Telegram account, so these are identity-gated (the user-id
+# bearer) and keyed by user id, unlike the operator-gated discovery above. The login spans several
+# requests (start -> scan QR or enter code -> 2FA), driven by the in-process TelegramConnectManager;
+# the blocking tdjson pump is offloaded so it never stalls the event loop.
+
+
+def connect_manager(request: Request) -> TelegramConnectManager:
+    manager: TelegramConnectManager | None = request.app.state.backend.telegram_connect
+    if manager is None:
+        raise ConflictError("Telegram TDLib connect is not configured")
+    return manager
+
+
+ConnectManagerDep = Annotated[TelegramConnectManager, Depends(connect_manager)]
+
+
+def _view(status: ConnectStatus) -> TelegramConnectView:
+    return TelegramConnectView(state=status.state.value, qr_link=status.qr_link)
+
+
+@router.post("/tdlib/connect", response_model=TelegramConnectView)
+async def start_tdlib_connect(
+    body: TelegramConnectStart, manager: ConnectManagerDep, user: CurrentUserDep
+) -> TelegramConnectView:
+    """Begin this user's TDLib login; returns the next step (a QR link, or a code prompt)."""
+    status = await run_in_threadpool(
+        manager.start, str(user.id), use_qr=body.use_qr, phone=body.phone
+    )
+    return _view(status)
+
+
+@router.get("/tdlib/connect", response_model=TelegramConnectView)
+async def tdlib_connect_status(
+    manager: ConnectManagerDep, user: CurrentUserDep
+) -> TelegramConnectView:
+    """Poll the login (e.g. while waiting for the QR to be scanned on the phone)."""
+    try:
+        status = await run_in_threadpool(manager.status, str(user.id))
+    except NoActiveConnectError as exc:
+        raise NotFoundError("no TDLib login in progress") from exc
+    return _view(status)
+
+
+@router.post("/tdlib/connect/code", response_model=TelegramConnectView)
+async def submit_tdlib_code(
+    body: TelegramConnectCode, manager: ConnectManagerDep, user: CurrentUserDep
+) -> TelegramConnectView:
+    """Submit the login code Telegram delivered to the account."""
+    try:
+        status = await run_in_threadpool(manager.submit_code, str(user.id), body.code)
+    except NoActiveConnectError as exc:
+        raise NotFoundError("no TDLib login in progress") from exc
+    return _view(status)
+
+
+@router.post("/tdlib/connect/password", response_model=TelegramConnectView)
+async def submit_tdlib_password(
+    body: TelegramConnectPassword, manager: ConnectManagerDep, user: CurrentUserDep
+) -> TelegramConnectView:
+    """Submit the 2FA (cloud) password when the account has two-step verification enabled."""
+    try:
+        status = await run_in_threadpool(manager.submit_password, str(user.id), body.password)
+    except NoActiveConnectError as exc:
+        raise NotFoundError("no TDLib login in progress") from exc
+    return _view(status)

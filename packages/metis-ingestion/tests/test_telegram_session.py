@@ -122,6 +122,28 @@ def test_revocation_closes_the_session() -> None:
     assert session.handle(_auth("authorizationStateClosed")) is AuthState.CLOSED
 
 
+def test_resume_submits_a_code_provided_after_the_wait_update() -> None:
+    fake = _SendFake()
+    session = TelegramSession(client=fake, parameters=_PARAMS)
+    session.provide_phone("+1")
+    session.handle(_auth("authorizationStateWaitPhoneNumber"))  # -> WAIT_CODE
+    session.handle(_auth("authorizationStateWaitCode"))  # code not provided yet: nothing sent
+    assert session.state is AuthState.WAIT_CODE
+    assert not any(s["@type"] == "checkAuthenticationCode" for s in fake.sent)
+
+    session.provide_code("54321")  # the operator types it after the prompt
+    assert session.resume() is AuthState.WAIT_PARAMETERS  # now it is pushed
+    assert fake.sent[-1] == {"@type": "checkAuthenticationCode", "code": "54321"}
+    assert session._code is None  # still single-use
+
+
+def test_resume_is_a_noop_outside_a_wait_state() -> None:
+    fake = _SendFake()
+    session = TelegramSession(client=fake, parameters=_PARAMS)
+    assert session.resume() is AuthState.WAIT_PARAMETERS  # initial state, nothing to push
+    assert fake.sent == []
+
+
 # --- backfill / enumeration client -------------------------------------------------------------
 
 

@@ -48,6 +48,28 @@ class TelegramChatView(BaseModel):
     last_message_id: int
 
 
+class TelegramConnectStart(BaseModel):
+    """Begin a TDLib login: QR by default, or supply a phone number for the code flow."""
+
+    use_qr: bool = True
+    phone: str | None = None
+
+
+class TelegramConnectCode(BaseModel):
+    code: str
+
+
+class TelegramConnectPassword(BaseModel):
+    password: str
+
+
+class TelegramConnectView(BaseModel):
+    """Where the login is + what to do next (a ``qr_link`` to scan while in ``wait_qr``)."""
+
+    state: str
+    qr_link: str | None = None
+
+
 class SourceView(BaseModel):
     id: str
     workspace_id: str

@@ -146,6 +146,21 @@ class TelegramSession:
             self.state = AuthState.CLOSED
         return self.state
 
+    def resume(self) -> AuthState:
+        """Re-apply the current wait state's send after a credential is provided out of band.
+
+        TDLib does not re-emit an authorization state, so when the operator supplies the phone,
+        login code, or 2FA password *after* that ``WAIT_*`` update already arrived (the usual case —
+        the code is delivered only once the flow is under way), call this to push it. A no-op in any
+        other state. The connect driver calls it right after the matching ``provide_*``."""
+        if self.state is AuthState.WAIT_PHONE:
+            self._begin_login()
+        elif self.state is AuthState.WAIT_CODE:
+            self._submit_code()
+        elif self.state is AuthState.WAIT_PASSWORD:
+            self._submit_password()
+        return self.state
+
     def _begin_login(self) -> None:
         if self.use_qr:
             self.client.send({"@type": "requestQrCodeAuthentication", "other_user_ids": []})
