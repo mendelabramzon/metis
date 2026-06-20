@@ -29,20 +29,6 @@ from metis_ingestion.security.cred_store import EncryptedCredentialStore
 TDLIB_CONNECTOR = "telegram_tdlib"
 _DB_KEY_PREFIX = "db_key:"
 
-#: Auth states that are "settled" — TDLib will not advance them without fresh user input, so the
-#: pump stops on an empty receive when in one (vs. the transient WAIT_PARAMETERS, where more is
-#: coming and an empty receive is just TDLib still working).
-_SETTLED = frozenset(
-    {
-        AuthState.WAIT_PHONE,
-        AuthState.WAIT_QR,
-        AuthState.WAIT_CODE,
-        AuthState.WAIT_PASSWORD,
-        AuthState.READY,
-        AuthState.CLOSED,
-    }
-)
-
 #: Builds a fresh tdjson client for one login (the native one in deployment, a fake in tests).
 TdjsonClientFactory = Callable[[], TdjsonClient]
 
@@ -141,27 +127,15 @@ class TelegramConnectManager:
         return session
 
     def _advance(self, user_id: str, session: TelegramSession) -> ConnectStatus:
-        state = self._pump(session)
+        state = session.pump(
+            poll_timeout=self._poll_timeout,
+            max_updates=self._max_updates,
+            max_empty_polls=self._max_empty_polls,
+        )
         if state in (AuthState.READY, AuthState.CLOSED):
             self._finish(user_id, session)
         link = session.qr_link if state is AuthState.WAIT_QR else None
         return ConnectStatus(state=state, qr_link=link)
-
-    def _pump(self, session: TelegramSession) -> AuthState:
-        """Feed TDLib updates into the session until it settles or has nothing more to say."""
-        empty = 0
-        for _ in range(self._max_updates):
-            update = session.client.receive(self._poll_timeout)
-            if update is None:
-                empty += 1
-                if session.state in _SETTLED or empty >= self._max_empty_polls:
-                    break
-                continue
-            empty = 0
-            session.handle(update)
-            if session.state in (AuthState.READY, AuthState.CLOSED):
-                break
-        return session.state
 
     def _finish(self, user_id: str, session: TelegramSession) -> None:
         # On READY the authorized TDLib database is persisted on disk; release this client so the

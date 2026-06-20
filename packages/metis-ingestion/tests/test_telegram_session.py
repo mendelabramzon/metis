@@ -144,6 +144,39 @@ def test_resume_is_a_noop_outside_a_wait_state() -> None:
     assert fake.sent == []
 
 
+class _PumpFake:
+    """A fake tdjson that replays a scripted list of updates, then times out (None)."""
+
+    def __init__(self, updates: list[dict[str, Any]]) -> None:
+        self._queue = deque(updates)
+        self.sent: list[dict[str, Any]] = []
+
+    def send(self, request: Any) -> None:
+        self.sent.append(dict(request))
+
+    def receive(self, timeout: float = 1.0) -> dict[str, Any] | None:
+        return self._queue.popleft() if self._queue else None
+
+
+def test_pump_drives_a_reopened_session_to_ready() -> None:
+    # Reopening an already-authorized database: TDLib asks for parameters, then jumps to ready with
+    # no phone/code — exactly what the worker backfill drain relies on.
+    fake = _PumpFake(
+        [_auth("authorizationStateWaitTdlibParameters"), _auth("authorizationStateReady")]
+    )
+    session = TelegramSession(client=fake, parameters=_PARAMS)
+    assert session.pump(poll_timeout=0.0) is AuthState.READY
+    assert fake.sent[0]["@type"] == "setTdlibParameters"
+
+
+def test_pump_stops_at_a_wait_state_when_input_is_needed() -> None:
+    fake = _PumpFake(
+        [_auth("authorizationStateWaitTdlibParameters"), _auth("authorizationStateWaitPhoneNumber")]
+    )
+    session = TelegramSession(client=fake, parameters=_PARAMS)  # no phone, not QR
+    assert session.pump(poll_timeout=0.0) is AuthState.WAIT_PHONE  # awaits the operator, not READY
+
+
 # --- backfill / enumeration client -------------------------------------------------------------
 
 
