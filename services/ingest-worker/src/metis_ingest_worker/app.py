@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 
 import httpx
 
@@ -20,6 +21,14 @@ from metis_core.audit import PostgresAuditSink
 from metis_core.config import CoreSettings
 from metis_core.db.engine import make_engine, make_sessionmaker
 from metis_core.jobs import PostgresJobQueue
+from metis_core.llm import (
+    AnthropicProvider,
+    MetisModelRouter,
+    ModelCaller,
+    OpenAICompatProvider,
+    RoutableProvider,
+)
+from metis_core.llm.ocr import model_transcriber
 from metis_core.objectstore import S3ObjectStore
 from metis_core.security import Cryptobox
 from metis_core.stores import (
@@ -45,9 +54,44 @@ from metis_ingestion import (
 from metis_ingestion.connectors import FetchingConnector
 from metis_ingestion.poller import Pipeline
 from metis_ingestion.security.cred_store import EncryptedCredentialStore
-from metis_protocol import SourceConfig, SourceId, WorkspaceId
+from metis_protocol import AuditSink, ModelTier, SourceConfig, SourceId, WorkspaceId
 
 from .settings import IngestWorkerSettings
+
+
+def _vision_caller(
+    settings: IngestWorkerSettings, audit_sink: AuditSink
+) -> tuple[ModelCaller | None, list[Callable[[], Awaitable[None]]]]:
+    """A vision ModelCaller for scanned-PDF OCR (None if none configured), plus its client closers.
+
+    Anthropic (cloud Claude vision) and/or a self-hosted OpenAI-compatible vision endpoint.
+    """
+    providers: list[RoutableProvider] = []
+    closers: list[Callable[[], Awaitable[None]]] = []
+    if settings.anthropic_api_key:
+        import anthropic  # lazy: only when an Anthropic key is configured
+
+        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        closers.append(client.close)
+        providers.append(AnthropicProvider(client))
+    if settings.vision_endpoint and settings.vision_model:
+        http = httpx.AsyncClient(timeout=httpx.Timeout(120.0))
+        closers.append(http.aclose)
+        providers.append(
+            OpenAICompatProvider(
+                http,
+                name="ocr-vlm",
+                model=settings.vision_model,
+                is_external=settings.vision_external,
+                tiers=(ModelTier.LOCAL,),
+                base_url=f"{settings.vision_endpoint.rstrip('/')}/v1",
+                supports_vision=True,
+            )
+        )
+    if not providers:
+        return None, []
+    return ModelCaller(MetisModelRouter(providers), audit_sink), closers
+
 
 logger = logging.getLogger("metis_ingest_worker")
 
@@ -143,6 +187,9 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
     document_store = PostgresDocumentStore(sessionmaker)
     claim_store = PostgresClaimStore(sessionmaker)
     audit_sink = PostgresAuditSink(sessionmaker)
+    # A vision caller for scanned-PDF OCR (None unless a vision model is configured); the per-source
+    # transcriber binds the workspace so the router's policy gating applies.
+    ocr_caller, ocr_closers = _vision_caller(settings, audit_sink)
 
     # OAuth + Drive use their own HTTP clients (async for the token endpoint, sync for the Drive API
     # snapshot); credentials come from the encrypted store, keyed by cred_store_key.
@@ -199,6 +246,9 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
         )
 
     async def pipeline_factory(source: SourceConfig) -> Pipeline:
+        transcribe = (
+            model_transcriber(ocr_caller, source.workspace_id) if ocr_caller is not None else None
+        )
         return IngestionPipeline(
             connector=await connector_for(source),
             artifact_store=artifact_store,
@@ -206,6 +256,7 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
             claim_store=claim_store,
             audit_sink=audit_sink,
             source_id=source.id,
+            transcribe=transcribe,
         )
 
     worker = ConnectorSyncWorker(
@@ -218,6 +269,8 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
     finally:
         await token_http.aclose()
         drive_http.close()
+        for close in ocr_closers:
+            await close()
         await engine.dispose()
 
 

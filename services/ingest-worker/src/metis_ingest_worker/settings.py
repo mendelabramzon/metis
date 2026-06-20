@@ -48,3 +48,10 @@ class IngestWorkerSettings(BaseSettings):
     google_token_url: str = "https://oauth2.googleapis.com/token"
     google_client_id: str = ""
     cred_store_key: str = ""  # Fernet key for the encrypted credential store (tokens at rest)
+    # OCR for scanned PDFs (optional): a vision model for the parse-quality escalation. Either an
+    # Anthropic key (cloud Claude vision) and/or a self-hosted OpenAI-compatible vision endpoint.
+    # Absent both, ingestion stays deterministic + layout-only (no OCR).
+    anthropic_api_key: str = ""
+    vision_endpoint: str = ""  # OpenAI-compatible base URL of a vision model (e.g. a local VLM)
+    vision_model: str = ""
+    vision_external: bool = False  # whether vision_endpoint is an external provider (policy gating)

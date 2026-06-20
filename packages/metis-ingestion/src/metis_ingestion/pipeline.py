@@ -22,6 +22,7 @@ from metis_ingestion.extract import BaselineExtractor
 from metis_ingestion.failures import StepFailure, UnsupportedMediaType, record_failure
 from metis_ingestion.normalize import build_normalized_doc_rich
 from metis_ingestion.parsers import get_format
+from metis_ingestion.parsers.ocr import Transcribe
 from metis_ingestion.segment import parse_document
 from metis_protocol import AuditSink, SourceId, SourceRef
 
@@ -45,6 +46,7 @@ class IngestionPipeline:
         audit_sink: AuditSink,
         extractor: BaselineExtractor | None = None,
         source_id: SourceId | None = None,
+        transcribe: Transcribe | None = None,
     ) -> None:
         self._connector = connector
         self._artifacts = artifact_store
@@ -55,6 +57,8 @@ class IngestionPipeline:
         # The registered source this pipeline syncs (None for unregistered/inline ingest); stamped
         # onto each raw artifact so source-level erasure can find what this source produced.
         self._source_id = source_id
+        # OCR transcriber for low-coverage PDFs (None keeps parsing deterministic + layout-only).
+        self._transcribe = transcribe
 
     async def run(self, *, cursor: str | None = None) -> IngestResult:
         refs = await self._connector.discover(cursor)
@@ -85,7 +89,7 @@ class IngestionPipeline:
         await self._artifacts.put_blob(data)
         await self._artifacts.put(raw)
 
-        doc, product = await build_normalized_doc_rich(raw, data)
+        doc, product = await build_normalized_doc_rich(raw, data, transcribe=self._transcribe)
         await self._documents.put_normalized(doc)
 
         fmt = get_format(raw.media_type)
