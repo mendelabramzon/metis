@@ -10,8 +10,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from metis_ingestion import mime
-from metis_ingestion.connectors import ConnectorRegistry, RecordedTransport, TelegramConnector
+from metis_ingestion.connectors import (
+    ConnectorRegistry,
+    RecordedTransport,
+    TelegramConnector,
+    TelegramSourceConfig,
+)
 from metis_protocol import ArtifactKind, Sensitivity, WorkspaceId
 
 
@@ -80,3 +88,23 @@ async def test_public_channel_keeps_the_source_sensitivity(tmp_path: Path, works
     ref = (await connector.discover(None))[0]
     raw, _ = await connector.fetch_with_bytes(ref)
     assert raw.policy.sensitivity is Sensitivity.INTERNAL  # not floored up to CONFIDENTIAL
+
+
+def test_registry_validates_a_telegram_source_config() -> None:
+    registry = ConnectorRegistry.with_defaults()
+    parsed = registry.validate_config(
+        "telegram", {"chat_id": 7001, "business_connection_id": "bc-1"}
+    )
+    assert isinstance(parsed, TelegramSourceConfig)
+    assert parsed.chat_id == 7001
+    assert parsed.chat_type == "private"  # defaulted
+
+
+def test_registry_rejects_a_telegram_source_without_a_chat() -> None:
+    registry = ConnectorRegistry.with_defaults()
+    with pytest.raises(ValidationError):
+        registry.validate_config("telegram", {"business_connection_id": "bc"})  # no chat_id
+
+
+def test_registry_config_is_none_for_a_connector_without_a_schema() -> None:
+    assert ConnectorRegistry.with_defaults().validate_config("imap", {}) is None

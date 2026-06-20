@@ -34,6 +34,19 @@ _LISTING_KEY = "messages.json"
 _PRIVATE_CHAT_TYPES = frozenset({"private", "group", "supergroup"})
 
 
+class TelegramSourceConfig(BaseModel):
+    """The validated ``SourceConfig.config`` payload for a Telegram chat source.
+
+    One selected chat per source: the Business connection that authorizes the bot to see it, the
+    chat id, and its kind (which sets the sensitivity floor). The opt-in TDLib path fills the same
+    shape with ``business_connection_id`` left empty.
+    """
+
+    business_connection_id: str = ""
+    chat_id: int
+    chat_type: str = "private"
+
+
 class _Sender(BaseModel):
     id: int | None = None
     name: str = "unknown"

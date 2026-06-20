@@ -64,7 +64,7 @@ from metis_ingestion.connectors.scheduling import (
     poll_due,
 )
 from metis_ingestion.connectors.slack import SlackConnector
-from metis_ingestion.connectors.telegram import TelegramConnector
+from metis_ingestion.connectors.telegram import TelegramConnector, TelegramSourceConfig
 from metis_ingestion.connectors.web_clip import WebClipConnector
 
 __all__ = [
@@ -101,6 +101,7 @@ __all__ = [
     "SecretResolver",
     "SlackConnector",
     "TelegramConnector",
+    "TelegramSourceConfig",
     "TokenProvider",
     "TransientError",
     "Transport",

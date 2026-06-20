@@ -133,3 +133,17 @@ async def test_runs_for_is_newest_first_and_limited(sessionmaker):
     recent = await store.runs_for(source.id, limit=2)
     assert len(recent) == 2
     assert recent[0].started_at > recent[1].started_at  # newest first
+
+
+async def test_config_payload_round_trips(sessionmaker):
+    store = PostgresSourceStore(sessionmaker)
+    payload = {"business_connection_id": "bc-1", "chat_id": 7001, "chat_type": "private"}
+    config = _config(new_id(WorkspaceId), name="ada-telegram").model_copy(
+        update={"connector": "telegram", "config": payload}
+    )
+
+    await store.register(config)
+    fetched = await store.get(config.id)
+
+    assert fetched is not None
+    assert fetched.config == payload  # the connector-specific selection survives the JSON body

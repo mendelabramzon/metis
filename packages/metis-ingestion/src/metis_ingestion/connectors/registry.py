@@ -8,8 +8,10 @@ misconfigured source errs on the side of *more* restrictive, not less.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 from metis_ingestion.connectors.auth import ConnectorAuth, basic_auth, no_auth, oauth2, token_auth
 from metis_ingestion.connectors.base import FetchingConnector, RateLimiter, Transport
@@ -18,7 +20,7 @@ from metis_ingestion.connectors.gdrive import GoogleDriveConnector
 from metis_ingestion.connectors.gmail import GmailConnector
 from metis_ingestion.connectors.imap import ImapConnector
 from metis_ingestion.connectors.slack import SlackConnector
-from metis_ingestion.connectors.telegram import TelegramConnector
+from metis_ingestion.connectors.telegram import TelegramConnector, TelegramSourceConfig
 from metis_ingestion.connectors.web_clip import WebClipConnector
 from metis_protocol import Sensitivity, WorkspaceId
 
@@ -33,6 +35,7 @@ class ConnectorSpec:
     factory: ConnectorFactory
     auth: ConnectorAuth
     default_sensitivity: Sensitivity
+    config_model: type[BaseModel] | None = None  # validates a source's connector-specific config
 
 
 class UnknownConnectorError(KeyError):
@@ -51,6 +54,20 @@ class ConnectorRegistry:
 
     def names(self) -> list[str]:
         return sorted(self._specs)
+
+    def validate_config(self, name: str, config: Mapping[str, object]) -> BaseModel | None:
+        """Validate a source's connector-specific config against the connector's schema.
+
+        Returns the parsed typed config (``None`` if the connector takes none), raising on an
+        unknown connector or a payload that does not match — so a misconfigured source fails at
+        setup, not mid-sync.
+        """
+        spec = self._specs.get(name)
+        if spec is None:
+            raise UnknownConnectorError(name)
+        if spec.config_model is None:
+            return None
+        return spec.config_model.model_validate(dict(config))
 
     def create(
         self,
@@ -97,6 +114,12 @@ class ConnectorRegistry:
             ConnectorSpec("calendar", CalendarConnector, oauth2(), Sensitivity.INTERNAL)
         )
         registry.register(
-            ConnectorSpec("telegram", TelegramConnector, token_auth(), Sensitivity.CONFIDENTIAL)
+            ConnectorSpec(
+                "telegram",
+                TelegramConnector,
+                token_auth(),
+                Sensitivity.CONFIDENTIAL,
+                config_model=TelegramSourceConfig,
+            )
         )
         return registry

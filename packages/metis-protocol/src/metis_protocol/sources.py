@@ -12,7 +12,7 @@ evidence artifacts, so they are not registered in the schema snapshot set.
 
 from __future__ import annotations
 
-from pydantic import AwareDatetime
+from pydantic import AwareDatetime, Field, JsonValue
 
 from metis_protocol.enums import ConnectorRunStatus, Sensitivity
 from metis_protocol.ids import ConnectorRunId, SourceId, WorkspaceId
@@ -49,6 +49,9 @@ class SourceConfig(VersionedModel):
     credential: SourceCredentialRef | None = None
     created_at: AwareDatetime
     active: bool = True
+    # Connector-specific selection (which mailbox/folder/chat): opaque to the protocol, validated by
+    # the connector registry — e.g. a Telegram source's business-connection id + chat id.
+    config: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class SourceCursor(VersionedModel):
