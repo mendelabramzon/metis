@@ -6,6 +6,7 @@ Each router maps requests to backend calls and protocol objects to wire DTOs —
 from __future__ import annotations
 
 from metis_gateway.routers import (
+    actions,
     approvals,
     audit,
     contradictions,
@@ -28,6 +29,7 @@ from metis_gateway.routers import (
 ALL_ROUTERS = (
     users.router,
     workspaces.router,
+    actions.router,
     sources.router,
     telegram.router,
     ingestion.router,

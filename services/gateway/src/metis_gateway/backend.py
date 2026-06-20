@@ -36,6 +36,7 @@ from metis_core.security.deletion import erase_artifact as erase_artifact_core
 from metis_core.security.deletion import erase_source as erase_source_core
 from metis_core.security.deletion import erase_workspace_artifacts as erase_workspace_artifacts_core
 from metis_core.stores import (
+    PostgresActionStore,
     PostgresClaimStore,
     PostgresDocumentStore,
     PostgresIdentityStore,
@@ -69,6 +70,9 @@ from metis_ingestion.parsers.ocr import Transcribe
 from metis_ingestion.security.cred_store import EncryptedCredentialStore
 from metis_maintainer.memory import MemCellBuilder
 from metis_protocol import (
+    ActionId,
+    ActionStatus,
+    ActionStore,
     AgentKind,
     ArtifactId,
     ArtifactRef,
@@ -100,6 +104,7 @@ from metis_protocol import (
     ObjectStore,
     Organization,
     PolicyState,
+    ProposedAction,
     Provenance,
     QueryRequest,
     RawArtifact,
@@ -715,6 +720,34 @@ class InMemorySourceStore:
         return chats
 
 
+class InMemoryActionStore:
+    """In-process ``ActionStore`` for the default backend and tests (durable: Postgres)."""
+
+    def __init__(self) -> None:
+        self._actions: dict[str, ProposedAction] = {}
+
+    async def propose(self, action: ProposedAction) -> ProposedAction:
+        return self._actions.setdefault(str(action.id), action)  # idempotent by id
+
+    async def get(self, action_id: ActionId) -> ProposedAction | None:
+        return self._actions.get(str(action_id))
+
+    async def list(
+        self, workspace_id: WorkspaceId, *, status: ActionStatus | None = None
+    ) -> Sequence[ProposedAction]:
+        actions = [
+            a
+            for a in self._actions.values()
+            if a.workspace_id == workspace_id and (status is None or a.status is status)
+        ]
+        actions.sort(key=lambda a: a.created_at, reverse=True)
+        return actions
+
+    async def update(self, action: ProposedAction) -> ProposedAction:
+        self._actions[str(action.id)] = action
+        return action
+
+
 class WikiInbox:
     """In-memory wiki patch reviews (dev backend; durable sibling is PostgresWikiReviewInbox)."""
 
@@ -1256,6 +1289,8 @@ class Backend:
     sources: SourceStore
     wiki: WikiReviewInbox
     inbox: ApprovalInbox
+    actions: ActionStore = field(default_factory=InMemoryActionStore)
+    model_caller: ModelCaller | None = None  # the caller the command interpreter uses (None = none)
     identity: IdentityStore = field(default_factory=InMemoryIdentityStore)
     connectors: ConnectorRegistry = field(default_factory=ConnectorRegistry.with_defaults)
     object_store: ObjectStore = field(default_factory=InMemoryObjectStore)
@@ -1345,6 +1380,8 @@ def build_backend(settings: GatewaySettings) -> Backend:
         jobs=InMemoryJobQueue(),
         audit=audit,
         sources=InMemorySourceStore(),
+        actions=InMemoryActionStore(),
+        model_caller=plane.make_caller(allow_external=True),
         wiki=wiki,
         inbox=inbox,
         object_store=object_store,
@@ -1446,6 +1483,8 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         jobs=PostgresJobQueue(sessionmaker),  # durable: jobs survive restart; workers lease over it
         audit=audit,
         sources=PostgresSourceStore(sessionmaker),  # durable: source configs/cursors/runs persist
+        actions=PostgresActionStore(sessionmaker),  # durable: proposed actions + decisions persist
+        model_caller=plane.make_caller(allow_external=True),
         wiki=wiki,
         inbox=inbox,
         identity=PostgresIdentityStore(sessionmaker),

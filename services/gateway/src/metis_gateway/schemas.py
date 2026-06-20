@@ -14,6 +14,9 @@ from typing import Literal
 from pydantic import BaseModel, Field, JsonValue
 
 from metis_protocol import (
+    ActionKind,
+    ActionRisk,
+    ActionStatus,
     ContradictionStatus,
     JobState,
     MemoryOp,
@@ -429,3 +432,32 @@ class SpendView(BaseModel):
     workspace_id: str
     today_total_usd: float
     today_by_task: dict[str, float] = Field(default_factory=dict)
+
+
+# --- proposed actions (the command surface) ----------------------------------------------------
+
+
+class CommandRequest(BaseModel):
+    command: str
+    workspace_id: str | None = None  # defaults to the deployment's configured workspace
+
+
+class DecisionRequest(BaseModel):
+    note: str = ""
+
+
+class ProposedActionView(BaseModel):
+    """A proposed-action card: what the system understood, its risk, and the recorded decision."""
+
+    id: str
+    workspace_id: str
+    kind: ActionKind
+    risk: ActionRisk
+    command: str
+    summary: str
+    parameters: dict[str, JsonValue] = Field(default_factory=dict)
+    sensitivity: Sensitivity
+    audit_target: str
+    status: ActionStatus
+    decided_by: str | None = None
+    decision_note: str = ""
