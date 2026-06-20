@@ -36,9 +36,15 @@ execution dispatch (1.5), and the opt-in Telegram TDLib path (1.4). Status by wo
     / `ActionKind` / `ActionStatus`), the durable `ActionStore`, the LLM interpreter
     (`INTERPRET_COMMAND` task class + prompt → typed action, structured output, read-only ANSWER
     fallback), and `routers/actions.py` (interpret → propose → risk-gated approve/reject).
-  - **TODO:** execution *dispatch* — an approved effectful action actually running against the engines
-    (start a sync, apply a memory/wiki patch, …). Today the lifecycle is recorded and only read-only
-    ANSWER runs (via the console's run-answer shortcut).
+  - **Execution dispatch — STARTED** (`execution.py` + `POST /actions/{id}/execute`, risk-gated):
+    read-only kinds (answer/find_evidence/draft → query engine; inspect_source → source + runs) run
+    from PROPOSED; `START_SYNC` requires APPROVED then enqueues a real connector-sync job; `EXTERNAL`
+    is blocked; each run emits an `action.executed` audit event and records EXECUTED/FAILED.
+  - **TODO:** dispatch for the write kinds — `CREATE_MEMORY` and `CREATE_WIKI_PATCH` (and
+    `PROPOSE_SOURCE_CHANGE`). These are deliberately deferred: per the truth-hierarchy invariant they
+    must flow through the claim pipeline / wiki review inbox, never a direct memory write — the exact
+    "remember X" semantics (ingest the assertion as a user-sourced doc vs. a reviewed memory patch)
+    is the open product decision to settle before implementing.
 - **1.6 UI — MOSTLY DONE.** The single-file context-exoskeleton console at `/` now covers:
   command → proposed-action cards (risk badges + status-filtered inbox); **identity login** (user-id
   bearer) + a **workspace switcher** from `GET /workspaces`; workspace-scoped **ask**
@@ -60,10 +66,11 @@ execution dispatch (1.5), and the opt-in Telegram TDLib path (1.4). Status by wo
   and fanned out to every active chat source — not per-source jobs (one queue per bot token).
 - **The command interpreter is LLM-based**, via the model plane's structured-output path.
 
-**Suggested next steps (in order):** 1.5 execution dispatch (map each approved `ActionKind` to its
-engine, gated by risk — read-only + `START_SYNC` first; `CREATE_MEMORY`/`CREATE_WIKI_PATCH` must
-respect the truth hierarchy, so route them through the pipeline / wiki inbox, never a direct write;
-`EXTERNAL` stays blocked) → 1.6 evidence drill-down → 1.4 Telegram TDLib opt-in.
+**Suggested next steps (in order):** settle the `CREATE_MEMORY`/`CREATE_WIKI_PATCH` execution
+semantics (truth-hierarchy-safe: pipeline ingest / wiki review inbox) then implement that dispatch →
+1.6 evidence drill-down (the `evidence.py` endpoints exist; wire raw→spans→claims→mem cells into the
+console) → 1.4 Telegram TDLib opt-in (backfill + followed channels + `business_connection`
+revocation). Read-only + `START_SYNC` execution dispatch is already done.
 
 ## Objective
 
