@@ -129,10 +129,77 @@ The `local` profile wires this to the `model-runtime` service — pull the model
 **Skills / web search.** Point `METIS_GATEWAY_SKILLS_ROOT` at a skills directory (e.g. `skills/`,
 which ships `web_search`) to register skills; run one via `POST /skills/run` (operator scope).
 
+## Telegram ingestion (opt-in)
+
+Two transports behind one connector seam (per-chat source config, cursoring, and erasure are
+identical for both): the **Business connected-bot** (the default — forward sync of owner-authorized
+chats, no account-ban risk) and the opt-in **TDLib** personal-account path (history backfill +
+followed channels the bot cannot reach). Both are off unless you bring up the overlay:
+
+```bash
+# .env must set METIS_CRED_STORE_KEY (a Fernet key), TELEGRAM_BOT_TOKEN, and — for TDLib —
+# TELEGRAM_API_ID / TELEGRAM_API_HASH (from https://my.telegram.org). Generate the Fernet key:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+docker compose -f docker-compose.yml -f compose/profiles.local.yml -f compose/profiles.telegram.yml up -d
+```
+
+`METIS_CRED_STORE_KEY` **must be the same value** for the gateway and both workers — secrets (OAuth
+tokens, TDLib database keys) are encrypted with it and shared through the durable `connector_secrets`
+table, so a mismatched key means the worker cannot decrypt what the gateway wrote.
+
+**Bot path (default).** Connect the deployment bot to each owner's account in Telegram's Business
+settings and authorize the specific chats; the `telegram-bot-worker` (`MODE=telegram`) drains
+`getUpdates` once per cycle and fans the batch out to every active Telegram source. Discover the
+chats it has seen with `GET /telegram/chats` (operator), then turn one into a source with
+`POST /sources` (`connector: telegram`, `config: {business_connection_id, chat_id, chat_type}`).
+Revoking the bot in Telegram pauses its sources automatically (a `business_connection` disable →
+`active=false`).
+
+**TDLib path (opt-in, per user).** The `tdlib-lib` one-shot builds `libtdjson` and publishes it into
+the `tdliblib` volume; the gateway and `telegram-tdlib-worker` mount it plus the shared `tdlibdata`
+volume (the per-account databases). Each user logs in their own account through the gateway:
+
+```bash
+# QR (default): returns {"state":"wait_qr","qr_link":"tg://login?token=..."} — render the link as a
+# QR code and scan it in Telegram (Settings → Devices → Link Desktop Device).
+curl -X POST .../telegram/tdlib/connect -H "Authorization: Bearer <user-id>" -d '{"use_qr":true}'
+curl .../telegram/tdlib/connect -H "Authorization: Bearer <user-id>"          # poll until "ready"
+# Phone instead of QR: POST {"phone":"+1..."} then POST /telegram/tdlib/connect/code {"code":"..."}
+# and, if 2FA is on, POST /telegram/tdlib/connect/password {"password":"..."}.
+```
+
+Only the TDLib database-encryption key is stored (encrypted); login codes and the 2FA password are
+never persisted. Once a user is `ready`, register their TDLib sources (`connector: telegram`, config
+with `tdlib_user_id` set to that user) and the `telegram-tdlib-worker` backfills each chat's history.
+
+### First-deploy validation (manual — needs a live account)
+
+The credential-free replay suite covers the connector/transport/drain logic; the live login +
+backfill can only be checked against a real Telegram account, so validate once per deployment:
+
+1. **libtdjson loads.** After `up`, the `tdlib-lib` service should exit 0 having listed
+   `libtdjson.so*`. Confirm the gateway can load it:
+   `docker compose exec gateway python -c "from metis_ingestion.connectors import load_tdjson_library; load_tdjson_library('/opt/tdlib/libtdjson.so'); print('ok')"`.
+   A failure here is almost always an OpenSSL/zlib ABI mismatch — rebuild `tdlib.Dockerfile` on the
+   same base as the app image (it already pins `python:3.12-slim`), and bump `TDLIB_REF` if the build
+   itself fails. The C++ build is slow (many minutes) and is **not** exercised by CI.
+2. **Login.** Run the QR (or phone/2FA) flow above and confirm `state` reaches `ready`; check
+   `connector_secrets` holds a `telegram_tdlib:db_key:<user>` row (ciphertext only).
+3. **Backfill.** Register a small TDLib source and confirm artifacts appear (`GET /jobs`, the
+   evidence browser) and that re-running the worker does not re-ingest (the per-chat cursor dedups).
+4. **Shared state.** The gateway writes the database under `tdlibdata`; the worker must reopen the
+   **same** volume — if backfill logs "did not authorize", confirm both mount `tdlibdata` and share
+   `METIS_CRED_STORE_KEY`.
+
+Poll conservatively (TDLib flood-waits surface as retryable rate-limit errors); the bot path needs
+no Premium and carries no ban risk, so prefer it and reserve TDLib for backfill/followed-channels.
+
 ## Known wiring follow-up
 
-The worker **services** (`ingest-worker`, `maintainer-worker`, `runtime-worker`) currently run their
-Stage-0 entrypoints (wire-and-exit); the engine logic lives in the packages and the core `Worker`
-lease/handle loop exists, so turning each into a long-running lease-and-dispatch loop is a code
-change, not new infrastructure — the Compose stack already defines and wires them. The gateway is a
-fully serving uvicorn process.
+The `ingest-worker` runs real long-running loops: a durable lease/dispatch drain for connector-sync
+jobs (`MODE=queue`, the default) and the dedicated Telegram drains (`MODE=telegram` /
+`telegram_tdlib`, wired by the Telegram overlay above). The `maintainer-worker` and `runtime-worker`
+still run their Stage-0 entrypoints (wire-and-exit); the engine logic lives in the packages and the
+core `Worker` lease/handle loop exists, so turning each into a long-running loop is a code change, not
+new infrastructure — the Compose stack already defines and wires them. The gateway is a fully serving
+uvicorn process.
