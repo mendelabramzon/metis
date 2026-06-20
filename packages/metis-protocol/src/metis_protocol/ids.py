@@ -179,6 +179,10 @@ class EnvelopeId(PrefixedId):
     prefix = "evl"
 
 
+class ActionId(PrefixedId):
+    prefix = "act"
+
+
 class ModelRunId(PrefixedId):
     prefix = "run"
 

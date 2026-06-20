@@ -193,3 +193,41 @@ class Role(StrEnum):
     MEMBER = "member"
     ADMIN = "admin"
     OWNER = "owner"
+
+
+class ActionKind(StrEnum):
+    """What a free-text request was interpreted as — the typed intent behind a proposed action."""
+
+    ANSWER = "answer"
+    FIND_EVIDENCE = "find_evidence"
+    INSPECT_SOURCE = "inspect_source"
+    DRAFT_RESPONSE = "draft_response"
+    CREATE_MEMORY = "create_memory"
+    CREATE_WIKI_PATCH = "create_wiki_patch"
+    START_SYNC = "start_sync"
+    PROPOSE_SOURCE_CHANGE = "propose_source_change"
+
+
+class ActionRisk(StrEnum):
+    """How risky executing a proposed action is — sets whether/how the UI gates it.
+
+    ``READ_ONLY`` runs without confirmation; ``REVERSIBLE`` needs undo or inbox approval;
+    ``MEMORY_WRITE``/``WIKI_WRITE`` show a diff for approval; ``EXTERNAL`` side effects are
+    approval-only (and out of Stage 1).
+    """
+
+    READ_ONLY = "read_only"
+    REVERSIBLE = "reversible"
+    MEMORY_WRITE = "memory_write"
+    WIKI_WRITE = "wiki_write"
+    EXTERNAL = "external"
+
+
+class ActionStatus(StrEnum):
+    """A proposed action's lifecycle: proposed -> approved/rejected -> executed (or failed)."""
+
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EXECUTED = "executed"
+    FAILED = "failed"

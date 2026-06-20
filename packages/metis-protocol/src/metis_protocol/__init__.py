@@ -7,6 +7,7 @@ implements. No I/O, no storage, no LLM calls, and no other ``metis_*`` import.
 
 from __future__ import annotations
 
+from metis_protocol.actions import ApprovalDecision, ProposedAction
 from metis_protocol.artifacts import (
     Artifact,
     NormalizedDoc,
@@ -27,6 +28,9 @@ from metis_protocol.claims import (
 )
 from metis_protocol.enums import (
     SENSITIVITY_ORDER,
+    ActionKind,
+    ActionRisk,
+    ActionStatus,
     AgentKind,
     ArtifactKind,
     ConnectorRunStatus,
@@ -73,6 +77,7 @@ from metis_protocol.identity import (
     WorkspaceModelPolicy,
 )
 from metis_protocol.ids import (
+    ActionId,
     ArtifactId,
     AuditId,
     BatchId,
@@ -206,7 +211,12 @@ __all__ = [
     "SCHEMA_REGISTRY",
     "SCHEMA_VERSION_V1",
     "SENSITIVITY_ORDER",
+    "ActionId",
+    "ActionKind",
+    "ActionRisk",
+    "ActionStatus",
     "AgentKind",
+    "ApprovalDecision",
     "Artifact",
     "ArtifactId",
     "ArtifactKind",
@@ -308,6 +318,7 @@ __all__ = [
     "ProfileFact",
     "ProfileId",
     "ProfileScope",
+    "ProposedAction",
     "ProtocolError",
     "ProtocolModel",
     "Provenance",
