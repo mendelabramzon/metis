@@ -72,6 +72,11 @@ from metis_ingestion.connectors.telegram_bot_transport import (
     TelegramBotTransport,
     build_telegram_connector,
 )
+from metis_ingestion.connectors.telegram_tdlib_transport import (
+    TelegramTdlibConfig,
+    TelegramTdlibTransport,
+    build_tdlib_connector,
+)
 from metis_ingestion.connectors.web_clip import WebClipConnector
 
 __all__ = [
@@ -113,6 +118,8 @@ __all__ = [
     "TelegramBotTransport",
     "TelegramConnector",
     "TelegramSourceConfig",
+    "TelegramTdlibConfig",
+    "TelegramTdlibTransport",
     "TokenProvider",
     "TransientError",
     "Transport",
@@ -123,6 +130,7 @@ __all__ = [
     "build_gmail_connector",
     "build_google_drive_connector",
     "build_poll_job",
+    "build_tdlib_connector",
     "build_telegram_connector",
     "build_webhook_job",
     "no_auth",

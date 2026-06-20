@@ -35,6 +35,7 @@ from metis_ingestion.connectors import (
     WebClipConnector,
     build_gmail_connector,
     build_google_drive_connector,
+    build_tdlib_connector,
     build_telegram_connector,
     with_retries,
 )
@@ -111,6 +112,7 @@ __all__ = [
     "build_normalized_doc",
     "build_normalized_doc_rich",
     "build_raw_artifact",
+    "build_tdlib_connector",
     "build_telegram_connector",
     "drain_telegram_once",
     "extract_discovered_chats",
