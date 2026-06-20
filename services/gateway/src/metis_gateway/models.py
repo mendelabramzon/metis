@@ -3,7 +3,9 @@
 ``build_model_plane`` assembles a policy-bound ``MetisModelRouter`` from settings: Anthropic
 and/or any OpenAI-compatible cloud (incl. a Hugging Face model behind vLLM/TGI) for the upper
 tiers, plus a local Ollama endpoint for the LOCAL tier and as the restricted-data fallback (the
-router never routes restricted data to an external provider). Embeddings stay local (``bge-m3``).
+router never routes restricted data to an external provider). Embeddings come from an embed-kind
+capability manifest (a self-hosted HF TEI / OpenAI-compatible ``/embeddings`` endpoint) when one is
+registered, else a local Ollama embedder (``bge-m3``), else deterministic stub vectors.
 With nothing configured, the gateway returns deterministic extractive answers; on a model error
 :class:`FallbackAnswerGenerator` falls back to the extractive answer instead of a 500.
 """
@@ -26,7 +28,16 @@ from metis_core.llm import (
     RoutableProvider,
     chat_provider_from_capability,
 )
-from metis_core.memory_index import EmbeddingRouter, local_router
+from metis_core.llm.routing_config import task_tier
+from metis_core.memory_index import (
+    DEFAULT_EMBEDDING_MODEL,
+    Embedder,
+    EmbeddingRouter,
+    OllamaEmbedder,
+    embedder_from_capability,
+    stub_router,
+)
+from metis_core.observability import record_model_cost
 from metis_gateway.settings import GatewaySettings
 from metis_protocol import (
     AuditEvent,
@@ -75,6 +86,12 @@ class SpendTracker:
         if run is not None and run.cost_usd:
             self.record(
                 event.workspace_id, run.task_class.value, run.cost_usd, day=event.occurred_at.date()
+            )
+            record_model_cost(
+                run.cost_usd,
+                task_class=run.task_class.value,
+                provider=run.provider,
+                tier=task_tier(run.task_class).value,
             )
         await self._inner.emit(event)
 
@@ -151,6 +168,7 @@ class ModelPlane:
     local_client: httpx.AsyncClient | None
     closers: tuple[Callable[[], Awaitable[None]], ...]
     manifests: tuple[ModelCapability, ...] = ()  # the registered capability manifests (operators)
+    manifest_client: httpx.AsyncClient | None = None  # shared client for self-hosted manifest URLs
 
     def make_caller(self, *, allow_external: bool) -> ModelCaller | None:
         providers = (
@@ -219,14 +237,42 @@ def build_model_plane(settings: GatewaySettings, *, audit_sink: AuditSink) -> Mo
         local_client=local_client,
         closers=tuple(closers),
         manifests=settings.model_manifests,
+        manifest_client=manifest_client,
     )
 
 
 def build_embedding_router(
-    client: httpx.AsyncClient, *, endpoint: str, model: str
+    *,
+    manifests: Sequence[ModelCapability] = (),
+    manifest_client: httpx.AsyncClient | None = None,
+    local_client: httpx.AsyncClient | None = None,
+    local_endpoint: str | None = None,
+    local_model: str = DEFAULT_EMBEDDING_MODEL,
 ) -> EmbeddingRouter:
-    """A local (restricted-safe) Ollama embedding router for the memory index."""
-    return local_router(client, model=model, base_url=endpoint.rstrip("/"))
+    """The memory index's embedding router, sourced from config.
+
+    An embed-kind capability manifest (a self-hosted HF TEI server or any OpenAI-compatible
+    ``/embeddings`` endpoint) takes precedence — capability-driven, dimension-gated enablement with
+    no per-model adapter; when its endpoint is external, the local Ollama embedder is kept as the
+    restricted-data fallback so restricted text never leaves the box. With no manifest, the local
+    Ollama endpoint embeds (restricted-safe). With neither, the deterministic stub embedder keeps
+    the index usable (extractive answers).
+    """
+    embed_manifests = [c for c in manifests if c.kind is ModelKind.EMBED]
+    local: OllamaEmbedder | None = (
+        OllamaEmbedder(local_client, model=local_model, base_url=local_endpoint.rstrip("/"))
+        if local_client is not None and local_endpoint is not None
+        else None
+    )
+    if embed_manifests and manifest_client is not None:
+        primary = embedder_from_capability(embed_manifests[0], manifest_client)
+        embedders: list[Embedder] = [primary]
+        if primary.is_external and local is not None:
+            embedders.append(local)  # restricted data never routes to the external embedder
+        return EmbeddingRouter(embedders)
+    if local is not None:
+        return EmbeddingRouter([local])
+    return stub_router()
 
 
 class FallbackAnswerGenerator(AnswerGenerator):

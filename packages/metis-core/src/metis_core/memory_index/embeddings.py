@@ -32,7 +32,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from metis_core.db.session import unit_of_work
 from metis_core.db.types import EMBEDDING_DIM
 from metis_core.models import MemCellRow, MemSceneRow, SegmentRow
-from metis_protocol import MemCell, MemScene, Segment, Sensitivity, is_at_least, max_sensitivity
+from metis_protocol import (
+    MemCell,
+    MemScene,
+    ModelCapability,
+    ModelKind,
+    PrivacyTier,
+    Segment,
+    Sensitivity,
+    is_at_least,
+    max_sensitivity,
+)
 
 #: Default local embedding model and its version tag. The version is recorded on every
 #: embedded row; bump it (and re-index) whenever the model or preprocessing changes.
@@ -225,6 +235,69 @@ class OllamaEmbedder:
         return [list(vector) for vector in vectors]
 
 
+class OpenAICompatEmbedder:
+    """An OpenAI-compatible embeddings endpoint (``POST {base_url}/embeddings``), behind
+    :class:`Embedder`.
+
+    This is the same ``/v1/embeddings`` contract a self-hosted Hugging Face TEI server and OpenAI
+    both expose, so a model declared by a capability manifest plugs straight in with no per-model
+    adapter (the embedding analogue of ``chat_provider_from_capability``). ``is_external`` comes
+    from the manifest's privacy tier: a self-hosted (non-external) endpoint embeds restricted data;
+    an external one is held off restricted data by :class:`EmbeddingRouter`. Returned vectors are
+    validated against the locked dimension.
+    """
+
+    def __init__(
+        self,
+        client: Any,
+        *,
+        model: str,
+        version: str,
+        dim: int,
+        base_url: str,
+        is_external: bool,
+    ) -> None:
+        self._client = client
+        self._model = model
+        self._version = version
+        self._dim = dim
+        self._base_url = base_url.rstrip("/")
+        self._is_external = is_external
+
+    @property
+    def name(self) -> str:
+        return f"openai-compat:{self._model}"
+
+    @property
+    def version(self) -> str:
+        return self._version
+
+    @property
+    def dim(self) -> int:
+        return self._dim
+
+    @property
+    def is_external(self) -> bool:
+        return self._is_external
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        response = await self._client.post(
+            f"{self._base_url}/embeddings",
+            json={"model": self._model, "input": list(texts)},
+        )
+        data = response.json()["data"]
+        vectors = [item["embedding"] for item in data]
+        for vector in vectors:
+            if len(vector) != self._dim:
+                raise ValueError(
+                    f"{self.name} returned dim {len(vector)}, expected {self._dim} "
+                    f"(embedding dimension is locked; see ADR 0014)"
+                )
+        return [list(vector) for vector in vectors]
+
+
 class EmbeddingRouter:
     """Picks an embedder by sensitivity, enforcing *restricted → local* before any call.
 
@@ -272,6 +345,34 @@ def stub_router() -> EmbeddingRouter:
 def local_router(client: Any, **kwargs: Any) -> EmbeddingRouter:
     """A router backed by a local Ollama embedder (restricted-safe by construction)."""
     return EmbeddingRouter([OllamaEmbedder(client, **kwargs)])
+
+
+def embedder_from_capability(capability: ModelCapability, client: Any) -> OpenAICompatEmbedder:
+    """Map an EMBED manifest onto an embedder over ``client``; reject a non-embed manifest.
+
+    The manifest's ``embedding_dim`` must equal the index's locked dimension: switching the
+    embedding model is a re-index by design (version-gated, ADR 0014), so a mismatch is refused here
+    rather than silently corrupting the pgvector column. ``privacy_tier`` becomes the embedder's
+    externality, so a self-hosted (LOCAL/INTERNAL) TEI manifest may embed restricted data and an
+    EXTERNAL one is held to the same restricted-data floor as the cloud.
+    """
+    if capability.kind is not ModelKind.EMBED:
+        raise ValueError(f"{capability.provider!r} is a chat manifest, not an embed provider")
+    # embedding_dim is guaranteed non-None for an EMBED manifest by ModelCapability's validator.
+    if capability.embedding_dim != EMBEDDING_DIM:
+        raise ValueError(
+            f"embed manifest {capability.provider!r} declares embedding_dim "
+            f"{capability.embedding_dim}, but the index dimension is locked at {EMBEDDING_DIM}; "
+            "switching the embedding model is an explicit re-index, not a config flip (ADR 0014)"
+        )
+    return OpenAICompatEmbedder(
+        client,
+        model=capability.model_id,
+        version=f"{capability.provider}:{capability.model_id}",
+        dim=capability.embedding_dim,
+        base_url=capability.base_url,
+        is_external=capability.privacy_tier is PrivacyTier.EXTERNAL,
+    )
 
 
 class MemoryIndexer:

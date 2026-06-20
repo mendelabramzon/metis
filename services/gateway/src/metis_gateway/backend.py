@@ -27,7 +27,7 @@ from metis_core.db.session import unit_of_work
 from metis_core.jobs import PostgresJobQueue
 from metis_core.llm import ModelCaller
 from metis_core.llm.ocr import model_transcriber
-from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup, stub_router
+from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup
 from metis_core.models import RawArtifactRow, SkillApprovalRow
 from metis_core.objectstore import S3ObjectStore
 from metis_core.security import Cryptobox
@@ -1364,15 +1364,17 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
     audit = PostgresAuditLog(sessionmaker, workspace_id)
 
     # Model wiring (optional). Chat: Anthropic/OpenAI-compatible cloud + local fallback assembled by
-    # the plane. Embeddings: local bge-m3 when an endpoint is set, else stub vectors. The answer
-    # generator degrades to extractive on a model error.
+    # the plane. Embeddings: an embed-kind manifest (self-hosted TEI) when registered, else local
+    # bge-m3 when an endpoint is set, else stub vectors. The answer generator degrades to extractive
+    # on a model error.
     plane = build_model_plane(settings, audit_sink=audit)
-    if plane.local_client is not None and settings.model_endpoint is not None:
-        embedding_router: EmbeddingRouter = build_embedding_router(
-            plane.local_client, endpoint=settings.model_endpoint, model=settings.embedding_model
-        )
-    else:
-        embedding_router = stub_router()
+    embedding_router: EmbeddingRouter = build_embedding_router(
+        manifests=plane.manifests,
+        manifest_client=plane.manifest_client,
+        local_client=plane.local_client,
+        local_endpoint=settings.model_endpoint,
+        local_model=settings.embedding_model,
+    )
 
     # Retriever + claim store are workspace-agnostic (they scope by the request's workspace_id), so
     # they are built once and shared; only the answer generator's caller varies with the workspace's
