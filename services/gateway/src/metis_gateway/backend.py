@@ -26,6 +26,7 @@ from metis_core.audit import PostgresAuditSink, recent_audit_events
 from metis_core.db.session import unit_of_work
 from metis_core.jobs import PostgresJobQueue
 from metis_core.llm import ModelCaller
+from metis_core.llm.ocr import model_transcriber
 from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup, stub_router
 from metis_core.models import RawArtifactRow, SkillApprovalRow
 from metis_core.objectstore import S3ObjectStore
@@ -64,6 +65,7 @@ from metis_ingestion import (
     parse_document,
 )
 from metis_ingestion.connectors import ConnectorRegistry
+from metis_ingestion.parsers.ocr import Transcribe
 from metis_ingestion.security.cred_store import EncryptedCredentialStore
 from metis_maintainer.memory import MemCellBuilder
 from metis_protocol import (
@@ -452,7 +454,7 @@ class InMemoryWorkspace:
             policy=policy,
             connector=connector,
         )
-        doc, product = build_normalized_doc_rich(raw, data, policy=policy)
+        doc, product = await build_normalized_doc_rich(raw, data, policy=policy)
         parsed, segments = parse_document(
             doc, fmt.segmentation, pages=product.pages, page_count=product.page_count
         )
@@ -930,6 +932,7 @@ class PostgresWorkspace:
         object_store: S3ObjectStore,
         query_engine: QueryEngine,
         embedding_router: EmbeddingRouter,
+        ocr_transcribe: Transcribe | None = None,
     ) -> None:
         self._workspace_id = workspace_id
         self._sessionmaker = sessionmaker
@@ -942,6 +945,8 @@ class PostgresWorkspace:
         self._indexer = MemoryIndexer(sessionmaker, embedding_router)
         self._builder = MemCellBuilder()  # deterministic, evidence-only (no model call)
         self._query = query_engine
+        # The OCR transcriber for low-coverage PDFs (None unless a vision model is wired).
+        self._ocr_transcribe = ocr_transcribe
 
     async def ingest_bytes(
         self, *, filename: str, data: bytes, sensitivity: Sensitivity, connector: str = "upload"
@@ -964,7 +969,9 @@ class PostgresWorkspace:
         )
         await self._artifacts.put_blob(data)
         await self._artifacts.put(raw)
-        doc, product = build_normalized_doc_rich(raw, data, policy=policy)
+        doc, product = await build_normalized_doc_rich(
+            raw, data, policy=policy, transcribe=self._ocr_transcribe
+        )
         await self._documents.put_normalized(doc)
         parsed, segments = parse_document(
             doc, fmt.segmentation, pages=product.pages, page_count=product.page_count
@@ -1380,12 +1387,16 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
             claim_store=claim_store,
             generator=FallbackAnswerGenerator(caller=caller) if caller is not None else None,
         )
+        # OCR for low-coverage PDFs goes through the same model caller (so the workspace's external
+        # policy + the router's vision routing apply); None when no model is wired.
+        transcribe = model_transcriber(caller, ws_id) if caller is not None else None
         return PostgresWorkspace(
             workspace_id=ws_id,
             sessionmaker=sessionmaker,
             object_store=object_store,
             query_engine=query_engine,
             embedding_router=embedding_router,
+            ocr_transcribe=transcribe,
         )
 
     workspace = _workspace_factory(workspace_id, allow_external=True)

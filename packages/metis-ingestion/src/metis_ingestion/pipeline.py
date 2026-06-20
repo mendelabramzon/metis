@@ -85,7 +85,7 @@ class IngestionPipeline:
         await self._artifacts.put_blob(data)
         await self._artifacts.put(raw)
 
-        doc, product = build_normalized_doc_rich(raw, data)
+        doc, product = await build_normalized_doc_rich(raw, data)
         await self._documents.put_normalized(doc)
 
         fmt = get_format(raw.media_type)

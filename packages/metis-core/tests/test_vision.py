@@ -17,6 +17,7 @@ from metis_core.llm import (
     OpenAICompatProvider,
     StubProvider,
 )
+from metis_core.llm.ocr import model_transcriber
 from metis_protocol import (
     AuditEvent,
     ImagePart,
@@ -170,3 +171,10 @@ async def test_call_vision_text_transcribes_and_audits() -> None:
     )
     assert text == "page text"
     assert sink.events  # the OCR call was audited like any model call
+
+
+async def test_model_transcriber_degrades_to_empty_without_a_vision_model() -> None:
+    # Only a non-vision local provider: call_vision_text raises NoEligibleProviderError -> "".
+    caller = ModelCaller(MetisModelRouter([StubProvider()]), _RecordingSink())
+    transcribe = model_transcriber(caller, _WS)
+    assert await transcribe("image/png", b"bytes", Sensitivity.INTERNAL) == ""
