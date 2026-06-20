@@ -510,3 +510,4 @@ class ActionExecutionView(BaseModel):
     job_id: str | None = None
     doc_id: str | None = None
     patch_id: str | None = None
+    source_id: str | None = None
