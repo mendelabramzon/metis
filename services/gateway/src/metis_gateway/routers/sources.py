@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter
+from pydantic import ValidationError
 
 from metis_gateway.deps import BackendDep, OperatorDep, UserDep
 from metis_gateway.errors import ConflictError, NotFoundError
@@ -38,6 +39,12 @@ async def create_source(
     spec = backend.connectors.get(body.connector)
     if spec is None:
         raise ConflictError(f"unknown connector {body.connector!r}")
+    try:
+        # Validate the connector-specific payload (e.g. a Telegram chat) before persisting, so a
+        # misconfigured source is rejected at setup rather than failing mid-sync on the worker.
+        backend.connectors.validate_config(body.connector, body.config)
+    except ValidationError as exc:
+        raise ConflictError(f"invalid config for {body.connector!r} source") from exc
     workspace_id = WorkspaceId(body.workspace_id) if body.workspace_id else backend.workspace_id
     config = SourceConfig(
         id=new_id(SourceId),
@@ -47,6 +54,7 @@ async def create_source(
         sensitivity=body.sensitivity,
         auth_method=spec.auth.method.value,
         created_at=datetime.now(UTC),
+        config=body.config,
     )
     return _view(await backend.sources.register(config))
 

@@ -34,6 +34,7 @@ class SourceCreate(BaseModel):
     connector: str
     sensitivity: Sensitivity = Sensitivity.INTERNAL
     workspace_id: str | None = None  # defaults to the deployment's configured workspace
+    config: dict[str, JsonValue] = Field(default_factory=dict)  # connector-specific selection
 
 
 class SourceView(BaseModel):
