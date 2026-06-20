@@ -1541,6 +1541,7 @@ dependencies = [
     { name = "metis-maintainer" },
     { name = "metis-protocol" },
     { name = "metis-runtime" },
+    { name = "psycopg2-binary" },
     { name = "pydantic-settings" },
     { name = "python-multipart" },
     { name = "uvicorn", extra = ["standard"] },
@@ -1556,6 +1557,7 @@ requires-dist = [
     { name = "metis-maintainer", editable = "packages/metis-maintainer" },
     { name = "metis-protocol", editable = "packages/metis-protocol" },
     { name = "metis-runtime", editable = "packages/metis-runtime" },
+    { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
@@ -1568,6 +1570,7 @@ source = { editable = "services/ingest-worker" }
 dependencies = [
     { name = "metis-core" },
     { name = "metis-ingestion" },
+    { name = "psycopg2-binary" },
     { name = "pydantic-settings" },
 ]
 
@@ -1575,6 +1578,7 @@ dependencies = [
 requires-dist = [
     { name = "metis-core", editable = "packages/metis-core" },
     { name = "metis-ingestion", editable = "packages/metis-ingestion" },
+    { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.4" },
 ]
 

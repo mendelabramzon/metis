@@ -34,7 +34,7 @@ from metis_core.llm import (
 from metis_core.llm.ocr import model_transcriber
 from metis_core.objectstore import S3ObjectStore
 from metis_core.observability import setup_telemetry
-from metis_core.security import Cryptobox
+from metis_core.security import Cryptobox, PostgresSecretStore
 from metis_core.security.deletion import erase_artifacts_by_filename
 from metis_core.security.secrets import SecretNotFoundError
 from metis_core.stores import (
@@ -137,6 +137,18 @@ def build_connector(
     return LocalFolderConnector(settings.ingest_root, workspace_id=workspace_id)
 
 
+def _credentials(
+    settings: IngestWorkerSettings, core: CoreSettings
+) -> EncryptedCredentialStore | None:
+    """The durable, shared credential store (Postgres) — the worker reads secrets the gateway wrote
+    (OAuth refresh tokens, TDLib db keys). None when no cred store key is configured."""
+    if not settings.cred_store_key:
+        return None
+    return EncryptedCredentialStore(
+        store=PostgresSecretStore(core.database_url, Cryptobox(settings.cred_store_key))
+    )
+
+
 async def _poll(settings: IngestWorkerSettings, core: CoreSettings) -> None:
     engine = make_engine(core.database_url)
     sessionmaker = make_sessionmaker(engine)
@@ -216,11 +228,7 @@ async def _drain_jobs(settings: IngestWorkerSettings, core: CoreSettings) -> Non
     # snapshot); credentials come from the encrypted store, keyed by cred_store_key.
     token_http = httpx.AsyncClient(timeout=httpx.Timeout(60.0))
     drive_http = httpx.Client(timeout=httpx.Timeout(120.0))
-    credentials = (
-        EncryptedCredentialStore(Cryptobox(settings.cred_store_key))
-        if settings.cred_store_key
-        else None
-    )
+    credentials = _credentials(settings, core)
 
     async def connector_for(source: SourceConfig) -> FetchingConnector:
         if source.connector == "telegram":
@@ -439,7 +447,8 @@ async def _drain_tdlib(settings: IngestWorkerSettings, core: CoreSettings) -> No
     claim_store = PostgresClaimStore(sessionmaker)
     audit_sink = PostgresAuditSink(sessionmaker)
     ocr_caller, ocr_closers = _vision_caller(settings, audit_sink)
-    credentials = EncryptedCredentialStore(Cryptobox(settings.cred_store_key))
+    credentials = _credentials(settings, core)
+    assert credentials is not None  # cred_store_key is required for this mode (guarded above)
 
     @contextmanager
     def account_sessions(user_id: str) -> Iterator[TelegramTdlibClient | None]:

@@ -8,13 +8,13 @@ core ``Cryptobox``, so a dumped store reveals only ciphertext. ``for_connector``
 
 from __future__ import annotations
 
-from metis_core.security import Cryptobox, EncryptedSecretStore
+from metis_core.security import Cryptobox, EncryptedSecretStore, SecretStore
 
 
 class ConnectorSecretResolver:
     """A ``SecretResolver`` scoped to one connector's namespace."""
 
-    def __init__(self, store: EncryptedSecretStore, connector: str) -> None:
+    def __init__(self, store: SecretStore, connector: str) -> None:
         self._store = store
         self._connector = connector
 
@@ -23,10 +23,22 @@ class ConnectorSecretResolver:
 
 
 class EncryptedCredentialStore:
-    """Per-connector credentials, encrypted at rest with a core ``Cryptobox``."""
+    """Per-connector credentials, encrypted at rest, over an in-memory or durable ``SecretStore``.
 
-    def __init__(self, crypto: Cryptobox) -> None:
-        self._store = EncryptedSecretStore(crypto)
+    Pass a ``Cryptobox`` for the in-memory store (dev/tests), or a ``store`` (e.g. a
+    ``PostgresSecretStore``) for the durable, cross-process backend used in deployment — the
+    namespacing + connector resolver are identical either way.
+    """
+
+    def __init__(
+        self, crypto: Cryptobox | None = None, *, store: SecretStore | None = None
+    ) -> None:
+        if store is not None:
+            self._store: SecretStore = store
+        elif crypto is not None:
+            self._store = EncryptedSecretStore(crypto)
+        else:
+            raise ValueError("EncryptedCredentialStore needs a Cryptobox or a SecretStore")
 
     def set_credential(self, *, connector: str, name: str, value: str) -> None:
         self._store.set(f"{connector}:{name}", value)

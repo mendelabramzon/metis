@@ -30,7 +30,7 @@ from metis_core.llm.ocr import model_transcriber
 from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup
 from metis_core.models import RawArtifactRow, SkillApprovalRow
 from metis_core.objectstore import S3ObjectStore
-from metis_core.security import Cryptobox
+from metis_core.security import Cryptobox, PostgresSecretStore
 from metis_core.security.deletion import ErasureResult, ErasureSummary
 from metis_core.security.deletion import erase_artifact as erase_artifact_core
 from metis_core.security.deletion import erase_source as erase_source_core
@@ -1264,11 +1264,21 @@ class GoogleOAuthConfig:
         return f"{self.auth_url}?{urlencode(params)}"
 
 
-def _build_credentials(settings: GatewaySettings) -> EncryptedCredentialStore | None:
-    """The encrypted credential store the OAuth callback writes refresh tokens into."""
+def _build_credentials(
+    settings: GatewaySettings, *, database_url: str | None = None
+) -> EncryptedCredentialStore | None:
+    """The encrypted credential store the OAuth callback + TDLib login write secrets into.
+
+    With ``database_url`` (the Postgres backend) it is durable and shared across processes — the
+    ingest worker reads the same secrets, and they survive a restart; without it (the in-memory
+    backend) it is per-process (dev/tests).
+    """
     if not settings.cred_store_key:
         return None
-    return EncryptedCredentialStore(Cryptobox(settings.cred_store_key))
+    crypto = Cryptobox(settings.cred_store_key)
+    if database_url:
+        return EncryptedCredentialStore(store=PostgresSecretStore(database_url, crypto))
+    return EncryptedCredentialStore(crypto)
 
 
 def _build_telegram_connect(
@@ -1440,7 +1450,8 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
     """
     core = CoreSettings()
     workspace_id = WorkspaceId(settings.workspace_id)
-    credentials = _build_credentials(settings)  # shared by the OAuth callback + the TDLib login
+    # Durable + shared across processes (the worker reads the same secrets): the Postgres backend.
+    credentials = _build_credentials(settings, database_url=core.database_url)
 
     engine = make_engine(core.database_url)
     sessionmaker = make_sessionmaker(engine)
