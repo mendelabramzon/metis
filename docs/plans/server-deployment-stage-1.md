@@ -11,6 +11,54 @@ onto seams that already exist (the model router, the connector `Transport` inter
 source/job state, the Postgres backend, the hybrid memory index). The numbering below mirrors the
 roadmap's workstreams 1.1–1.6.
 
+## Implementation Status (2026-06-20)
+
+Most of Stage 1 is built and on `main`; what remains is the bulk of the UI (1.6), per-action
+execution dispatch (1.5), and the opt-in Telegram TDLib path (1.4). Status by workstream:
+
+- **1.1 Deployment foundation — DONE.** Caddy TLS proxy, OTel spine + dashboards/alerts, scheduled
+  restore drill, resource budgets.
+- **1.2 Identity — DONE** (prior): orgs/users/workspaces/memberships, RBAC, the isolation gate.
+- **1.3 Provider plane — DONE**, including the embedding-capability manifest (self-hosted TEI) tail.
+- **1.4 Live ingestion:**
+  - Email/Drive (IMAP, Gmail/Drive over OAuth) + file upload + parser-quality — DONE (prior).
+  - **Telegram — DONE for the bot path** (the chosen default): the connector (CHAT_MESSAGE rendering
+    + recorded replay), per-chat `SourceConfig.config` + registry validation, the live Business
+    connected-bot transport, the dedicated `mode=telegram` worker drain (one global getUpdates offset
+    fanned out per chat), deletion→tombstone, and chat discovery (`telegram_chats` table +
+    `GET /telegram/chats`).
+  - **Telegram — TODO:** the opt-in TDLib transport (history backfill + followed channels) and
+    `business_connection` revocation handling. Global offset persistence was deliberately skipped
+    (Telegram confirms updates server-side once the offset advances + per-source cursors dedup).
+- **1.5 Durable state + command surface:**
+  - Durable job/wiki/approval state + erasure/evidence/contradiction/memory surfaces — DONE (prior).
+  - **Proposed-action command surface — DONE:** the action vocabulary (`ProposedAction` / `ActionRisk`
+    / `ActionKind` / `ActionStatus`), the durable `ActionStore`, the LLM interpreter
+    (`INTERPRET_COMMAND` task class + prompt → typed action, structured output, read-only ANSWER
+    fallback), and `routers/actions.py` (interpret → propose → risk-gated approve/reject).
+  - **TODO:** execution *dispatch* — an approved effectful action actually running against the engines
+    (start a sync, apply a memory/wiki patch, …). Today the lifecycle is recorded and only read-only
+    ANSWER runs (via the console's run-answer shortcut).
+- **1.6 UI — STARTED.** The single-file context-exoskeleton console at `/` (command → proposed-action
+  cards with risk badges + a status-filtered inbox, Telegram chat discovery, and sources / jobs /
+  approvals / audit / ask). **TODO:** login + workspace switcher, source-setup forms (Telegram bot
+  connect, OAuth, upload), contradictions + spend tabs, evidence drill-down — and a real SPA if a
+  richer UX is wanted.
+
+**Key decisions (settled — do not relitigate):**
+
+- **Telegram is bot-first (hybrid).** The sanctioned Business connected-bot is the default transport
+  (no account-ban risk, no encrypted-session subsystem, reaches private chats); TDLib is opt-in only
+  for what the bot cannot do (history backfill, followed channels). Both behind the same `Transport`
+  seam, so per-chat `SourceConfig`/cursoring/erasure are identical.
+- **Telegram delivery is polling** (`getUpdates`), drained once per cycle by the dedicated worker mode
+  and fanned out to every active chat source — not per-source jobs (one queue per bot token).
+- **The command interpreter is LLM-based**, via the model plane's structured-output path.
+
+**Suggested next steps (in order):** 1.6 source-setup forms + workspace switcher → 1.6
+contradictions/spend tabs → 1.5 execution dispatch (map each approved `ActionKind` to its engine,
+gated by risk) → 1.4 Telegram TDLib opt-in.
+
 ## Objective
 
 - Replace dev-token auth with organization / user / workspace / membership identity and RBAC,
