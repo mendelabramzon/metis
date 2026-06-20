@@ -141,6 +141,11 @@ def _render_markdown(message: _Message) -> str:
 class TelegramConnector(BaseConnector):
     connector = "telegram"
 
+    @property
+    def deleted_message_ids(self) -> tuple[str, ...]:
+        """Locators the bot transport saw deleted here (empty over a recorded/replay transport)."""
+        return tuple(getattr(self._transport, "deleted_message_ids", ()))
+
     def _listing(self) -> tuple[_Entry, ...]:
         return _LISTING.validate_json(self._read(_LISTING_KEY))
 

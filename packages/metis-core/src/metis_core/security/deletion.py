@@ -120,6 +120,41 @@ async def erase_source(
     )
 
 
+async def erase_artifacts_by_filename(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    object_store: ObjectStore,
+    *,
+    workspace_id: str,
+    source_id: str,
+    filenames: Sequence[str],
+) -> ErasureSummary:
+    """Erase a source's raw artifacts ingested under the given filenames (locators), cascade + blob.
+
+    The primitive behind per-message deletion: a deleted chat message tombstones its own artifact
+    and derived claims, keyed by the locator stamped on the artifact at ingest. Scoped to this
+    source's matching, non-tombstoned artifacts — every version of a message goes (an edit
+    re-ingests as a new artifact under the same filename); no other source or workspace is touched.
+    """
+    if not filenames:
+        return ErasureSummary(artifacts=0, claims=0, mem_cells=0, blobs_erased=0)
+    async with unit_of_work(sessionmaker) as session:
+        artifact_ids = list(
+            (
+                await session.scalars(
+                    select(RawArtifactRow.id).where(
+                        RawArtifactRow.workspace_id == workspace_id,
+                        RawArtifactRow.source_id == source_id,
+                        RawArtifactRow.body["filename"].astext.in_(list(filenames)),
+                        RawArtifactRow.tombstoned_at.is_(None),
+                    )
+                )
+            ).all()
+        )
+    return await _erase_each(
+        sessionmaker, object_store, workspace_id=workspace_id, artifact_ids=artifact_ids
+    )
+
+
 async def erase_workspace_artifacts(
     sessionmaker: async_sessionmaker[AsyncSession],
     object_store: ObjectStore,

@@ -106,6 +106,11 @@ def test_collects_deletions_for_the_chat() -> None:
     assert transport.deleted_message_ids == ("7001:3", "7001:4")
 
 
+def test_connector_surfaces_chat_deletions(workspace: WorkspaceId) -> None:
+    # The worker reads these off the connector to tombstone each deleted message's artifact.
+    assert _connector(workspace).deleted_message_ids == ("7001:3", "7001:4")
+
+
 def test_an_edit_reuses_the_message_id_as_one_versioned_entry() -> None:
     # A new message and a later edit of the same id collapse to one listing entry; the edit's
     # content wins — a re-render is a new content-addressed artifact (a new version of the message).

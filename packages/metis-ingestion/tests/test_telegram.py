@@ -108,3 +108,8 @@ def test_registry_rejects_a_telegram_source_without_a_chat() -> None:
 
 def test_registry_config_is_none_for_a_connector_without_a_schema() -> None:
     assert ConnectorRegistry.with_defaults().validate_config("imap", {}) is None
+
+
+def test_recorded_connector_reports_no_deletions(connectors_root, workspace) -> None:
+    # Replay fixtures carry no deletions, so the connector reports none (no tombstoning on replay).
+    assert _telegram(connectors_root, workspace).deleted_message_ids == ()

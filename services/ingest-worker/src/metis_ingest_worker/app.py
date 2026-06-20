@@ -33,6 +33,7 @@ from metis_core.llm.ocr import model_transcriber
 from metis_core.objectstore import S3ObjectStore
 from metis_core.observability import setup_telemetry
 from metis_core.security import Cryptobox
+from metis_core.security.deletion import erase_artifacts_by_filename
 from metis_core.stores import (
     PostgresClaimStore,
     PostgresDocumentStore,
@@ -323,13 +324,14 @@ async def _drain_telegram(settings: IngestWorkerSettings, core: CoreSettings) ->
         transcribe = (
             model_transcriber(ocr_caller, source.workspace_id) if ocr_caller is not None else None
         )
+        connector = build_telegram_connector(
+            workspace_id=source.workspace_id,
+            config=config,
+            sensitivity=source.sensitivity,
+            updates=updates,
+        )
         pipeline = IngestionPipeline(
-            connector=build_telegram_connector(
-                workspace_id=source.workspace_id,
-                config=config,
-                sensitivity=source.sensitivity,
-                updates=updates,
-            ),
+            connector=connector,
             artifact_store=artifact_store,
             document_store=document_store,
             claim_store=claim_store,
@@ -339,6 +341,15 @@ async def _drain_telegram(settings: IngestWorkerSettings, core: CoreSettings) ->
         )
         poller = await DurableIngestPoller.resume(pipeline, source=source, store=sources)
         await poller.poll_once()
+        # A message deleted in this chat tombstones its own artifact + derived claims.
+        if connector.deleted_message_ids:
+            await erase_artifacts_by_filename(
+                sessionmaker,
+                object_store,
+                workspace_id=str(source.workspace_id),
+                source_id=str(source.id),
+                filenames=connector.deleted_message_ids,
+            )
 
     offset = 0
     try:
