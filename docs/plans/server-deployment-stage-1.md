@@ -13,8 +13,11 @@ roadmap's workstreams 1.1–1.6.
 
 ## Implementation Status (2026-06-20)
 
-Most of Stage 1 is built and on `main`; what remains is the opt-in Telegram TDLib path (1.4) and
-`PROPOSE_SOURCE_CHANGE` execution dispatch (1.5, low priority). Status by workstream:
+Most of Stage 1 is built and on `main`. The opt-in TDLib path's core (transport + session/auth +
+backfill/enumeration client) is now done behind the `Transport` seam; what remains is its deployment
+wiring (native `libtdjson` client, gateway connect endpoint, worker backfill drain) plus
+`business_connection` revocation and `PROPOSE_SOURCE_CHANGE` execution dispatch (1.5, low priority).
+Status by workstream:
 
 - **1.1 Deployment foundation — DONE.** Caddy TLS proxy, OTel spine + dashboards/alerts, scheduled
   restore drill, resource budgets.
@@ -27,9 +30,20 @@ Most of Stage 1 is built and on `main`; what remains is the opt-in Telegram TDLi
     connected-bot transport, the dedicated `mode=telegram` worker drain (one global getUpdates offset
     fanned out per chat), deletion→tombstone, and chat discovery (`telegram_chats` table +
     `GET /telegram/chats`).
-  - **Telegram — TODO:** the opt-in TDLib transport (history backfill + followed channels) and
-    `business_connection` revocation handling. Global offset persistence was deliberately skipped
-    (Telegram confirms updates server-side once the offset advances + per-source cursors dedup).
+  - **Telegram TDLib (opt-in) — core DONE behind the same `Transport` seam:** the TDLib transport
+    (`telegram_tdlib_transport.py`) maps TDLib's message shape to the canonical listing the
+    `TelegramConnector` renders, so backfilled history + followed channels ingest as CHAT_MESSAGE
+    artifacts with the *same* per-chat `SourceConfig`/cursor/erasure as the bot path; the session
+    (`telegram_session.py`) is the authorization state machine (QR/phone → code → 2FA → ready/closed,
+    never persisting codes/2FA secrets) plus the backfill/enumeration client (`getChatHistory` paged,
+    `getChats`/`getChat`, `@extra`-correlated, flood-wait → `RateLimitError`). All over an injected
+    `TdjsonClient` (native `libtdjson` never imported), tested with no native lib + no live account.
+  - **Telegram TDLib — TODO (deployment wiring):** the native `libtdjson` `TdjsonClient` (ctypes,
+    deployment-only), a gateway per-user connect endpoint driving the session (surface the QR link /
+    prompt code+2FA), a worker backfill drain for TDLib sources, and storing the database-encryption
+    key via the credential store. Plus `business_connection` revocation handling on the bot path.
+    Global offset persistence was deliberately skipped (Telegram confirms updates server-side once
+    the offset advances + per-source cursors dedup).
 - **1.5 Durable state + command surface:**
   - Durable job/wiki/approval state + erasure/evidence/contradiction/memory surfaces — DONE (prior).
   - **Proposed-action command surface — DONE:** the action vocabulary (`ProposedAction` / `ActionRisk`
@@ -67,9 +81,12 @@ Most of Stage 1 is built and on `main`; what remains is the opt-in Telegram TDLi
   and fanned out to every active chat source — not per-source jobs (one queue per bot token).
 - **The command interpreter is LLM-based**, via the model plane's structured-output path.
 
-**Suggested next steps (in order):** 1.4 Telegram TDLib opt-in (backfill + followed channels +
-`business_connection` revocation) — the last substantial Stage-1 item → then `PROPOSE_SOURCE_CHANGE`
-execution dispatch (low priority). 1.6 UI and the rest of 1.5 execution dispatch are done.
+**Suggested next steps (in order):** TDLib *deployment wiring* — the native `libtdjson` `TdjsonClient`
+(ctypes), a gateway per-user connect endpoint driving `TelegramSession` (surface QR / prompt
+code+2FA, store the db-encryption key via the cred store), and a worker backfill drain for TDLib
+sources (using `TelegramTdlibClient.backfill` + `build_tdlib_connector`) → `business_connection`
+revocation handling → `PROPOSE_SOURCE_CHANGE` dispatch (low priority). The TDLib *core* (transport +
+session + client), 1.6 UI, and the rest of 1.5 execution dispatch are done.
 
 ## Objective
 
