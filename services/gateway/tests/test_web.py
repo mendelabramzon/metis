@@ -13,3 +13,7 @@ def test_root_serves_the_console(client) -> None:
     assert "context exoskeleton" in body
     assert "/actions" in body  # the command / proposed-action surface is wired into the UI
     assert "/telegram/chats" in body  # the Telegram chat-discovery surface too
+    assert "Sign in" in body  # identity login (user-id bearer) for the per-workspace surfaces
+    assert "/users/me" in body  # whoami validates the signed-in user
+    assert "/workspaces" in body  # the workspace switcher + workspace-scoped query
+    assert "/upload" in body  # file upload with a visible per-file parse status

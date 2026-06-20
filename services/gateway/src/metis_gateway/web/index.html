@@ -8,19 +8,20 @@
     :root { color-scheme: light dark; --bd: #8884; --mut: #888; }
     * { box-sizing: border-box; }
     body { font: 14px/1.55 system-ui, sans-serif; margin: 0; }
-    header { padding: .6rem 1rem; border-bottom: 1px solid var(--bd); display: flex; gap: .6rem; align-items: center; }
+    header { padding: .6rem 1rem; border-bottom: 1px solid var(--bd); display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
     header b { font-size: 1.05rem; }
     header .grow { flex: 1; }
-    header input { flex: 0 0 20rem; padding: .3rem .5rem; }
+    header input, header select { padding: .3rem .5rem; }
+    header input { flex: 0 0 11rem; }
     nav { display: flex; gap: .25rem; padding: .5rem 1rem 0; flex-wrap: wrap; }
     nav button { border: 1px solid var(--bd); background: transparent; padding: .35rem .8rem; border-radius: 6px 6px 0 0; cursor: pointer; }
     nav button.on { font-weight: 600; border-bottom-color: transparent; }
     main { padding: 1rem; max-width: 60rem; }
     section { display: none; }
     section.on { display: block; }
-    input, textarea, button { font: inherit; }
+    input, textarea, button, select { font: inherit; }
     textarea { width: 100%; }
-    .row { display: flex; gap: .5rem; margin-bottom: .8rem; }
+    .row { display: flex; gap: .5rem; margin-bottom: .8rem; align-items: center; }
     .row > input, .row > textarea { flex: 1; padding: .4rem .5rem; }
     .act { border: 1px solid var(--bd); background: transparent; border-radius: 5px; padding: .25rem .6rem; cursor: pointer; }
     .act.primary { background: #2a72e6; color: #fff; border-color: #2a72e6; }
@@ -36,6 +37,7 @@
     .memory_write, .wiki_write { background: #b9770022; color: #b97700; }
     .external { background: #c62a2a22; color: #c62a2a; }
     .pill { font-size: .72em; padding: .1rem .45rem; border: 1px solid var(--bd); border-radius: 999px; }
+    .ok { color: #2e7d32; } .bad { color: #c62a2a; }
     .meta { margin: .35rem 0; }
     .meta span { margin-right: .9rem; }
     .cardactions { display: flex; gap: .4rem; margin-top: .5rem; }
@@ -45,7 +47,11 @@
   <header>
     <b>Metis</b><span class="mut">context exoskeleton</span>
     <span class="grow"></span>
-    <input id="token" placeholder="Bearer token" />
+    <input id="user" placeholder="user id" title="sign in as a user (identity bearer)" />
+    <button class="act" onclick="signIn()">Sign in</button>
+    <select id="ws" title="active workspace"></select>
+    <span id="whoami" class="mut"></span>
+    <input id="token" placeholder="operator token" title="operator / scope token" />
   </header>
   <nav id="tabs"></nav>
   <main>
@@ -67,6 +73,11 @@
       <div class="row"><input id="q" placeholder="Ask the workspace for a grounded answer…" /><button class="act primary" onclick="ask()">Ask</button></div>
       <div id="answer"></div>
     </section>
+    <section id="upload">
+      <p class="mut">Upload PDF/DOCX/XLSX/CSV/TXT/MD/HTML/EML into the active workspace — each file shows its parse status. Sign in and pick a workspace first.</p>
+      <div class="row"><input type="file" id="files" multiple /><button class="act primary" onclick="upload()">Upload</button></div>
+      <div id="upload-out"></div>
+    </section>
     <section id="sources"><button class="act" onclick="load('sources')">Refresh</button><div id="sources-out"></div></section>
     <section id="telegram">
       <p class="mut">Chats the bot has seen on a connection — pick one to ingest as a source.</p>
@@ -77,11 +88,15 @@
     <section id="audit"><button class="act" onclick="load('audit')">Refresh</button><div id="audit-out"></div></section>
   </main>
   <script>
-    const TABS = ["command", "ask", "sources", "telegram", "jobs", "approvals", "audit"];
+    const TABS = ["command", "ask", "upload", "sources", "telegram", "jobs", "approvals", "audit"];
     const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-    const tok = () => document.getElementById("token").value.trim();
+    const tok = () => document.getElementById("token").value.trim();   // operator / scope token
+    const uid = () => document.getElementById("user").value.trim();    // signed-in user id (identity bearer)
+    const ws = () => document.getElementById("ws").value;              // active workspace id
     const hdr = () => ({ "Authorization": "Bearer " + tok(), "Content-Type": "application/json" });
+    const userHdr = () => ({ "Authorization": "Bearer " + uid(), "Content-Type": "application/json" });
     const api = (p, opts = {}) => fetch(p, { headers: hdr(), ...opts }).then(r => r.json());
+    const userApi = (p, opts = {}) => fetch(p, { headers: userHdr(), ...opts }).then(r => r.json());
 
     function show(tab) {
       for (const t of TABS) {
@@ -90,6 +105,21 @@
       }
       if (["sources", "telegram", "jobs", "approvals", "audit"].includes(tab)) load(tab);
       if (tab === "command") loadActions();
+    }
+
+    // --- identity: sign in as a user, then switch the active workspace --------------------------
+    // Two principals coexist in the gateway: the operator/scope token (top-right) authorizes the
+    // operator surfaces (command, sources, telegram, jobs, audit); a user id is the identity bearer
+    // for the membership-gated per-workspace surfaces (ask, upload). Signing in lists the user's
+    // workspaces; the chosen one is the target for those surfaces.
+    async function signIn() {
+      const who = document.getElementById("whoami");
+      if (!uid()) { who.textContent = ""; return; }
+      const me = await userApi("/users/me");
+      who.textContent = me.email ? "signed in as " + esc(me.email) : "sign-in failed";
+      const sel = document.getElementById("ws");
+      const spaces = me.email ? await userApi("/workspaces") : [];
+      sel.innerHTML = (spaces || []).map(w => `<option value="${esc(w.id)}">${esc(w.name)} · ${esc(w.kind)}</option>`).join("");
     }
 
     // --- command / proposed actions -------------------------------------------------------------
@@ -132,12 +162,47 @@
       document.getElementById("ans-" + id).innerHTML = `<pre>${esc(r.answer || "")}</pre><div class="mut">${r.sufficient ? cites : "no grounded evidence"}</div>`;
     }
 
-    // --- ask (direct grounded query) ------------------------------------------------------------
+    // --- ask (grounded query) -------------------------------------------------------------------
+    // Workspace-scoped (membership-gated) when signed in with a workspace selected; otherwise the
+    // default-workspace path under the scope token, so the console works before any sign-in.
     async function ask() {
       const text = document.getElementById("q").value;
-      const r = await api("/query", { method: "POST", body: JSON.stringify({ text }) });
+      const scoped = uid() && ws();
+      const r = scoped
+        ? await userApi(`/workspaces/${ws()}/query`, { method: "POST", body: JSON.stringify({ text }) })
+        : await api("/query", { method: "POST", body: JSON.stringify({ text }) });
       const cites = (r.citations || []).map(c => `claim ${esc((c.claim_id || "").slice(0, 12))}… · span ${esc((c.source_span_id || "—").slice(0, 12))}`).join("<br>");
-      document.getElementById("answer").innerHTML = `<pre>${esc(r.answer || "")}</pre><div class="mut">${r.sufficient ? cites : "no grounded evidence"}</div>`;
+      const where = scoped ? `workspace ${esc(ws().slice(0, 12))}…` : "default workspace (scope token)";
+      document.getElementById("answer").innerHTML = `<pre>${esc(r.answer || "")}</pre><div class="mut">${r.sufficient ? cites : "no grounded evidence"} · ${where}</div>`;
+    }
+
+    // --- upload (per-file parse status) ---------------------------------------------------------
+    async function upload() {
+      const out = document.getElementById("upload-out");
+      if (!uid() || !ws()) { out.innerHTML = "<i class='mut'>sign in and pick a workspace first</i>"; return; }
+      const input = document.getElementById("files");
+      if (!input.files.length) { out.innerHTML = "<i class='mut'>choose one or more files</i>"; return; }
+      const form = new FormData();
+      for (const f of input.files) form.append("files", f);
+      out.innerHTML = "<i class='mut'>uploading…</i>";
+      // Multipart upload: send only the bearer so the browser sets the multipart boundary itself.
+      const r = await fetch(`/workspaces/${ws()}/upload`, {
+        method: "POST", headers: { "Authorization": "Bearer " + uid() }, body: form,
+      }).then(x => x.json());
+      const rows = (r.files || []).map(f => ({
+        file: f.filename,
+        status: f.status,
+        doc: (f.doc_id || "").slice(0, 12),
+        segments: f.segments,
+        claims: f.claims,
+        coverage: f.coverage == null ? "" : f.coverage.toFixed(2),
+        pages: f.page_count == null ? "" : f.page_count,
+        path: f.parse_path || "",
+        note: f.error || (f.warnings || []).join("; "),
+      }));
+      out.innerHTML = rows.length
+        ? table(rows, ["file", "status", "doc", "segments", "claims", "coverage", "pages", "path", "note"])
+        : `<i class='mut'>${esc(r.detail || "upload failed")}</i>`;
     }
 
     // --- dashboards -----------------------------------------------------------------------------
