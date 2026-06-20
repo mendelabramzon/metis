@@ -486,3 +486,5 @@ class ActionExecutionView(BaseModel):
     sufficient: bool | None = None
     citations: list[Citation] = Field(default_factory=list)
     job_id: str | None = None
+    doc_id: str | None = None
+    patch_id: str | None = None

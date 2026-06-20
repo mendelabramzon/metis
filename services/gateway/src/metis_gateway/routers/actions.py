@@ -152,4 +152,6 @@ async def execute(action_id: str, backend: BackendDep, principal: UserDep) -> Ac
             Citation(claim_id=c, source_span_id=s, artifact_id=a) for c, s, a in outcome.citations
         ],
         job_id=outcome.job_id,
+        doc_id=outcome.doc_id,
+        patch_id=outcome.patch_id,
     )

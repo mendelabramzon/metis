@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from metis_core.wiki.approval import WikiPatchReview
 from metis_gateway.backend import Backend
 from metis_gateway.errors import ConflictError, NotFoundError, TooManyRequestsError
 from metis_gateway.models import over_daily_cap
@@ -30,9 +31,15 @@ from metis_protocol import (
     Attribution,
     AuditEvent,
     AuditId,
+    PolicyState,
     ProposedAction,
+    Provenance,
     Sensitivity,
     SourceId,
+    WikiOp,
+    WikiPatch,
+    WikiPatchId,
+    is_at_least,
     new_id,
 )
 from metis_runtime.agent import AgentRequest
@@ -51,6 +58,8 @@ class ExecutionOutcome:
     # (claim_id, source_span_id, artifact_id) rows, mirroring the query router's flat citations.
     citations: list[tuple[str, str | None, str | None]] = field(default_factory=list)
     job_id: str | None = None  # for START_SYNC: the queued connector-sync job
+    doc_id: str | None = None  # for CREATE_MEMORY: the doc the assertion was ingested as
+    patch_id: str | None = None  # for CREATE_WIKI_PATCH: the patch queued for review
 
 
 def guard_executable(action: ProposedAction) -> None:
@@ -79,10 +88,23 @@ async def execute_action(
         outcome = await _inspect_source(action, backend=backend)
     elif action.kind is ActionKind.START_SYNC:
         outcome = await _start_sync(action, backend=backend)
-    else:  # CREATE_MEMORY / CREATE_WIKI_PATCH / PROPOSE_SOURCE_CHANGE — deferred (truth hierarchy)
+    elif action.kind is ActionKind.CREATE_MEMORY:
+        outcome = await _create_memory(action, backend=backend)
+    elif action.kind is ActionKind.CREATE_WIKI_PATCH:
+        outcome = await _create_wiki_patch(action, backend=backend, actor=actor)
+    else:  # PROPOSE_SOURCE_CHANGE — a connector/source change is itself an approval, deferred
         raise ConflictError(f"execution for {action.kind.value} actions is not implemented yet")
     await _audit(action, backend=backend, actor=actor, detail=outcome.detail)
     return outcome
+
+
+def _first_str(action: ProposedAction, keys: tuple[str, ...]) -> str | None:
+    """The first non-empty string among the named parameters (interpreter params are free-form)."""
+    for key in keys:
+        value = action.parameters.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
 
 
 async def _run_query(
@@ -152,6 +174,58 @@ async def _start_sync(action: ProposedAction, *, backend: Backend) -> ExecutionO
         cursor=cursor.cursor if cursor is not None else None,
     )
     return ExecutionOutcome(detail=f"queued sync job for {source.name}", job_id=str(job_id))
+
+
+async def _create_memory(action: ProposedAction, *, backend: Backend) -> ExecutionOutcome:
+    """Remember an assertion by *ingesting it through the claim pipeline* (truth hierarchy): it
+    becomes a user-sourced doc → claims → mem cell with provenance, never a direct memory write."""
+    content = _first_str(action, ("content", "text", "note", "memory", "summary"))
+    if content is None:
+        raise ConflictError("create_memory requires a 'content' (or text/note) parameter")
+    ws_id = action.workspace_id
+    policy = await backend.identity.get_model_policy(ws_id)
+    workspace = backend.workspace_for(ws_id, allow_external=policy.allow_external_models)
+    outcome = await workspace.ingest_bytes(
+        filename=f"memory-{action.id}.md",
+        data=content.encode("utf-8"),
+        sensitivity=action.sensitivity,
+        connector="command",
+    )
+    return ExecutionOutcome(
+        detail=f"ingested via the pipeline as doc {outcome.doc_id} ({outcome.claims} claim(s))",
+        doc_id=outcome.doc_id,
+    )
+
+
+async def _create_wiki_patch(
+    action: ProposedAction, *, backend: Backend, actor: str
+) -> ExecutionOutcome:
+    """Propose a wiki patch into the review inbox (never a direct write): a new page from the
+    command, held PROPOSED for the existing wiki approval to commit (or reject)."""
+    body = _first_str(action, ("body", "content", "markdown", "text")) or action.command
+    title = _first_str(action, ("title", "topic", "page")) or action.summary or "Untitled"
+    sensitivity = action.sensitivity
+    patch = WikiPatch(
+        id=new_id(WikiPatchId),
+        provenance=Provenance(
+            workspace_id=action.workspace_id,
+            attribution=Attribution(agent_kind=AgentKind.HUMAN, agent=actor),
+        ),
+        policy=PolicyState(
+            sensitivity=sensitivity,
+            allow_external_models=not is_at_least(sensitivity, Sensitivity.RESTRICTED),
+        ),
+        created_at=datetime.now(UTC),
+        op=WikiOp.CREATE,
+        title=title,
+        body_markdown=body,
+        rationale=f"proposed from command: {action.command}",
+    )
+    await backend.wiki.propose(WikiPatchReview(patch=patch))
+    return ExecutionOutcome(
+        detail=f"proposed wiki patch {patch.id} for review (not yet committed)",
+        patch_id=str(patch.id),
+    )
 
 
 async def _audit(action: ProposedAction, *, backend: Backend, actor: str, detail: str) -> None:

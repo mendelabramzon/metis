@@ -212,6 +212,8 @@
         html += `<pre>${esc(r.answer)}</pre><div class="mut">${r.sufficient ? cites : "no grounded evidence"}</div>`;
       }
       if (r.job_id) html += `<div class="mut">queued job ${esc(r.job_id.slice(0, 12))}…</div>`;
+      if (r.doc_id) html += `<div class="mut">ingested doc ${esc(r.doc_id.slice(0, 12))}…</div>`;
+      if (r.patch_id) html += `<div class="mut">wiki patch ${esc(r.patch_id.slice(0, 12))}… queued for review</div>`;
       el.innerHTML = html;
     }
 

@@ -138,15 +138,67 @@ def test_external_side_effects_are_blocked(client: TestClient, op: dict[str, str
     assert "external" in resp.json()["error"]["message"].lower()
 
 
-def test_memory_write_kind_is_deferred(client: TestClient, op: dict[str, str]) -> None:
+def test_create_memory_ingests_through_the_pipeline(client: TestClient, op: dict[str, str]) -> None:
+    """CREATE_MEMORY remembers an assertion by ingesting it (raw→claims), never a direct write —
+    so the remembered fact is grounded evidence, retrievable like any other ingested doc."""
     action_id = _inject(
         client,
         kind=ActionKind.CREATE_MEMORY,
         risk=ActionRisk.MEMORY_WRITE,
+        parameters={"content": "Ada Lovelace is the CTO of Acme Inc."},
         status=ActionStatus.APPROVED,
     )
     resp = client.post(f"/actions/{action_id}/execute", headers=op)
-    assert resp.status_code == 409  # routed via the pipeline later, never a direct write
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["doc_id"]
+    assert resp.json()["action"]["status"] == "executed"
+
+    answered = client.post("/query", json={"text": "Who is the CTO of Acme?"}, headers=op)
+    assert answered.json()["sufficient"] is True  # the assertion is now grounded, citable evidence
+
+
+def test_create_memory_without_content_is_a_clean_error(
+    client: TestClient, op: dict[str, str]
+) -> None:
+    action_id = _inject(
+        client,
+        kind=ActionKind.CREATE_MEMORY,
+        risk=ActionRisk.MEMORY_WRITE,
+        status=ActionStatus.APPROVED,  # approved, but nothing to remember
+    )
+    resp = client.post(f"/actions/{action_id}/execute", headers=op)
+    assert resp.status_code == 409
+    assert "content" in resp.json()["error"]["message"]
+
+
+def test_create_wiki_patch_proposes_for_review(client: TestClient, op: dict[str, str]) -> None:
+    """CREATE_WIKI_PATCH queues a patch in the review inbox (never a direct write); the existing
+    wiki approval commits it later."""
+    action_id = _inject(
+        client,
+        kind=ActionKind.CREATE_WIKI_PATCH,
+        risk=ActionRisk.WIKI_WRITE,
+        parameters={"title": "Acme", "body": "Acme ships in 2026."},
+        status=ActionStatus.APPROVED,
+    )
+    resp = client.post(f"/actions/{action_id}/execute", headers=op)
+    assert resp.status_code == 200, resp.text
+    patch_id = resp.json()["patch_id"]
+    assert patch_id
+    # the patch is proposed for review, not applied — it shows up in the wiki patch inbox.
+    patches = client.get("/wiki/patches", headers=op).json()
+    assert any(p["id"] == patch_id and p["status"] == "proposed" for p in patches)
+
+
+def test_propose_source_change_is_deferred(client: TestClient, op: dict[str, str]) -> None:
+    action_id = _inject(
+        client,
+        kind=ActionKind.PROPOSE_SOURCE_CHANGE,
+        risk=ActionRisk.REVERSIBLE,  # not external, so it reaches the (unimplemented) dispatch
+        status=ActionStatus.APPROVED,
+    )
+    resp = client.post(f"/actions/{action_id}/execute", headers=op)
+    assert resp.status_code == 409
     assert "not implemented" in resp.json()["error"]["message"].lower()
 
 
