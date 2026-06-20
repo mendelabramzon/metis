@@ -369,6 +369,18 @@ async def _drain_telegram(settings: IngestWorkerSettings, core: CoreSettings) ->
         for chat in extract_discovered_chats(updates):
             await sources.upsert_discovered_chat(chat)
 
+    async def deactivate_revoked(connection_ids: set[str]) -> None:
+        """Pause the sources of any Business connection the owner revoked (they can't sync now)."""
+        for source in await sources.list_all():
+            if source.connector != "telegram" or not source.active:
+                continue
+            connection = TelegramSourceConfig.model_validate(source.config).business_connection_id
+            if connection and connection in connection_ids:
+                await sources.set_active(source.id, False)
+                logger.warning(
+                    "telegram: connection %s revoked; paused source %s", connection, source.id
+                )
+
     offset = 0
     try:
         while True:
@@ -387,6 +399,7 @@ async def _drain_telegram(settings: IngestWorkerSettings, core: CoreSettings) ->
                 sources=active,
                 sync_source=sync_source,
                 record_chats=record_chats,
+                on_revoked=deactivate_revoked,
             )
             logger.info("telegram drain: %d active source(s), next offset=%d", len(active), offset)
             await asyncio.sleep(settings.poll_interval_seconds)

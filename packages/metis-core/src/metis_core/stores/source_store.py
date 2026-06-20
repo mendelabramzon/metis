@@ -58,6 +58,17 @@ class PostgresSourceStore:
             row = await session.get(SourceConfigRow, str(source_id))
         return to_model(row, SourceConfig) if row is not None else None
 
+    async def set_active(self, source_id: SourceId, active: bool) -> SourceConfig | None:
+        """Pause/resume a source; ``active`` lives both as a column and in the ``body``, so set both
+        (a new dict so SQLAlchemy notices it). Used to pause a Telegram source on revocation."""
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(SourceConfigRow, str(source_id))
+            if row is None:
+                return None
+            row.active = active
+            row.body = {**row.body, "active": active}
+            return to_model(row, SourceConfig)
+
     async def list(self, workspace_id: WorkspaceId) -> Sequence[SourceConfig]:
         """The workspace's sources, oldest first — what the ingest worker polls for a workspace."""
         stmt = (

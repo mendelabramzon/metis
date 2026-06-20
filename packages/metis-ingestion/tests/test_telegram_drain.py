@@ -7,7 +7,12 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from metis_ingestion import TelegramBotClient, drain_telegram_once, extract_discovered_chats
+from metis_ingestion import (
+    TelegramBotClient,
+    drain_telegram_once,
+    extract_discovered_chats,
+    revoked_connection_ids,
+)
 from metis_protocol import Sensitivity, SourceConfig, SourceId, WorkspaceId, new_id
 
 
@@ -86,6 +91,38 @@ async def test_empty_batch_keeps_the_offset_and_touches_nothing() -> None:
 
     assert offset == 42  # nothing new -> the offset holds
     assert touched is False
+
+
+def test_revoked_connection_ids_picks_disabled_connections_only() -> None:
+    updates = [
+        {"update_id": 1, "business_connection": {"id": "bc-1", "is_enabled": False}},  # revoked
+        {"update_id": 2, "business_connection": {"id": "bc-2", "is_enabled": True}},  # still on
+        {"update_id": 3, "business_message": {"message_id": 1, "chat": {"id": 7001}}},  # unrelated
+    ]
+    assert revoked_connection_ids(updates) == {"bc-1"}
+
+
+async def test_drain_hands_revoked_connections_to_the_handler() -> None:
+    batch = [{"update_id": 5, "business_connection": {"id": "bc-1", "is_enabled": False}}]
+    client = TelegramBotClient(token="T", http_client=_FakeBotHTTP(batch))
+    paused: list[set[str]] = []
+
+    async def sync_source(source: SourceConfig, updates: Sequence[Mapping[str, Any]]) -> None:
+        pass
+
+    async def on_revoked(ids: set[str]) -> None:
+        paused.append(ids)
+
+    offset = await drain_telegram_once(
+        client=client,
+        offset=0,
+        sources=[_source("a")],
+        sync_source=sync_source,
+        on_revoked=on_revoked,
+    )
+
+    assert paused == [{"bc-1"}]  # the revoked connection reached the handler
+    assert offset == 6  # the batch still advances the offset
 
 
 def test_extract_discovered_chats_dedups_by_connection_and_chat() -> None:
