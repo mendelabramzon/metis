@@ -11,13 +11,13 @@ onto seams that already exist (the model router, the connector `Transport` inter
 source/job state, the Postgres backend, the hybrid memory index). The numbering below mirrors the
 roadmap's workstreams 1.1–1.6.
 
-## Implementation Status (2026-06-20)
+## Implementation Status (2026-06-21)
 
-Most of Stage 1 is built and on `main`. The opt-in TDLib path's core (transport + session/auth +
-backfill/enumeration client) is now done behind the `Transport` seam; what remains is its deployment
-wiring (native `libtdjson` client, gateway connect endpoint, worker backfill drain) plus
-`business_connection` revocation and `PROPOSE_SOURCE_CHANGE` execution dispatch (1.5, low priority).
-Status by workstream:
+All of Stage 1 is built. The opt-in TDLib path is now complete end to end — its core (transport +
+session/auth + backfill/enumeration client) *and* its deployment wiring (native `libtdjson` ctypes
+client, the gateway per-user connect endpoint, the worker backfill drain) — and the two trailing
+items are done too: `business_connection` revocation on the bot path and `PROPOSE_SOURCE_CHANGE`
+execution dispatch. There are no remaining Stage-1 TODOs. Status by workstream:
 
 - **1.1 Deployment foundation — DONE.** Caddy TLS proxy, OTel spine + dashboards/alerts, scheduled
   restore drill, resource budgets.
@@ -28,8 +28,8 @@ Status by workstream:
   - **Telegram — DONE for the bot path** (the chosen default): the connector (CHAT_MESSAGE rendering
     + recorded replay), per-chat `SourceConfig.config` + registry validation, the live Business
     connected-bot transport, the dedicated `mode=telegram` worker drain (one global getUpdates offset
-    fanned out per chat), deletion→tombstone, and chat discovery (`telegram_chats` table +
-    `GET /telegram/chats`).
+    fanned out per chat), deletion→tombstone, chat discovery (`telegram_chats` table +
+    `GET /telegram/chats`), and `business_connection` revocation → source pause (`SourceStore.set_active`).
   - **Telegram TDLib (opt-in) — core DONE behind the same `Transport` seam:** the TDLib transport
     (`telegram_tdlib_transport.py`) maps TDLib's message shape to the canonical listing the
     `TelegramConnector` renders, so backfilled history + followed channels ingest as CHAT_MESSAGE
@@ -38,12 +38,20 @@ Status by workstream:
     never persisting codes/2FA secrets) plus the backfill/enumeration client (`getChatHistory` paged,
     `getChats`/`getChat`, `@extra`-correlated, flood-wait → `RateLimitError`). All over an injected
     `TdjsonClient` (native `libtdjson` never imported), tested with no native lib + no live account.
-  - **Telegram TDLib — TODO (deployment wiring):** the native `libtdjson` `TdjsonClient` (ctypes,
-    deployment-only), a gateway per-user connect endpoint driving the session (surface the QR link /
-    prompt code+2FA), a worker backfill drain for TDLib sources, and storing the database-encryption
-    key via the credential store. Plus `business_connection` revocation handling on the bot path.
-    Global offset persistence was deliberately skipped (Telegram confirms updates server-side once
-    the offset advances + per-source cursors dedup).
+  - **Telegram TDLib (opt-in) — deployment wiring now DONE:** the native `libtdjson` `TdjsonClient`
+    (`telegram_tdjson.py`, a ctypes binding over the per-handle JSON interface, the one place that
+    imports the lib — injected/faked everywhere else); the gateway per-user connect endpoint
+    (`telegram_connect.py` + `POST /telegram/tdlib/connect[/code|/password]`) driving the session
+    across requests, surfacing the QR link / code / 2FA prompt and storing only the database-encryption
+    key via the credential store (codes/2FA consumed, never persisted); and the worker backfill drain
+    (`mode=telegram_tdlib` + `telegram_tdlib_drain.py`) that groups sources by owning account
+    (`TelegramSourceConfig.tdlib_user_id`), reopens each authorized database, and pages history via
+    `TelegramTdlibClient.backfill_chat` into the same per-chat connector/cursor as the bot path. The
+    auth pump (`TelegramSession.pump`) is shared by the gateway login and the worker reopen. Global
+    offset persistence was deliberately skipped (Telegram confirms updates server-side once the offset
+    advances + per-source cursors dedup). Cross-process db-key/database sharing (gateway login →
+    worker backfill) needs a shared volume + a persistent `SecretStore` backend — the same deployment
+    concern as the OAuth→worker token handoff, picked by the deployment profile.
 - **1.5 Durable state + command surface:**
   - Durable job/wiki/approval state + erasure/evidence/contradiction/memory surfaces — DONE (prior).
   - **Proposed-action command surface — DONE:** the action vocabulary (`ProposedAction` / `ActionRisk`
@@ -57,8 +65,10 @@ Status by workstream:
     (truth-hierarchy-safe — never a direct memory write); `CREATE_WIKI_PATCH` (APPROVED) proposes a
     patch into the wiki review inbox for the existing approval to commit; `EXTERNAL` is blocked. Each
     run emits an `action.executed` audit event and records EXECUTED/FAILED.
-  - **TODO:** only `PROPOSE_SOURCE_CHANGE` dispatch remains (a connector/source change is itself an
-    approval) — low priority.
+  - **`PROPOSE_SOURCE_CHANGE` dispatch — DONE:** an approved action registers a connector-backed
+    source from its parameters (connector + name + config), validated through the connector registry
+    (a bad config is rejected at execution, not mid-sync) — the `POST /sources` path, gated as an
+    approval. Execution dispatch now covers every `ActionKind`.
 - **1.6 UI — DONE.** The single-file context-exoskeleton console at `/` now covers:
   command → proposed-action cards (risk badges + status-filtered inbox); **identity login** (user-id
   bearer) + a **workspace switcher** from `GET /workspaces`; workspace-scoped **ask**
@@ -81,12 +91,14 @@ Status by workstream:
   and fanned out to every active chat source — not per-source jobs (one queue per bot token).
 - **The command interpreter is LLM-based**, via the model plane's structured-output path.
 
-**Suggested next steps (in order):** TDLib *deployment wiring* — the native `libtdjson` `TdjsonClient`
-(ctypes), a gateway per-user connect endpoint driving `TelegramSession` (surface QR / prompt
-code+2FA, store the db-encryption key via the cred store), and a worker backfill drain for TDLib
-sources (using `TelegramTdlibClient.backfill` + `build_tdlib_connector`) → `business_connection`
-revocation handling → `PROPOSE_SOURCE_CHANGE` dispatch (low priority). The TDLib *core* (transport +
-session + client), 1.6 UI, and the rest of 1.5 execution dispatch are done.
+**Suggested next steps:** Stage 1's feature TODOs are closed. What remains before a live multi-user
+deployment is *operational*, not feature work: (1) a persistent `SecretStore` backend (KMS/keyring)
+so connector secrets — the OAuth refresh tokens *and* the TDLib database-encryption keys — survive
+restarts and are shared gateway↔worker (today's `EncryptedCredentialStore` is per-process in-memory);
+(2) a shared volume for the per-account TDLib database directories so the worker reopens what the
+gateway login authorized; (3) packaging `libtdjson` into the worker/gateway images. Then real-account
+TDLib validation (QR/2FA login, history backfill) against the recorded-fixture suite. Beyond that,
+Stage 2 (deep research, outbound actions, signed cross-company exchange).
 
 ## Objective
 
