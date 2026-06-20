@@ -12,6 +12,9 @@ dependencies = [
     "alembic>=1.13",
 ]
 
+[project.scripts]
+metis-restore-drill = "metis_deploy.restore_drill:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

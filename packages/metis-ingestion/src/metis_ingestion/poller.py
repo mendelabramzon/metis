@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Protocol, runtime_checkable
 
+from metis_core.observability import observe_ingestion_lag
 from metis_ingestion.pipeline import IngestResult
 from metis_protocol import (
     ConnectorRun,
@@ -84,9 +85,11 @@ class DurableIngestPoller:
         try:
             result = await self._poller.poll_once()
         except Exception as exc:
+            self._observe_lag(started)
             run = self._run(ConnectorRunStatus.FAILED, started, error=str(exc))
             await self._store.record_run(run)
             raise
+        self._observe_lag(started)
         await self._store.set_cursor(
             SourceCursor(
                 source_id=self._source.id, cursor=self._poller.cursor, updated_at=datetime.now(UTC)
@@ -103,6 +106,12 @@ class DurableIngestPoller:
                 )
             )
         return result
+
+    def _observe_lag(self, started: datetime) -> None:
+        """How long this connector's sync cycle took, for the ingestion-lag dashboard."""
+        observe_ingestion_lag(
+            (datetime.now(UTC) - started).total_seconds(), connector=self._source.connector
+        )
 
     def _run(
         self,

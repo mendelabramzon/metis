@@ -19,8 +19,21 @@ from metis_deploy.health import (
     liveness_probe,
 )
 from metis_deploy.migrations import run_migrations
-from metis_deploy.observability import METRIC_LABELS, TRACE_ID_FIELD, Metric
+from metis_deploy.observability import (
+    METRIC_LABELS,
+    TRACE_ID_FIELD,
+    Metric,
+    flush_telemetry,
+    incr_restore_drill,
+    setup_telemetry,
+)
 from metis_deploy.profiles import ModelProfile, build_providers, build_router, is_external_capable
+from metis_deploy.restore_drill import (
+    RestoreDrillError,
+    RestoreDrillResult,
+    latest_bundle,
+    run_restore_drill,
+)
 
 __version__ = "0.0.0"
 
@@ -33,11 +46,18 @@ __all__ = [
     "HealthStatus",
     "Metric",
     "ModelProfile",
+    "RestoreDrillError",
+    "RestoreDrillResult",
     "__version__",
     "build_providers",
     "build_router",
+    "flush_telemetry",
+    "incr_restore_drill",
     "is_external_capable",
+    "latest_bundle",
     "liveness_probe",
     "run_backup",
     "run_migrations",
+    "run_restore_drill",
+    "setup_telemetry",
 ]

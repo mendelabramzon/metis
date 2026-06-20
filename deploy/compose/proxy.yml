@@ -1,0 +1,35 @@
+# TLS-terminating reverse proxy (Caddy) in front of the gateway. Fronts the whole stack behind one
+# domain with automatic HTTPS:
+#   METIS_DOMAIN=metis.example.com METIS_ACME_EMAIL=ops@example.com \
+#     docker compose -f docker-compose.yml -f compose/proxy.yml up
+# Caddy obtains + renews a Let's Encrypt cert for $METIS_DOMAIN and proxies to gateway:8000. For a
+# local/offline run leave METIS_DOMAIN unset (defaults to localhost; Caddy serves its internal CA).
+# The proxy is the only ingress: the gateway's own published port is reset so 8000 is not exposed.
+name: metis
+
+services:
+  proxy:
+    image: caddy:2
+    depends_on:
+      gateway:
+        condition: service_healthy
+    environment:
+      METIS_DOMAIN: ${METIS_DOMAIN:-localhost}
+      METIS_ACME_EMAIL: ${METIS_ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./compose/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data  # persist issued certs across restarts (avoids Let's Encrypt rate limits)
+      - caddy_config:/config
+    restart: unless-stopped
+
+  gateway:
+    # Behind the proxy the gateway must not publish to the host directly — reset the base mapping so
+    # only the proxy's 80/443 are reachable (Compose merge tag; validate with `docker compose config`).
+    ports: !reset []
+
+volumes:
+  caddy_data:
+  caddy_config:

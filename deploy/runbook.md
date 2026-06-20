@@ -21,6 +21,18 @@ operator console) is on `http://localhost:8000` (`/` for the console, `/health` 
 > Migrations run **once** in the `migrate` service (workers wait on
 > `service_completed_successfully`), so multiple workers never race the schema.
 
+For a public deployment, add the TLS proxy overlay (`compose/proxy.yml`): Caddy terminates HTTPS for
+one domain and forwards to the gateway, which is then no longer published on `8000` directly.
+
+```bash
+METIS_DOMAIN=metis.example.com METIS_ACME_EMAIL=ops@example.com \
+  docker compose -f docker-compose.yml -f compose/profiles.local.yml -f compose/proxy.yml up -d
+```
+
+Caddy auto-issues and renews a Let's Encrypt certificate for `$METIS_DOMAIN` (persisted in the
+`caddy_data` volume across restarts). Leave `METIS_DOMAIN` unset for a local bring-up — it defaults
+to `localhost` and Caddy serves `https://localhost` with its internal CA.
+
 ## Health
 
 ```bash
@@ -45,6 +57,8 @@ Two surfaces:
   policy denials, ingestion lag, parse/extraction failures, and job failures — see
   `observability/dashboards/dashboards.md`. Every unit of work carries a `trace_id` that stitches a
   request across the gateway and workers; drill from a failed-job panel into its trace by `trace_id`.
+- **Alerts**: load `observability/alerts.yml` into the Prometheus that scrapes the collector — spend
+  ceiling, job-failure rate, ingestion lag, and restore-drill freshness, with tunable thresholds.
 
 Retry a failed job: `POST /jobs/{id}/retry` (or the **retry** button in the console).
 
@@ -72,6 +86,19 @@ pg_restore --clean --no-owner -d "postgresql://metis:***@localhost:5432/metis" d
 tar -C ./wiki -xzf wiki.tar.gz
 # blobs: restore the minio volume snapshot, or metis_core.security.restore(...) for a bundle
 ```
+
+Restore drill (run from host cron, after the backup):
+
+```bash
+docker compose -f docker-compose.yml -f backup/restore-drill.yml \
+    --profile restore-drill run --rm restore-drill
+```
+
+A backup you have never restored is a hope, not a backup. The drill restores the newest bundle into
+a **scratch** MinIO bucket + temp wiki dir (never the live stores), asserts every blob round-trips
+content-addressed, and records `metis.backup.restore_drill_runs{outcome}`. The
+`RestoreDrillStale` alert fires when a passing drill has not been seen for a day, so a silently
+broken backup chain surfaces before it is needed.
 
 ## Recover
 

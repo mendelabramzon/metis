@@ -1,0 +1,31 @@
+# Scheduled restore drill (profile-gated one-shot). Run from host cron, after backup-job.yml:
+#   docker compose -f docker-compose.yml -f backup/restore-drill.yml \
+#       --profile restore-drill run --rm restore-drill
+# Restores the newest bundle under /backups into a *scratch* MinIO bucket + a temp wiki dir (never
+# the live stores), asserts every blob round-trips content-addressed, and records the drill outcome
+# metric so the restore-drill freshness alert fires when drills stop passing. Reuses the gateway
+# image (it already carries metis_deploy + the object-store client). Pair with backup-job.yml.
+name: metis
+
+services:
+  restore-drill:
+    profiles: ["restore-drill"]
+    build:
+      context: ..
+      dockerfile: deploy/images/gateway.Dockerfile
+    entrypoint: ["uv", "run", "--no-dev", "metis-restore-drill", "--backup-root", "/backups"]
+    environment:
+      METIS_CORE_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
+      METIS_CORE_OBJECT_STORE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      METIS_CORE_OBJECT_STORE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    volumes:
+      - backups:/backups:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  backups:
+  miniodata:

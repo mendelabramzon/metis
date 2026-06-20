@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 from metis_core.jobs import Worker
+from metis_core.observability import linked_span
 from metis_ingestion.connectors.scheduling import POLL_JOB_KIND
 from metis_ingestion.poller import DurableIngestPoller, Pipeline
 from metis_protocol import Job, JobQueue, SourceConfig, SourceId, SourceStore
@@ -41,9 +42,17 @@ class ConnectorSyncWorker(Worker):
 
     async def handle(self, job: Job) -> None:
         source = await self._resolve(job)
-        pipeline = await self._pipeline_factory(source)
-        poller = await DurableIngestPoller.resume(pipeline, source=source, store=self._sources)
-        await poller.poll_once()
+        payload = job.payload if isinstance(job.payload, dict) else {}
+        raw_trace = payload.get("_trace")
+        raw_trace = raw_trace if isinstance(raw_trace, dict) else {}
+        carrier = {str(key): str(value) for key, value in raw_trace.items()}
+        # Resume the enqueuer's trace so this sync is a child of the request that scheduled it.
+        with linked_span(
+            "ingest.sync", carrier, connector=source.connector, source_id=str(source.id)
+        ):
+            pipeline = await self._pipeline_factory(source)
+            poller = await DurableIngestPoller.resume(pipeline, source=source, store=self._sources)
+            await poller.poll_once()
 
     async def _resolve(self, job: Job) -> SourceConfig:
         payload = job.payload if isinstance(job.payload, dict) else {}

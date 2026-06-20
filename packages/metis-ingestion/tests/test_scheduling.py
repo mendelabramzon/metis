@@ -55,6 +55,7 @@ async def test_poll_job_carries_cursor_for_resume() -> None:
         "connector": "slack",
         "source_id": job.payload["source_id"],
         "cursor": "1717236000.000300",
+        "_trace": {},  # no active span here -> empty carrier (worker starts a fresh trace)
     }
 
 

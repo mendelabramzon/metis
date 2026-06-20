@@ -16,6 +16,7 @@ from metis_core._util import now_utc
 from metis_core.db.session import unit_of_work
 from metis_core.mappers import job_to_row, to_model
 from metis_core.models import JobRow
+from metis_core.observability import incr_job_failure
 from metis_protocol import Job, JobId, JobState, WorkspaceId
 
 _LEASABLE = (JobState.PENDING.value, JobState.RETRYING.value)
@@ -93,6 +94,7 @@ class PostgresJobQueue:
             else:
                 row.state = JobState.FAILED.value
             _sync_body(row)
+        incr_job_failure(kind=row.kind)
 
     # --- operator inspect/retry surface ------------------------------------------------------
 

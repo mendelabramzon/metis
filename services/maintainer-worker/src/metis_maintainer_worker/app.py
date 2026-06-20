@@ -14,6 +14,7 @@ import asyncio
 import logging
 
 from metis_core import PostgresJobQueue, make_engine, make_sessionmaker
+from metis_core.observability import setup_telemetry
 from metis_maintainer import build_deps, build_registry
 from metis_maintainer.runner import MaintainerWorker
 
@@ -28,6 +29,7 @@ def run(
     """Build settings, wire the worker, and either stop (dry run) or poll the queue."""
     settings = settings if settings is not None else MaintainerWorkerSettings()
     logging.basicConfig(level=settings.log_level)
+    setup_telemetry("maintainer-worker")  # no-op without OTEL_EXPORTER_OTLP_ENDPOINT
 
     engine = make_engine(settings.database_url)  # lazy: no connection until first use
     sessionmaker = make_sessionmaker(engine)

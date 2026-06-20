@@ -30,6 +30,7 @@ from metis_core.llm import (
 )
 from metis_core.llm.ocr import model_transcriber
 from metis_core.objectstore import S3ObjectStore
+from metis_core.observability import setup_telemetry
 from metis_core.security import Cryptobox
 from metis_core.stores import (
     PostgresClaimStore,
@@ -279,6 +280,7 @@ def run(
 ) -> IngestWorkerSettings:
     settings = settings if settings is not None else IngestWorkerSettings()
     logging.basicConfig(level=settings.log_level)
+    setup_telemetry("ingest-worker")  # no-op without an OTLP endpoint; resumes job traces
     logger.info(
         "metis-ingest-worker wiring (mode=%s, connector=%s, poll_interval_seconds=%s)",
         settings.mode,

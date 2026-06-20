@@ -1,0 +1,88 @@
+# Prometheus alerting rules over the metrics the gateway + workers emit (cataloged in
+# src/metis_deploy/observability.py, scraped from the collector's Prometheus exporter at
+# otel-collector:9464). Load this into the Prometheus that scrapes that endpoint:
+#   rule_files: [ /etc/prometheus/alerts.yml ]
+#
+# Metric names are verbatim (the collector sets add_metric_suffixes: false): the OTel name's dots
+# become underscores, e.g. metis.model.cost_usd -> metis_model_cost_usd; histograms keep the usual
+# _bucket / _sum / _count suffixes. Thresholds are deliberately conservative starting points — tune
+# them to the deployment (the budgets live in metis_core.llm.routing_config / budgets.env).
+
+groups:
+  - name: metis-spend
+    rules:
+      # Daily model spend across the org crossed the ceiling. Spend is enforced per-workspace at the
+      # router (daily_cost_cap_usd); this is the org-wide operator backstop so a runaway is visible
+      # even when no single workspace trips its cap.
+      - alert: ModelSpendCeiling
+        expr: sum(increase(metis_model_cost_usd[1d])) > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model spend over the daily ceiling"
+          description: "Org model spend in the last 24h is {{ $value | printf \"%.2f\" }} USD (ceiling 50). Check the spend dashboard by task_class/provider/tier."
+
+  - name: metis-jobs
+    rules:
+      # A background job kind is failing repeatedly (connector sync, consolidation, ...). Connector
+      # failures surface here because a failed sync fails its queued job.
+      - alert: JobFailuresHigh
+        expr: sum by (kind) (increase(metis_jobs_failures[15m])) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Background jobs failing: {{ $labels.kind }}"
+          description: "{{ $value | printf \"%.0f\" }} failures of kind {{ $labels.kind }} in 15m. Inspect via the jobs dashboard / the failed-job trace_id."
+
+      # Parse/extraction failures are spiking for a media type — a connector or upload path is
+      # feeding malformed documents, or a parser regressed.
+      - alert: ParseFailuresHigh
+        expr: sum by (media_type) (increase(metis_ingestion_parse_failures[30m])) > 10
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Parse failures rising for {{ $labels.media_type }}"
+          description: "{{ $value | printf \"%.0f\" }} parse failures for {{ $labels.media_type }} in 30m."
+
+  - name: metis-ingestion
+    rules:
+      # A connector's sync cycle p95 is slow — the source is lagging behind its real state.
+      - alert: IngestionLagHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, connector) (rate(metis_ingestion_lag_seconds_bucket[15m]))
+          ) > 300
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingestion lag high for {{ $labels.connector }}"
+          description: "p95 sync-cycle time for {{ $labels.connector }} is {{ $value | printf \"%.0f\" }}s (>300s)."
+
+  - name: metis-backup
+    rules:
+      # No *passing* restore drill in 36h (drills run daily). A backup chain that no longer restores
+      # is invisible until you need it — this is the freshness gate. `or vector(0)` makes the rule
+      # fire even when the series is absent (the drill never ran / never reported).
+      - alert: RestoreDrillStale
+        expr: (sum(increase(metis_backup_restore_drill_runs{outcome="pass"}[36h])) or vector(0)) == 0
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Restore drill stale"
+          description: "No passing restore drill in 36h — the latest backup may not be restorable. Run backup/restore-drill.yml and check its logs."
+
+      # A restore drill actively failed: the latest bundle could not be round-tripped.
+      - alert: RestoreDrillFailing
+        expr: increase(metis_backup_restore_drill_runs{outcome="fail"}[6h]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Restore drill failing"
+          description: "A restore drill failed in the last 6h — the newest backup did not round-trip. Inspect the restore-drill logs immediately."

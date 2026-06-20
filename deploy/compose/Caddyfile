@@ -1,0 +1,14 @@
+# Caddy config for the Metis reverse proxy (see compose/proxy.yml).
+# One site, served over HTTPS, proxying to the gateway. With a real $METIS_DOMAIN Caddy auto-issues
+# and renews a Let's Encrypt certificate; with the localhost default it uses Caddy's internal CA, so
+# `https://localhost` works out of the box for a local bring-up.
+{
+	# ACME contact for expiry/issue notices (optional; ignored for the localhost internal CA).
+	email {$METIS_ACME_EMAIL}
+}
+
+{$METIS_DOMAIN:localhost} {
+	encode gzip
+	# Terminate TLS here and forward to the gateway; /health and every API route ride this proxy.
+	reverse_proxy gateway:8000
+}

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from metis_core.llm.errors import NoEligibleProviderError
 from metis_core.llm.routing_config import RoutingConfig, task_tier
+from metis_core.observability import incr_policy_denial
 from metis_protocol import (
     ModelRequest,
     ModelResponse,
@@ -50,6 +51,10 @@ class MetisModelRouter:
 
     def route(self, request: ModelRequest) -> RoutableProvider:
         external_blocked = is_at_least(request.sensitivity, self._config.external_block_floor)
+        if external_blocked and any(provider.is_external for provider in self._providers):
+            # The allowlist actively suppressed an external option for restricted data — the
+            # policy-enforcement signal an operator watches (routing still proceeds to a local one).
+            incr_policy_denial(kind="external_provider", sensitivity=request.sensitivity.value)
         for provider in self._providers:
             if provider.is_external and external_blocked:
                 continue  # allowlist enforced before any prompt construction

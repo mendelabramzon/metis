@@ -22,6 +22,9 @@ exporters:
   # Scrape target for the dashboards (ingestion lag, model spend, policy denials, job failures).
   prometheus:
     endpoint: 0.0.0.0:9464
+    # Keep metric names verbatim (no `_total` / unit suffixes), so `metis.model.cost_usd` scrapes as
+    # `metis_model_cost_usd` — the names alerts.yml and the dashboards reference, dots -> underscores.
+    add_metric_suffixes: false
 
 service:
   pipelines:

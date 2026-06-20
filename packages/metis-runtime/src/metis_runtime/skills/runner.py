@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 import jsonschema
 
+from metis_core.observability import incr_skill_run
 from metis_protocol import (
     AgentKind,
     ArtifactRef,
@@ -190,6 +191,8 @@ class SkillRunner:
     async def _audit_run(
         self, action: str, manifest: SkillManifest, *, outcome: str | None = None
     ) -> None:
+        if outcome is not None:  # count finished runs by outcome (the dashboard signal)
+            incr_skill_run(skill=manifest.name, outcome=outcome)
         await self._audit.emit(
             AuditEvent(
                 id=new_id(AuditId),

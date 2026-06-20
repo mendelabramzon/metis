@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import JsonValue
 
+from metis_core.observability import current_trace_carrier
 from metis_ingestion.connectors.base import ConnectorError
 from metis_protocol import Job, JobId, JobQueue, SourceId, WorkspaceId, new_id
 
@@ -42,12 +43,21 @@ def build_poll_job(
     cursor: str | None,
     now: datetime | None = None,
 ) -> Job:
-    """A poll job that carries the cursor, so the worker resumes from that watermark."""
+    """A poll job that carries the cursor, so the worker resumes from that watermark.
+
+    The job also carries the enqueuer's W3C trace context (``_trace``) so the worker's sync links
+    back to the scheduling request (empty when enqueued outside a span, giving a fresh trace).
+    """
     return Job(
         id=new_id(JobId),
         workspace_id=workspace_id,
         kind=POLL_JOB_KIND,
-        payload={"connector": connector, "source_id": str(source_id), "cursor": cursor},
+        payload={
+            "connector": connector,
+            "source_id": str(source_id),
+            "cursor": cursor,
+            "_trace": current_trace_carrier(),
+        },
         created_at=now if now is not None else _now(),
         scheduled_at=now if now is not None else _now(),
     )

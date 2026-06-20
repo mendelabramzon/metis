@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import argparse
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse
 
+from metis_core.observability import setup_telemetry, span
 from metis_gateway.backend import build_backend, build_postgres_backend
 from metis_gateway.errors import install_error_handlers
 from metis_gateway.routers import ALL_ROUTERS
@@ -52,8 +53,22 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app(settings: GatewaySettings | None = None) -> FastAPI:
     """Assemble the app: routers, error handlers, health, the debug UI, and the backend lifespan."""
     settings = settings if settings is not None else GatewaySettings()
+    # Telemetry: idempotent and a no-op without OTEL_EXPORTER_OTLP_ENDPOINT, so the served app
+    # exports spans/metrics while tests and dry runs pay nothing.
+    setup_telemetry(settings.service_name)
     app = FastAPI(title="Metis Gateway", version="0.0.0", lifespan=_lifespan)
     app.state.settings = settings
+
+    @app.middleware("http")
+    async def _trace_request(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        # A server span per request, carrying the trace_id a queued connector-sync job stashes and
+        # the ingest worker later resumes — linking gateway -> worker -> store in one trace.
+        with span(
+            "http.request", **{"http.method": request.method, "http.route": request.url.path}
+        ):
+            return await call_next(request)
 
     install_error_handlers(app)
     for router in ALL_ROUTERS:

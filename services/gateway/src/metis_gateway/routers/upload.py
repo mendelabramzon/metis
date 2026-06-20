@@ -8,8 +8,11 @@ caller's workspace (the membership gate), tagged with the ``upload`` connector f
 
 from __future__ import annotations
 
+import mimetypes
+
 from fastapi import APIRouter, UploadFile
 
+from metis_core.observability import incr_parse_failure
 from metis_gateway.deps import BackendDep, WorkspaceWriterDep
 from metis_gateway.errors import ConflictError
 from metis_gateway.schemas import ParseStatus, UploadResponse
@@ -36,6 +39,7 @@ async def upload_files(
         except ConflictError as exc:
             statuses.append(ParseStatus(filename=filename, status="unsupported", error=str(exc)))
         except Exception as exc:  # one malformed file must not fail the whole batch
+            incr_parse_failure(media_type=mimetypes.guess_type(filename)[0] or "unknown")
             statuses.append(ParseStatus(filename=filename, status="failed", error=str(exc)))
         else:
             statuses.append(
