@@ -1,0 +1,100 @@
+# Telegram ingestion overlay (opt-in): the Business connected-bot drain + the personal TDLib
+# backfill path. TDLib binds the native libtdjson, so a one-shot `tdlib-lib` service builds it
+# (deploy/images/tdlib.Dockerfile) and publishes it into a volume the gateway + TDLib worker mount
+# read-only — the app images stay lean. A second volume holds the per-account TDLib databases the
+# gateway login creates and the worker reopens (the gateway and the TDLib worker must share it).
+#
+#   docker compose -f docker-compose.yml -f compose/profiles.telegram.yml up
+#
+# Requires, from the environment / the secret store (never a committed file):
+#   METIS_CRED_STORE_KEY  a Fernet key — the SAME value across gateway + workers, so a secret one
+#                         writes (an OAuth token, a TDLib db key) the others can decrypt
+#   TELEGRAM_BOT_TOKEN    the deployment bot token (Business connected-bot drain)
+#   TELEGRAM_API_ID / TELEGRAM_API_HASH   a Telegram app credential (my.telegram.org) for TDLib
+name: metis
+
+x-app-env: &app-env
+  METIS_CORE_DATABASE_URL: postgresql+asyncpg://metis:${POSTGRES_PASSWORD:-metis}@postgres:5432/metis
+  METIS_CORE_OBJECT_STORE_ENDPOINT_URL: http://minio:9000
+  METIS_CORE_OBJECT_STORE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  METIS_CORE_OBJECT_STORE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  METIS_MODEL_PROFILE: ${METIS_MODEL_PROFILE:-local}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
+services:
+  # One-shot: build libtdjson and publish it into the shared lib volume, then exit.
+  tdlib-lib:
+    build:
+      context: ..
+      dockerfile: deploy/images/tdlib.Dockerfile
+    command: ["sh", "-c", "cp -a /opt/td/lib/libtdjson.so* /opt/tdlib-out/ && ls -l /opt/tdlib-out"]
+    volumes:
+      - tdliblib:/opt/tdlib-out
+    restart: "no"
+
+  # The gateway gains the per-user TDLib connect endpoint: it loads libtdjson (mounted read-only)
+  # and writes the per-account databases into the shared data volume the TDLib worker reopens.
+  gateway:
+    environment:
+      METIS_GATEWAY_CRED_STORE_KEY: ${METIS_CRED_STORE_KEY:?set METIS_CRED_STORE_KEY (a Fernet key)}
+      METIS_GATEWAY_TELEGRAM_API_ID: ${TELEGRAM_API_ID:?set TELEGRAM_API_ID for the TDLib path}
+      METIS_GATEWAY_TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:?set TELEGRAM_API_HASH for the TDLib path}
+      METIS_GATEWAY_TELEGRAM_TDLIB_DATA_ROOT: /var/lib/metis/tdlib
+      METIS_GATEWAY_TELEGRAM_TDLIB_LIBRARY: /opt/tdlib/libtdjson.so
+    volumes:
+      - tdliblib:/opt/tdlib:ro
+      - tdlibdata:/var/lib/metis/tdlib
+    depends_on:
+      tdlib-lib:
+        condition: service_completed_successfully
+
+  # The Business connected-bot drain (forward sync of authorized chats). No native lib needed.
+  telegram-bot-worker:
+    build:
+      context: ..
+      dockerfile: deploy/images/ingest-worker.Dockerfile
+    environment:
+      <<: *app-env
+      METIS_INGEST_WORKER_MODE: telegram
+      METIS_INGEST_WORKER_TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?set TELEGRAM_BOT_TOKEN}
+      METIS_INGEST_WORKER_CRED_STORE_KEY: ${METIS_CRED_STORE_KEY:?set METIS_CRED_STORE_KEY (a Fernet key)}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # The TDLib personal-account backfill drain: reopens the authorized databases (shared data volume)
+  # with libtdjson (shared lib volume) and pages each selected chat's history.
+  telegram-tdlib-worker:
+    build:
+      context: ..
+      dockerfile: deploy/images/ingest-worker.Dockerfile
+    environment:
+      <<: *app-env
+      METIS_INGEST_WORKER_MODE: telegram_tdlib
+      METIS_INGEST_WORKER_TELEGRAM_API_ID: ${TELEGRAM_API_ID:?set TELEGRAM_API_ID for the TDLib path}
+      METIS_INGEST_WORKER_TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:?set TELEGRAM_API_HASH for the TDLib path}
+      METIS_INGEST_WORKER_TELEGRAM_TDLIB_DATA_ROOT: /var/lib/metis/tdlib
+      METIS_INGEST_WORKER_TELEGRAM_TDLIB_LIBRARY: /opt/tdlib/libtdjson.so
+      METIS_INGEST_WORKER_CRED_STORE_KEY: ${METIS_CRED_STORE_KEY:?set METIS_CRED_STORE_KEY (a Fernet key)}
+    volumes:
+      - tdliblib:/opt/tdlib:ro
+      - tdlibdata:/var/lib/metis/tdlib
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      tdlib-lib:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  tdliblib:
+  tdlibdata:
