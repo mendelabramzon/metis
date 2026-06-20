@@ -8,7 +8,7 @@ import pytest
 
 from metis_ingestion.connectors import ConnectorRegistry, RecordedTransport
 
-CONNECTORS = ["imap", "slack", "web_clip", "gdrive", "calendar"]
+CONNECTORS = ["imap", "slack", "web_clip", "gdrive", "calendar", "telegram"]
 
 
 def _make(name, connectors_root, workspace):

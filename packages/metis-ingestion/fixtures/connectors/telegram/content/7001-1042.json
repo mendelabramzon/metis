@@ -1,0 +1,11 @@
+{
+  "message_id": 1042,
+  "chat": {"id": 7001, "type": "private", "title": "Ada Lovelace"},
+  "date": 1717232400,
+  "sender": {"id": 1, "name": "Ada Lovelace", "username": "ada"},
+  "text": "Friday — sharing the deck now.",
+  "reply_to": {"message_id": 1040, "sender": "Grace Hopper", "excerpt": "When do we ship the roadmap?"},
+  "media": [
+    {"kind": "document", "file_id": "BQACdeck", "file_name": "roadmap.pdf", "mime_type": "application/pdf"}
+  ]
+}

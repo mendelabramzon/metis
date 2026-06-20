@@ -18,6 +18,7 @@ from metis_ingestion.connectors.gdrive import GoogleDriveConnector
 from metis_ingestion.connectors.gmail import GmailConnector
 from metis_ingestion.connectors.imap import ImapConnector
 from metis_ingestion.connectors.slack import SlackConnector
+from metis_ingestion.connectors.telegram import TelegramConnector
 from metis_ingestion.connectors.web_clip import WebClipConnector
 from metis_protocol import Sensitivity, WorkspaceId
 
@@ -94,5 +95,8 @@ class ConnectorRegistry:
         )
         registry.register(
             ConnectorSpec("calendar", CalendarConnector, oauth2(), Sensitivity.INTERNAL)
+        )
+        registry.register(
+            ConnectorSpec("telegram", TelegramConnector, token_auth(), Sensitivity.CONFIDENTIAL)
         )
         return registry

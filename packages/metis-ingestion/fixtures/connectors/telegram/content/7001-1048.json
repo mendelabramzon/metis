@@ -1,0 +1,8 @@
+{
+  "message_id": 1048,
+  "chat": {"id": 7001, "type": "private", "title": "Ada Lovelace"},
+  "date": 1717239600,
+  "sender": {"id": 1, "name": "Ada Lovelace", "username": "ada"},
+  "text": "Actually — let's move it to Monday.",
+  "edited": true
+}

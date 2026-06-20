@@ -1,0 +1,11 @@
+{
+  "message_id": 1045,
+  "chat": {"id": 7001, "type": "private", "title": "Ada Lovelace"},
+  "date": 1717236000,
+  "sender": {"id": 2, "name": "Grace Hopper", "username": "grace"},
+  "text": "FYI — investor update attached.",
+  "forward_from": {"origin": "Acme Newsletter"},
+  "media": [
+    {"kind": "document", "file_id": "BQACupd", "file_name": "investor-update.pdf", "mime_type": "application/pdf"}
+  ]
+}

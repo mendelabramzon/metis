@@ -1,0 +1,7 @@
+{
+  "message_id": 1040,
+  "chat": {"id": 7001, "type": "private", "title": "Ada Lovelace"},
+  "date": 1717228800,
+  "sender": {"id": 2, "name": "Grace Hopper", "username": "grace"},
+  "text": "When do we ship the roadmap?"
+}
