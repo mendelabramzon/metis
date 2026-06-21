@@ -134,7 +134,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/images/runtime-worker.Dockerfile
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Reads its own settings prefix (not METIS_CORE_*); point its DB at the stack's Postgres.
+      METIS_RUNTIME_WORKER_DATABASE_URL: postgresql+asyncpg://metis:${POSTGRES_PASSWORD:-metis}@postgres:5432/metis
     depends_on:
       postgres:
         condition: service_healthy
