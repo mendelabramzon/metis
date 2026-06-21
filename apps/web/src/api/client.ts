@@ -8,10 +8,12 @@
  */
 
 import type {
+  ActionExecutionView,
   ApiErrorBody,
   ArtifactEvidenceView,
   ClaimEvidenceView,
   InviteRedeemView,
+  ProposedActionView,
   QueryRequestBody,
   QueryResponse,
   UserView,
@@ -133,6 +135,55 @@ export const getArtifactEvidence = (
     `/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}`,
     { bearer, ...(signal ? { signal } : {}) },
   );
+
+// --- proposed actions (the command surface; pass the operator/scope token) ------------------
+
+/** Interpret a free-text command into a typed proposed action (shown before any execution). */
+export const proposeAction = (
+  operatorToken: string,
+  command: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<ProposedActionView> =>
+  request<ProposedActionView>("/actions", {
+    method: "POST",
+    body: { command, workspace_id: workspaceId },
+    bearer: operatorToken,
+    ...(signal ? { signal } : {}),
+  });
+
+/** Approve a proposed action (recording the actor); executing it is a separate gated step. */
+export const approveAction = (
+  operatorToken: string,
+  actionId: string,
+  note = "",
+): Promise<ProposedActionView> =>
+  request<ProposedActionView>(`/actions/${encodeURIComponent(actionId)}/approve`, {
+    method: "POST",
+    body: { note },
+    bearer: operatorToken,
+  });
+
+export const rejectAction = (
+  operatorToken: string,
+  actionId: string,
+  note = "",
+): Promise<ProposedActionView> =>
+  request<ProposedActionView>(`/actions/${encodeURIComponent(actionId)}/reject`, {
+    method: "POST",
+    body: { note },
+    bearer: operatorToken,
+  });
+
+/** Run an action against the engines (risk-gated server-side: effectful needs prior approval). */
+export const executeAction = (
+  operatorToken: string,
+  actionId: string,
+): Promise<ActionExecutionView> =>
+  request<ActionExecutionView>(`/actions/${encodeURIComponent(actionId)}/execute`, {
+    method: "POST",
+    bearer: operatorToken,
+  });
 
 /** Redeem an invite (unauthenticated). The returned `user_id` is the new user's bearer (A6). */
 export const redeemInvite = (
