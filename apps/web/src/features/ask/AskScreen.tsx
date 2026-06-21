@@ -1,7 +1,15 @@
 import { useRef, useState } from "react";
 
 import type { Citation } from "@/api/types";
-import { Badge, BlockedState, Button, Drawer, EmptyState, ErrorState } from "@/components";
+import {
+  Badge,
+  BlockedState,
+  Button,
+  Drawer,
+  EmptyState,
+  ErrorState,
+  RoutingBadge,
+} from "@/components";
 import type { BadgeVariant } from "@/components/Badge";
 import { useSession } from "@/session/SessionContext";
 
@@ -249,6 +257,17 @@ function AnswerArea({ state, canAsk, onPickCitation, onDecide, onReset }: Answer
             <p className={styles.answer} style={{ color: "var(--color-text-muted)" }}>
               No answer text was returned.
             </p>
+          )}
+
+          {response.routed_local !== null && (
+            <div className={styles.routingNote}>
+              <RoutingBadge outcome={response.routed_local ? "local" : "external"} />
+              <span>
+                {response.routed_local
+                  ? "Kept on your device — restricted evidence never left."
+                  : "Used an external model for this answer."}
+              </span>
+            </div>
           )}
 
           {outcome === "conflicting" && response.disagreements.length > 0 && (
