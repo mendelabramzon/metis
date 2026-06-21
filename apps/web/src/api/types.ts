@@ -253,6 +253,17 @@ export interface InboxItemView {
   status: string;
 }
 
+/** `GET /audit` — an audit/event row (operator-gated; global, no workspace field). */
+export interface AuditView {
+  id: string;
+  action: string;
+  actor: string;
+  target_id: string | null;
+  target_kind: string | null;
+  sensitivity: string | null;
+  occurred_at: string;
+}
+
 /** The gateway's error envelope (see install_error_handlers). */
 export interface ApiErrorBody {
   error?: { message?: string; code?: string };

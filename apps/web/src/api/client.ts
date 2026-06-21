@@ -11,6 +11,7 @@ import type {
   ActionExecutionView,
   ApiErrorBody,
   ArtifactEvidenceView,
+  AuditView,
   AuthorizeView,
   ClaimEvidenceView,
   ConnectorView,
@@ -180,6 +181,17 @@ export async function uploadFiles(
   }
   return data as UploadResponse;
 }
+
+/** The audit/event log (operator-gated; global). The Activity view filters it client-side. */
+export const listAudit = (
+  operatorToken: string,
+  limit = 100,
+  signal?: AbortSignal,
+): Promise<AuditView[]> =>
+  request<AuditView[]>(`/audit?limit=${limit}`, {
+    bearer: operatorToken,
+    ...(signal ? { signal } : {}),
+  });
 
 // --- review queue: contradictions (user bearer) + approvals (operator token) ----------------
 

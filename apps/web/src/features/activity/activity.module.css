@@ -1,0 +1,109 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.title {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+}
+.spacer {
+  flex: 1;
+}
+
+.filter {
+  display: inline-flex;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface);
+  margin-bottom: var(--space-5);
+}
+.filterBtn {
+  padding: 0.35rem 0.8rem;
+  border: none;
+  border-right: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.filterBtn:last-child {
+  border-right: none;
+}
+.filterBtnOn {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-subtle-fg);
+  font-weight: var(--weight-medium);
+}
+
+.dayGroup {
+  margin-bottom: var(--space-5);
+}
+.dayLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+.events {
+  display: grid;
+  gap: 2px;
+}
+.event {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.event:hover {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+.eventAction {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.eventActor {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.eventSpacer {
+  flex: 1;
+}
+.eventTime {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+.detailKey {
+  color: var(--color-text-muted);
+}
+.detailVal {
+  word-break: break-word;
+}
+.detailVal code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
