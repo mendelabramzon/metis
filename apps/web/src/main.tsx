@@ -1,7 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
 
 import { App } from "@/App";
+import { SessionProvider } from "@/session/SessionContext";
 import "@/styles/tokens.css";
 import "@/styles/global.css";
 
@@ -10,6 +12,10 @@ if (!container) throw new Error("missing #root");
 
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <SessionProvider>
+        <App />
+      </SessionProvider>
+    </BrowserRouter>
   </StrictMode>,
 );
