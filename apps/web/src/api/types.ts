@@ -98,6 +98,33 @@ export interface UploadResponse {
   files: ParseStatus[];
 }
 
+export type MembershipRole = "owner" | "admin" | "member" | "viewer" | "auditor";
+
+export const MEMBERSHIP_ROLES: readonly MembershipRole[] = [
+  "owner",
+  "admin",
+  "member",
+  "viewer",
+  "auditor",
+];
+
+/** `GET /workspaces/{ws}/members` item (workspace-admin gated). */
+export interface MembershipView {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  role: MembershipRole;
+}
+
+/** `POST /workspaces/{ws}/invites` (A6, admin) → a single-use invite token. */
+export interface InviteView {
+  id: string;
+  workspace_id: string;
+  role: MembershipRole;
+  token: string;
+  redeemed: boolean;
+}
+
 /** `POST /invites/{token}/redeem` (A6). `user_id` is the new user's bearer token. */
 export interface InviteRedeemView {
   user_id: string;
