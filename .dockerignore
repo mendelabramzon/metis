@@ -11,3 +11,7 @@ htmlcov
 coverage.xml
 .coverage
 **/*.egg-info
+# Node: the SPA is built inside the image (deploy/images/gateway.Dockerfile, `web` stage), so a
+# local install/build must not leak into the context or shadow the clean `npm ci`.
+**/node_modules
+apps/web/dist

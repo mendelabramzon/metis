@@ -30,6 +30,11 @@ class GatewaySettings(BaseServiceSettings):
     user_token: str = "user-dev-token"  # query/read scope
     skills_root: str | None = None  # directory of skill packages to register, if any
 
+    # The built React SPA (apps/web -> dist) to serve at /. Set in the deploy image to the copied
+    # build; unset = serve the legacy single-file operator console instead. A directory without an
+    # index.html is ignored (treated as unset).
+    web_dist: str | None = None
+
     # "memory" (in-process) or "postgres" (durable: Postgres + object store + memory index).
     # The Postgres backend reads DB/object-store config from the core settings (METIS_CORE_*).
     backend: str = "memory"
