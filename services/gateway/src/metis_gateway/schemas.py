@@ -331,6 +331,9 @@ class QueryResponse(BaseModel):
     status: str
     answer: str
     sufficient: bool
+    # True when the answer's cited evidence stayed on local/on-device models — external disallowed,
+    # or the evidence is RESTRICTED (which the router keeps local). None on the legacy /query path.
+    routed_local: bool | None = None
     citations: list[Citation] = Field(default_factory=list)
     contradictions: list[str] = Field(default_factory=list)
     filebacks: int = 0
