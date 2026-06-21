@@ -82,6 +82,15 @@ def test_base_compose_wires_the_cred_store_key_optionally() -> None:
     assert worker == "${METIS_CRED_STORE_KEY:-}"  # so the worker can decrypt what the gateway wrote
 
 
+def test_base_compose_wires_the_operator_and_user_tokens_optionally() -> None:
+    # `make setup` generates strong operator/user bearer tokens; the gateway must read them from
+    # .env, else a deployment is left authenticating on the well-known dev defaults. Optional (the
+    # `:-` default) so a clean machine with no .env still comes up — like the cred-store key above.
+    env = _load("docker-compose.yml")["services"]["gateway"]["environment"]
+    assert env["METIS_GATEWAY_OPERATOR_TOKEN"] == "${METIS_GATEWAY_OPERATOR_TOKEN:-operator-dev-token}"
+    assert env["METIS_GATEWAY_USER_TOKEN"] == "${METIS_GATEWAY_USER_TOKEN:-user-dev-token}"
+
+
 def test_maintainer_worker_points_at_the_stack_postgres() -> None:
     # The maintainer worker reads its own settings prefix (not METIS_CORE_*), so its DB url must be
     # set explicitly to the stack's Postgres host rather than the localhost default.

@@ -74,6 +74,11 @@ services:
       METIS_GATEWAY_BACKEND: postgres  # use the durable stores (Postgres + MinIO + memory index)
       METIS_GATEWAY_SKILLS_ROOT: skills  # register the shipped skills (web_search, ...)
       METIS_GATEWAY_HOST: "0.0.0.0"  # bind all interfaces so the published port is reachable
+      # Operator (full scope) and user (query/read) bearer tokens. `make setup` generates strong
+      # ones; set them in .env. Defaults are the well-known dev tokens, so the stack still comes up
+      # without a .env — DO NOT expose a deployment on the defaults.
+      METIS_GATEWAY_OPERATOR_TOKEN: ${METIS_GATEWAY_OPERATOR_TOKEN:-operator-dev-token}
+      METIS_GATEWAY_USER_TOKEN: ${METIS_GATEWAY_USER_TOKEN:-user-dev-token}
       # Encrypted secret-store key. Optional (empty = the stack still comes up): set
       # METIS_CRED_STORE_KEY in .env to enable durable connector secrets (OAuth tokens) AND the
       # runtime provider config UI (Settings -> Providers). `make setup` generates one. The
