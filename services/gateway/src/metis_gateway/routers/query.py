@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from metis_gateway.deps import BackendDep, UserDep
-from metis_gateway.schemas import Citation, QueryRequestBody, QueryResponse
+from metis_gateway.schemas import Citation, DisagreementView, QueryRequestBody, QueryResponse
 from metis_runtime.agent import AgentRequest
 
 router = APIRouter(prefix="/query", tags=["query"])
@@ -45,6 +45,11 @@ async def query(body: QueryRequestBody, backend: BackendDep, principal: UserDep)
         sufficient=answer.sufficient if answer is not None else False,
         citations=citations,
         contradictions=list(answer.contradictions) if answer is not None else [],
+        disagreements=(
+            [DisagreementView.from_conflict(c) for c in answer.conflicts]
+            if answer is not None
+            else []
+        ),
         filebacks=len(run.filebacks),
         pending_approvals=[request.key for request in run.pending_approvals],
     )

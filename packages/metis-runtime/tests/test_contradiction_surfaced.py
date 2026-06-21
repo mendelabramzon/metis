@@ -22,3 +22,9 @@ async def test_conflicting_evidence_is_surfaced(query_engine, seed) -> None:
     assert answer.sufficient
     assert answer.contradictions  # the conflict is surfaced...
     assert "onflicting" in answer.text  # ...and shown in the answer text, not resolved away
+
+    # ...and as a structured disagreement (A3): both sides, each backed by a source span.
+    assert len(answer.conflicts) == 1
+    sides = answer.conflicts[0].sides
+    assert {s.text for s in sides} == {"Ada is the CTO of Acme.", "Ada is the CEO of Acme."}
+    assert all(s.claim_id and s.source_span_id for s in sides)

@@ -6,7 +6,14 @@ contradiction-aware, and uncertainty-honest. Tool/skill use is Stage 9; the agen
 
 from __future__ import annotations
 
-from metis_runtime.query.answer import Answer, AnswerGenerator, conflict_notes
+from metis_runtime.query.answer import (
+    Answer,
+    AnswerGenerator,
+    Conflict,
+    ConflictSide,
+    conflict_notes,
+    conflicts_among,
+)
 from metis_runtime.query.api import QueryEngine
 from metis_runtime.query.cite_verify import CitationCheck, verify_citations
 from metis_runtime.query.fileback import FilebackProposal, propose_fileback
@@ -22,6 +29,8 @@ __all__ = [
     "AnswerGenerator",
     "BudgetedContextPacker",
     "CitationCheck",
+    "Conflict",
+    "ConflictSide",
     "FilebackProposal",
     "MemoryRetriever",
     "QueryEngine",
@@ -29,6 +38,7 @@ __all__ = [
     "Sufficiency",
     "assess_sufficiency",
     "conflict_notes",
+    "conflicts_among",
     "plan_query",
     "propose_fileback",
     "query_registry",

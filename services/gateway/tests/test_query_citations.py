@@ -34,3 +34,23 @@ def test_insufficient_evidence_is_honest_and_uncited(client, user) -> None:
     body = client.post("/query", json={"text": "What is the annual revenue?"}, headers=user).json()
     assert body["sufficient"] is False
     assert body["citations"] == []
+    assert body["disagreements"] == []
+
+
+def test_disagreement_view_maps_conflict_sides() -> None:
+    """The gateway projects a runtime Conflict to the wire shape the UI's panel consumes (A3)."""
+    from metis_gateway.schemas import DisagreementView
+    from metis_protocol import Sensitivity
+    from metis_runtime.query import Conflict, ConflictSide
+
+    conflict = Conflict(
+        predicate="role_of",
+        sides=(
+            ConflictSide("clm_a", "CTO", "ss_a", "art_a", Sensitivity.INTERNAL),
+            ConflictSide("clm_b", "CEO", "ss_b", "art_b", Sensitivity.INTERNAL),
+        ),
+    )
+    view = DisagreementView.from_conflict(conflict)
+    assert view.predicate == "role_of"
+    assert [s.claim_id for s in view.sides] == ["clm_a", "clm_b"]
+    assert [s.source_span_id for s in view.sides] == ["ss_a", "ss_b"]
