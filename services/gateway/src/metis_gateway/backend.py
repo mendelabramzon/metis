@@ -27,6 +27,7 @@ from metis_core.db.session import unit_of_work
 from metis_core.jobs import PostgresJobQueue
 from metis_core.llm import ModelCaller
 from metis_core.llm.ocr import model_transcriber
+from metis_core.mappers import to_model
 from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup
 from metis_core.models import RawArtifactRow, SkillApprovalRow
 from metis_core.objectstore import S3ObjectStore
@@ -258,6 +259,12 @@ class Workspace(Protocol):
     async def erase_workspace_artifacts(self) -> ErasureSummary: ...
 
     # Erase every artifact in this workspace (purges a user's personal workspace on erasure).
+
+    async def list_documents(self) -> Sequence[ArtifactEvidence]: ...
+
+    # The workspace's directly-uploaded documents (connector == "upload", non-tombstoned, newest
+    # first) — the upload counterpart to source listing, so a member can see and erase what they
+    # uploaded (uploads register no SourceConfig, so they never appear under /sources).
 
     # Evidence drill-down — each returns None when the entity is not in this workspace (→ 404).
     async def claim_evidence(self, claim_id: str) -> ClaimEvidence | None: ...
@@ -570,6 +577,14 @@ class InMemoryWorkspace:
                 artifacts += result.tombstoned.raw_artifacts
                 claims += result.tombstoned.claims
         return ErasureSummary(artifacts=artifacts, claims=claims, mem_cells=0, blobs_erased=0)
+
+    async def list_documents(self) -> Sequence[ArtifactEvidence]:
+        uploads = [
+            _artifact_evidence(raw)
+            for raw in self._raw.values()
+            if raw.provenance.attribution.agent == "upload" and raw.tombstoned_at is None
+        ]
+        return sorted(uploads, key=lambda d: d.created_at, reverse=True)
 
     async def claim_evidence(self, claim_id: str) -> ClaimEvidence | None:
         claim = self._by_id.get(claim_id)
@@ -1168,6 +1183,26 @@ class PostgresWorkspace:
         return await erase_workspace_artifacts_core(
             self._sessionmaker, self._object_store, workspace_id=str(self._workspace_id)
         )
+
+    async def list_documents(self) -> Sequence[ArtifactEvidence]:
+        """The workspace's uploaded documents, newest first. Scoped to ``connector == "upload"``
+        (source-less direct uploads), so connector-synced artifacts don't show up here. Reads the
+        artifact body off the row — no blob fetch — and reuses the evidence mapping."""
+        async with unit_of_work(self._sessionmaker) as session:
+            rows = (
+                await session.scalars(
+                    select(RawArtifactRow)
+                    .where(
+                        RawArtifactRow.workspace_id == str(self._workspace_id),
+                        RawArtifactRow.tombstoned_at.is_(None),
+                        RawArtifactRow.source_id.is_(None),
+                        RawArtifactRow.body["provenance"]["attribution"]["agent"].astext
+                        == "upload",
+                    )
+                    .order_by(RawArtifactRow.created_at.desc())
+                )
+            ).all()
+        return [_artifact_evidence(to_model(row, RawArtifact)) for row in rows]
 
     async def claim_evidence(self, claim_id: str) -> ClaimEvidence | None:
         claim = await self._claims.get(ClaimId(claim_id))

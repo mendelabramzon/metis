@@ -52,6 +52,17 @@ export interface SourceErasureView {
   blobs_erased: number;
 }
 
+/** `DELETE /workspaces/{ws}/documents/{id}` — the tombstone cascade for one uploaded document. */
+export interface ErasureView {
+  artifact_tombstoned: boolean;
+  normalized_docs: number;
+  parsed_docs: number;
+  segments: number;
+  claims: number;
+  mem_cells: number;
+  blobs_erased: number;
+}
+
 /** `GET /sources/connectors` — the catalog the add-source form is built from. */
 export interface ConnectorView {
   name: string;

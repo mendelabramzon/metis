@@ -18,6 +18,7 @@ import type {
   ContradictionStatus,
   ContradictionView,
   DigestView,
+  ErasureView,
   HealthView,
   InboxItemView,
   JobView,
@@ -236,6 +237,28 @@ export async function uploadFiles(
   }
   return data as UploadResponse;
 }
+
+/** A workspace's directly-uploaded documents (membership-gated), newest first. */
+export const listDocuments = (
+  bearer: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<ArtifactEvidenceView[]> =>
+  request<ArtifactEvidenceView[]>(`/workspaces/${encodeURIComponent(workspaceId)}/documents`, {
+    bearer,
+    ...(signal ? { signal } : {}),
+  });
+
+/** Erase an uploaded document: tombstone its derived graph + delete its blob (workspace writer). */
+export const deleteDocument = (
+  bearer: string,
+  workspaceId: string,
+  artifactId: string,
+): Promise<ErasureView> =>
+  request<ErasureView>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(artifactId)}`,
+    { method: "DELETE", bearer },
+  );
 
 // --- operations (operator-only) -------------------------------------------------------------
 
