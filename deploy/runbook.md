@@ -10,8 +10,16 @@ Pick a model profile (`local` = CPU Ollama, `cloud` = hosted provider, `gpu` = l
 
 ```bash
 cp env/.env.example .env        # fill in secrets (never commit .env)
+make setup >> .env              # generate strong tokens + the secret-store key into .env
 docker compose -f docker-compose.yml -f compose/profiles.local.yml up -d
 ```
+
+`make setup` (from the repo root) generates the deployment's own secrets — the operator/user tokens,
+Postgres/MinIO passwords, and `METIS_CRED_STORE_KEY` — and prints them; it never persists them, so
+review the block before appending. The cred key is **optional but recommended**: the base stack now
+wires it (gateway + ingest worker), so setting it unlocks durable connector secrets and the runtime
+provider config UI (Settings → Providers) without the Telegram overlay. Provider API keys themselves
+(Anthropic, Google, …) are set in that UI or as env vars — see "Providers & connector auth" below.
 
 Order is enforced by the manifest: Postgres and MinIO come up healthy, the one-shot `migrate`
 service runs Alembic to head, then the gateway and the three workers start. The gateway (API +

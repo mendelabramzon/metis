@@ -1,9 +1,10 @@
 # Metis developer commands. `make check` is the single gate run locally and in CI.
-.PHONY: install format lint typecheck test boundaries check eval clean help
+.PHONY: install setup format lint typecheck test boundaries check eval clean help
 
 help:
 	@echo "Targets:"
 	@echo "  install     uv sync the workspace (all packages + services)"
+	@echo "  setup       generate deployment secrets (paste into deploy/env/.env)"
 	@echo "  format      auto-format and auto-fix with ruff"
 	@echo "  lint        ruff lint + format check (no writes)"
 	@echo "  typecheck   mypy --strict over all package/service source"
@@ -14,6 +15,11 @@ help:
 
 install:
 	uv sync --all-packages
+
+# Generate the deployment's own secrets (cred key, tokens, infra passwords) and print them.
+# Pass args through, e.g. `make setup ARGS=--cred-key-only`. Never writes a file.
+setup:
+	uv run python -m metis_deploy.setup $(ARGS)
 
 format:
 	uv run ruff format .

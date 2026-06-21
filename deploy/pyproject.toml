@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 metis-restore-drill = "metis_deploy.restore_drill:main"
+metis-setup = "metis_deploy.setup:main"
 
 [build-system]
 requires = ["hatchling"]

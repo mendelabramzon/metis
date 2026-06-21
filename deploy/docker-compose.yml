@@ -74,6 +74,11 @@ services:
       METIS_GATEWAY_BACKEND: postgres  # use the durable stores (Postgres + MinIO + memory index)
       METIS_GATEWAY_SKILLS_ROOT: skills  # register the shipped skills (web_search, ...)
       METIS_GATEWAY_HOST: "0.0.0.0"  # bind all interfaces so the published port is reachable
+      # Encrypted secret-store key. Optional (empty = the stack still comes up): set
+      # METIS_CRED_STORE_KEY in .env to enable durable connector secrets (OAuth tokens) AND the
+      # runtime provider config UI (Settings -> Providers). `make setup` generates one. The
+      # Telegram overlay requires it; use the SAME value here and on the ingest worker.
+      METIS_GATEWAY_CRED_STORE_KEY: ${METIS_CRED_STORE_KEY:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -94,7 +99,11 @@ services:
     build:
       context: ..
       dockerfile: deploy/images/ingest-worker.Dockerfile
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Same key as the gateway (optional): lets the worker decrypt the OAuth tokens / connector
+      # secrets the gateway stored, so Drive/Gmail/Calendar syncs work. Empty = no durable secrets.
+      METIS_INGEST_WORKER_CRED_STORE_KEY: ${METIS_CRED_STORE_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
