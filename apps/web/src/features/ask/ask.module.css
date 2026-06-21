@@ -76,6 +76,61 @@
   font-size: var(--text-sm);
 }
 
+/* ---- Sources-disagree panel (D4) -------------------------------------------------------- */
+.disagreement {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--sensitivity-confidential-fg);
+  border-radius: var(--radius-lg);
+  background: var(--sensitivity-confidential-bg);
+}
+.disagreementHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-weight: var(--weight-semibold);
+  color: var(--sensitivity-confidential-fg);
+}
+.disagreementPredicate {
+  font-weight: var(--weight-normal);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+.sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+@media (max-width: 560px) {
+  .sides {
+    grid-template-columns: 1fr;
+  }
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.sideText {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.sideFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+.disagreementFoot {
+  margin-top: var(--space-3);
+}
+
 /* ---- Proposed-action cards (D7) --------------------------------------------------------- */
 .paramList {
   margin-top: var(--space-3);

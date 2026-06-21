@@ -7,6 +7,7 @@ import { useSession } from "@/session/SessionContext";
 
 import { ActionCard } from "./ActionCard";
 import { CitationCards } from "./CitationCards";
+import { DisagreementPanel } from "./DisagreementPanel";
 import { CitationDrawerBody } from "./CitationDrawerBody";
 import { InsufficientActions } from "./InsufficientActions";
 import type { AskOutcome } from "./useAsk";
@@ -250,11 +251,11 @@ function AnswerArea({ state, canAsk, onPickCitation, onDecide, onReset }: Answer
             </p>
           )}
 
-          {outcome === "conflicting" && (
-            <div className={styles.note}>
-              The evidence disagrees on this. Both sides are kept — open Review to resolve it. (The
-              full “sources disagree” panel arrives with D4.)
-            </div>
+          {outcome === "conflicting" && response.disagreements.length > 0 && (
+            <DisagreementPanel
+              disagreements={response.disagreements}
+              onViewSource={onPickCitation}
+            />
           )}
           {outcome === "action_proposal" && (
             <div className={styles.note}>
