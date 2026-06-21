@@ -1,0 +1,216 @@
+.shell {
+  display: grid;
+  grid-template-rows: var(--layout-header-h) 1fr;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---- Header ------------------------------------------------------------------------------ */
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-lg);
+  letter-spacing: -0.01em;
+}
+.brandTag {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-normal);
+  color: var(--color-text-muted);
+}
+
+.headerSlot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* The workspace-switcher placeholder (B4 replaces it with the real switcher). */
+.wsButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.wsButton:hover {
+  background: var(--color-sunken);
+}
+.wsButton:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+/* ---- User menu (native disclosure) ------------------------------------------------------ */
+.menu {
+  position: relative;
+}
+.menu > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.25rem 0.4rem 0.25rem 0.25rem;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.menu > summary::-webkit-details-marker {
+  display: none;
+}
+.menu > summary:hover {
+  background: var(--color-sunken);
+}
+.avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-subtle-fg);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+.menuEmail {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.menuPanel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  z-index: var(--z-overlay);
+  min-width: 15rem;
+  padding: var(--space-3);
+  background: var(--color-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+.menuLabel {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+.roleList {
+  display: grid;
+  gap: var(--space-1);
+}
+.roleOption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.2rem 0.3rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.roleOption:hover {
+  background: var(--color-sunken);
+}
+.menuDivider {
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--space-3) calc(-1 * var(--space-3));
+}
+.menuNote {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ---- Body: sidebar + content ------------------------------------------------------------ */
+.body {
+  display: grid;
+  grid-template-columns: var(--layout-nav-w) 1fr;
+  min-height: 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3) var(--space-2);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
+  overflow-y: auto;
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+}
+.navLink:hover {
+  background: var(--color-sunken);
+  color: var(--color-text);
+  text-decoration: none;
+}
+.navLinkActive {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-subtle-fg);
+}
+.navIcon {
+  display: inline-flex;
+  flex: none;
+}
+
+.content {
+  min-width: 0;
+  overflow-y: auto;
+}
+.contentInner {
+  max-width: var(--layout-content-max);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-8);
+}
+
+/* ---- Mobile: header stays; nav becomes a scrollable row above content ------------------- */
+@media (max-width: 640px) {
+  .body {
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar {
+    flex-direction: row;
+    gap: var(--space-1);
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+    padding: var(--space-2);
+  }
+  .navLink {
+    white-space: nowrap;
+  }
+  .menuEmail {
+    display: none;
+  }
+}
