@@ -37,6 +37,7 @@ import type {
   SourceErasureView,
   SourceView,
   TelegramChatView,
+  TelegramConnectView,
   UploadResponse,
   UserView,
   WorkspaceView,
@@ -413,6 +414,44 @@ export const listTelegramChats = (
   request<TelegramChatView[]>("/telegram/chats", {
     bearer: operatorToken,
     ...(signal ? { signal } : {}),
+  });
+
+// --- Telegram TDLib personal-account login (E5; user bearer — it's the user's own account) ---
+
+/** Begin this user's TDLib login (QR by default, or supply a phone for the code flow). */
+export const startTdlibConnect = (
+  bearer: string,
+  body: { use_qr: boolean; phone: string | null },
+): Promise<TelegramConnectView> =>
+  request<TelegramConnectView>("/telegram/tdlib/connect", { method: "POST", body, bearer });
+
+/** Poll the login (e.g. while waiting for the QR to be scanned on the phone). */
+export const getTdlibStatus = (
+  bearer: string,
+  signal?: AbortSignal,
+): Promise<TelegramConnectView> =>
+  request<TelegramConnectView>("/telegram/tdlib/connect", {
+    bearer,
+    ...(signal ? { signal } : {}),
+  });
+
+/** Submit the login code Telegram delivered to the account. */
+export const submitTdlibCode = (bearer: string, code: string): Promise<TelegramConnectView> =>
+  request<TelegramConnectView>("/telegram/tdlib/connect/code", {
+    method: "POST",
+    body: { code },
+    bearer,
+  });
+
+/** Submit the 2FA (cloud) password when the account has two-step verification enabled. */
+export const submitTdlibPassword = (
+  bearer: string,
+  password: string,
+): Promise<TelegramConnectView> =>
+  request<TelegramConnectView>("/telegram/tdlib/connect/password", {
+    method: "POST",
+    body: { password },
+    bearer,
   });
 
 /** Start a Google OAuth consent flow for a connector; returns the consent URL (or 409 if off). */
