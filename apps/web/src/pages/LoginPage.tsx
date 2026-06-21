@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { ApiError } from "@/api/client";
 import { Button } from "@/components";
@@ -107,7 +108,10 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <p className={styles.footnote}>Have an invite link? Open it to join your team.</p>
+        <p className={styles.footnote}>
+          Have an invite link? Open it to join your team. Or{" "}
+          <Link to="/setup">set up a new deployment</Link>.
+        </p>
       </div>
     </div>
   );

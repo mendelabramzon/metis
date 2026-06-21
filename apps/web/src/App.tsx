@@ -4,6 +4,7 @@ import { AppShell } from "@/app/AppShell";
 import { IndexRedirect, NotFound, RequireRole } from "@/app/guards";
 import { ActivityPage } from "@/pages/ActivityPage";
 import { AskPage } from "@/pages/AskPage";
+import { BootstrapPage } from "@/pages/BootstrapPage";
 import { DesignSystemPage } from "@/pages/DesignSystemPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { RedeemPage } from "@/pages/RedeemPage";
@@ -33,6 +34,7 @@ export function App() {
     <Routes>
       <Route path="/design" element={<DesignSystemPage />} />
       <Route path="/redeem/:token" element={<RedeemPage />} />
+      <Route path="/setup" element={<BootstrapPage />} />
       {status === "authenticated" ? (
         <Route element={<AppShell />}>
           <Route index element={<IndexRedirect />} />

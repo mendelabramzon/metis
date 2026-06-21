@@ -26,6 +26,7 @@ import type {
   MembershipRole,
   MembershipView,
   ModelPolicyView,
+  OrganizationView,
   SpendView,
   ProposedActionView,
   QueryRequestBody,
@@ -107,6 +108,24 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 /** Validate the user-id bearer and return the user (401 if unknown/inactive). */
 export const getMe = (bearer: string, signal?: AbortSignal): Promise<UserView> =>
   request<UserView>("/users/me", { bearer, ...(signal ? { signal } : {}) });
+
+/** Create the deployment's organization (operator-gated). First step of first-admin bootstrap. */
+export const createOrganization = (
+  operatorToken: string,
+  name: string,
+): Promise<OrganizationView> =>
+  request<OrganizationView>("/organizations", {
+    method: "POST",
+    body: { name },
+    bearer: operatorToken,
+  });
+
+/** Provision a user + their personal workspace (operator-gated). */
+export const createUser = (
+  operatorToken: string,
+  body: { organization_id: string; email: string; display_name: string },
+): Promise<UserView> =>
+  request<UserView>("/users", { method: "POST", body, bearer: operatorToken });
 
 /** The workspaces the signed-in user belongs to. */
 export const listWorkspaces = (bearer: string, signal?: AbortSignal): Promise<WorkspaceView[]> =>
