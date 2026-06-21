@@ -6,6 +6,7 @@ const KEYS = {
   userId: "metis.userId",
   operatorToken: "metis.operatorToken",
   activeWorkspaceId: "metis.activeWorkspaceId",
+  scope: "metis.scope",
 } as const;
 
 function read(key: string): string | null {
@@ -29,6 +30,7 @@ export interface PersistedSession {
   userId: string | null;
   operatorToken: string | null;
   activeWorkspaceId: string | null;
+  scope: string | null;
 }
 
 export function loadPersisted(): PersistedSession {
@@ -36,6 +38,7 @@ export function loadPersisted(): PersistedSession {
     userId: read(KEYS.userId),
     operatorToken: read(KEYS.operatorToken),
     activeWorkspaceId: read(KEYS.activeWorkspaceId),
+    scope: read(KEYS.scope),
   };
 }
 
@@ -51,8 +54,13 @@ export function persistActiveWorkspaceId(value: string | null): void {
   write(KEYS.activeWorkspaceId, value);
 }
 
+export function persistScope(value: string | null): void {
+  write(KEYS.scope, value);
+}
+
 export function clearPersisted(): void {
   persistUserId(null);
   persistOperatorToken(null);
   persistActiveWorkspaceId(null);
+  persistScope(null);
 }
