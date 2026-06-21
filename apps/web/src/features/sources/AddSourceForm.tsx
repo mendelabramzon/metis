@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
 
+import { trackActivation } from "@/analytics/activation";
 import { ApiError, createSource, getOAuthAuthorizeUrl, listConnectors } from "@/api/client";
 import type { ConnectorView } from "@/api/types";
 import { Button } from "@/components";
@@ -23,7 +24,7 @@ export function AddSourceForm({
   onCreated: () => void;
   onChanged: () => void;
 }) {
-  const { operatorToken, activeWorkspaceId } = useSession();
+  const { operatorToken, activeWorkspaceId, user } = useSession();
   const nameField = useId();
   const sensField = useId();
   const [connectors, setConnectors] = useState<ConnectorView[]>([]);
@@ -77,6 +78,7 @@ export function AddSourceForm({
         config: {},
         ...(activeWorkspaceId ? { workspace_id: activeWorkspaceId } : {}),
       });
+      if (user) trackActivation(user.id, "connected_source");
       onCreated();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn’t create the source.");

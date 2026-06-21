@@ -8,6 +8,7 @@ import {
   queryWorkspace,
   rejectAction,
 } from "@/api/client";
+import { trackActivation } from "@/analytics/activation";
 import type { ActionExecutionView, ProposedActionView, QueryResponse } from "@/api/types";
 import { useSession } from "@/session/SessionContext";
 
@@ -47,7 +48,7 @@ interface UseAsk {
  * action is blocked, and an effectful action surfaces a card for approve→execute / reject.
  */
 export function useAsk(): UseAsk {
-  const { userBearer, activeWorkspaceId, operatorToken } = useSession();
+  const { userBearer, activeWorkspaceId, operatorToken, user } = useSession();
   const [state, setState] = useState<AskState>({ kind: "idle" });
   const stateRef = useRef<AskState>(state);
   stateRef.current = state;
@@ -82,6 +83,7 @@ export function useAsk(): UseAsk {
       const controller = new AbortController();
       controllerRef.current = controller;
       setState({ kind: "asking", question: text });
+      if (user) trackActivation(user.id, "asked_question");
 
       // Operator-gated merge: interpret the input first, then route by the action's risk tier.
       if (operatorToken) {
@@ -116,7 +118,7 @@ export function useAsk(): UseAsk {
 
       await runQuery(userBearer, activeWorkspaceId, text, controller.signal);
     },
-    [userBearer, activeWorkspaceId, operatorToken, runQuery],
+    [userBearer, activeWorkspaceId, operatorToken, user, runQuery],
   );
 
   const decideAction = useCallback(
