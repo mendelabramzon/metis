@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { trackActivation } from "@/analytics/activation";
 import type { Citation } from "@/api/types";
 import {
   Badge,
@@ -36,7 +37,7 @@ const FRAMING: Record<AskOutcome, { label: string; variant: BadgeVariant }> = {
 /** The Ask screen (D1): context strip, scrolling answer area with a full state machine, and a
  *  pinned composer. Citations render as scope/sensitivity cards that open a source drawer (D2). */
 export function AskScreen() {
-  const { activeWorkspace, scope } = useSession();
+  const { activeWorkspace, scope, user } = useSession();
   const { state, canAsk, ask, decideAction, reset } = useAsk();
   const starterQuestions = useStarterQuestions();
   const [draft, setDraft] = useState("");
@@ -74,7 +75,10 @@ export function AskScreen() {
             canAsk={canAsk}
             starterQuestions={starterQuestions}
             onAsk={(q) => void ask(q)}
-            onPickCitation={(citation, index) => setSelected({ citation, index })}
+            onPickCitation={(citation, index) => {
+              setSelected({ citation, index });
+              if (user) trackActivation(user.id, "opened_citation");
+            }}
             onDecide={(approve) => void decideAction(approve)}
             onReset={reset}
           />

@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { trackActivation } from "@/analytics/activation";
 import { ApiError, uploadFiles } from "@/api/client";
 import type { ParseStatus } from "@/api/types";
 import { Badge, Button } from "@/components";
@@ -77,7 +78,7 @@ function FileRow({ item, onRetry }: { item: UploadItem; onRetry: () => void }) {
  * a retry for failures. One bad file surfaces its own status without failing the batch.
  */
 export function UploadPanel() {
-  const { userBearer, activeWorkspace, activeWorkspaceId } = useSession();
+  const { userBearer, activeWorkspace, activeWorkspaceId, user } = useSession();
   const [items, setItems] = useState<UploadItem[]>([]);
 
   function patch(id: string, status: ParseStatus | null) {
@@ -93,6 +94,9 @@ export function UploadPanel() {
         toUpload.map((it) => it.file),
       );
       toUpload.forEach((it, i) => patch(it.id, res.files[i] ?? null));
+      if (user && res.files.some((f) => f.status === "parsed")) {
+        trackActivation(user.id, "connected_source"); // a dense source landed
+      }
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Upload failed.";
       toUpload.forEach((it) => patch(it.id, { filename: it.file.name, status: "failed", error: message }));
