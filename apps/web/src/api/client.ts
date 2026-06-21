@@ -19,6 +19,9 @@ import type {
   ContradictionView,
   InboxItemView,
   InviteRedeemView,
+  InviteView,
+  MembershipRole,
+  MembershipView,
   ProposedActionView,
   QueryRequestBody,
   QueryResponse,
@@ -191,6 +194,42 @@ export const listAudit = (
   request<AuditView[]>(`/audit?limit=${limit}`, {
     bearer: operatorToken,
     ...(signal ? { signal } : {}),
+  });
+
+// --- members + invites (workspace-admin; user bearer) ---------------------------------------
+
+export const listMembers = (
+  bearer: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<MembershipView[]> =>
+  request<MembershipView[]>(`/workspaces/${encodeURIComponent(workspaceId)}/members`, {
+    bearer,
+    ...(signal ? { signal } : {}),
+  });
+
+export const addMember = (
+  bearer: string,
+  workspaceId: string,
+  userId: string,
+  role: MembershipRole,
+): Promise<MembershipView> =>
+  request<MembershipView>(`/workspaces/${encodeURIComponent(workspaceId)}/members`, {
+    method: "POST",
+    body: { user_id: userId, role },
+    bearer,
+  });
+
+/** Mint a single-use invite to this workspace (A6). The token forms the redeem link. */
+export const createWorkspaceInvite = (
+  bearer: string,
+  workspaceId: string,
+  role: MembershipRole,
+): Promise<InviteView> =>
+  request<InviteView>(`/workspaces/${encodeURIComponent(workspaceId)}/invites`, {
+    method: "POST",
+    body: { role },
+    bearer,
   });
 
 // --- review queue: contradictions (user bearer) + approvals (operator token) ----------------
