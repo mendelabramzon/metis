@@ -5,10 +5,13 @@ ENV PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 RUN pip install --no-cache-dir uv
 WORKDIR /app
 
 COPY . /app
-RUN uv sync --frozen --no-dev
+# --all-packages: install the whole workspace at build so the image is complete (no startup
+# download) and the healthcheck's bare `python -c "import metis_ingest_worker"` resolves.
+RUN uv sync --frozen --no-dev --all-packages
 
-CMD ["uv", "run", "--no-dev", "metis-ingest-worker"]
+CMD ["metis-ingest-worker"]
