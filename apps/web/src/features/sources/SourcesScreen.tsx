@@ -15,7 +15,7 @@ import {
 import { useSession } from "@/session/SessionContext";
 
 import { SOURCE_STATE_META, sourceState, summarize } from "./sourceState";
-import { UploadCard } from "./UploadCard";
+import { UploadPanel } from "./UploadPanel";
 import styles from "./sources.module.css";
 
 function SourceCard({
@@ -57,13 +57,12 @@ function SourceCard({
  * add-source catalog/OAuth, E4 Telegram.
  */
 export function SourcesScreen() {
-  const { operatorToken, activeWorkspace, workspaces } = useSession();
+  const { operatorToken, workspaces } = useSession();
   const [sources, setSources] = useState<SourceView[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string>("");
   const [addOpen, setAddOpen] = useState(false);
   const [queued, setQueued] = useState<ReadonlySet<string>>(new Set());
-  const [picked, setPicked] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     if (!operatorToken) {
@@ -114,18 +113,7 @@ export function SourcesScreen() {
         )}
       </div>
 
-      {activeWorkspace && (
-        <UploadCard
-          workspaceName={activeWorkspace.name}
-          onFiles={(files) => setPicked(files.map((f) => f.name))}
-        />
-      )}
-      {picked.length > 0 && (
-        <div className={styles.uploadHint} style={{ marginTop: "calc(-1 * var(--space-3))" }}>
-          {picked.length} file{picked.length === 1 ? "" : "s"} selected ({picked.join(", ")}) —
-          upload runs in E2.
-        </div>
-      )}
+      <UploadPanel />
 
       {!operatorToken ? (
         <EmptyState
