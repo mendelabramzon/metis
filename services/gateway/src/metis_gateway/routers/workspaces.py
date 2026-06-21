@@ -180,9 +180,18 @@ async def query_workspace(
     citations: list[Citation] = []
     if answer is not None:
         workspace = backend.workspace_for(ws_id, allow_external=allow_external)
+        scope = context.workspace.kind
         citations = [
-            Citation(claim_id=claim_id, source_span_id=span_id, artifact_id=artifact_id)
-            for claim_id, span_id, artifact_id in await workspace.citation_rows(answer.claims)
+            Citation(
+                claim_id=claim_id,
+                source_span_id=span_id,
+                artifact_id=artifact_id,
+                scope=scope,
+                sensitivity=sensitivity,
+            )
+            for claim_id, span_id, artifact_id, sensitivity in await workspace.citation_rows(
+                answer.claims
+            )
         ]
     return QueryResponse(
         run_id=str(run.run_id),

@@ -28,11 +28,15 @@ async def query(body: QueryRequestBody, backend: BackendDep, principal: UserDep)
     answer = run.answer
     citations: list[Citation] = []
     if answer is not None:
+        rows = await backend.workspace.citation_rows(answer.claims)
         citations = [
-            Citation(claim_id=claim_id, source_span_id=span_id, artifact_id=artifact_id)
-            for claim_id, span_id, artifact_id in await backend.workspace.citation_rows(
-                answer.claims
+            Citation(
+                claim_id=claim_id,
+                source_span_id=span_id,
+                artifact_id=artifact_id,
+                sensitivity=sensitivity,
             )
+            for claim_id, span_id, artifact_id, sensitivity in rows
         ]
     return QueryResponse(
         run_id=str(run.run_id),

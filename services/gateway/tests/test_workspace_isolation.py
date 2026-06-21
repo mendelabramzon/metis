@@ -110,7 +110,13 @@ def test_workspace_engine_is_isolated(client: TestClient, op: dict[str, str]) ->
         f"/workspaces/{ada_ws}/query", json={"text": "Apollo"}, headers=_bearer(ada)
     )
     assert ada_answer.status_code == 200
-    assert ada_answer.json()["sufficient"] is True
+    ada_body = ada_answer.json()
+    assert ada_body["sufficient"] is True
+    # Citations carry workspace scope + sensitivity (A1).
+    ada_ws_kind = client.get("/workspaces", headers=_bearer(ada)).json()[0]["kind"]
+    assert ada_body["citations"]
+    assert ada_body["citations"][0]["scope"] == ada_ws_kind
+    assert ada_body["citations"][0]["sensitivity"]
 
     # Grace can neither ingest into nor query Ada's workspace — she is not a member.
     blocked_ingest = client.post(

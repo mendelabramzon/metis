@@ -149,7 +149,8 @@ async def execute(action_id: str, backend: BackendDep, principal: UserDep) -> Ac
         answer=outcome.answer,
         sufficient=outcome.sufficient,
         citations=[
-            Citation(claim_id=c, source_span_id=s, artifact_id=a) for c, s, a in outcome.citations
+            Citation(claim_id=c, source_span_id=s, artifact_id=a, sensitivity=sens)
+            for c, s, a, sens in outcome.citations
         ],
         job_id=outcome.job_id,
         doc_id=outcome.doc_id,
