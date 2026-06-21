@@ -227,6 +227,8 @@ export interface QueryResponse {
   sufficient: boolean;
   /** True when the answer's cited evidence stayed on local/on-device models (A2); null on legacy path. */
   routed_local: boolean | null;
+  /** Whether a model produced the answer, or it was extractive because no provider is configured. */
+  answer_mode: "model" | "extractive" | null;
   citations: Citation[];
   contradictions: string[];
   disagreements: DisagreementView[];

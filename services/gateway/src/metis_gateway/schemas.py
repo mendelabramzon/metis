@@ -371,6 +371,9 @@ class QueryResponse(BaseModel):
     # True when the answer's cited evidence stayed on local/on-device models — external disallowed,
     # or the evidence is RESTRICTED (which the router keeps local). None on the legacy /query path.
     routed_local: bool | None = None
+    # Whether a chat model produced the answer ("model") or it was deterministic extractive text
+    # because no provider is configured for this workspace ("extractive"). None on legacy callers.
+    answer_mode: Literal["model", "extractive"] | None = None
     citations: list[Citation] = Field(default_factory=list)
     contradictions: list[str] = Field(default_factory=list)
     disagreements: list[DisagreementView] = Field(default_factory=list)

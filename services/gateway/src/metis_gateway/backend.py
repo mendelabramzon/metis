@@ -244,6 +244,13 @@ class Workspace(Protocol):
 
     async def answer(self, query: QueryRequest) -> Answer: ...  # the AgentLoop's Answerer
 
+    @property
+    def answers_with_model(self) -> bool: ...
+
+    # True when a chat model is wired to answer in this workspace; False => deterministic extractive
+    # answers (no provider configured for this workspace's model policy). Surfaced as the query
+    # response's ``answer_mode`` so the UI can say "answered without a model".
+
     async def citation_rows(
         self, claim_refs: Sequence[ClaimRef]
     ) -> list[tuple[str, str | None, str | None, Sensitivity | None]]: ...
@@ -654,6 +661,10 @@ class InMemoryWorkspace:
             max_sensitivity=max_sensitivity,
         )
 
+    @property
+    def answers_with_model(self) -> bool:
+        return self._caller is not None
+
     async def answer(self, query: QueryRequest) -> Answer:
         wanted = terms(query.text)
         matches = [
@@ -1063,6 +1074,10 @@ class PostgresWorkspace:
         self._query = query_engine
         # The OCR transcriber for low-coverage PDFs (None unless a vision model is wired).
         self._ocr_transcribe = ocr_transcribe
+
+    @property
+    def answers_with_model(self) -> bool:
+        return self._caller is not None
 
     async def ingest_bytes(
         self, *, filename: str, data: bytes, sensitivity: Sensitivity, connector: str = "upload"
