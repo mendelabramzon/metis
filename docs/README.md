@@ -8,6 +8,8 @@ Index of the project's documentation.
   staged roadmap (Stages 0–15).
 - [Package decomposition](package-decomposition.md) — package responsibilities,
   the dependency DAG, and swappable-interface ownership.
+- [UX/UI product plan](uxui.md) — product-facing UI structure, onboarding, and
+  flow guidance for replacing the debug console.
 
 ## Architecture
 
