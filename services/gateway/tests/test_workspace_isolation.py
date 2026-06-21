@@ -117,6 +117,8 @@ def test_workspace_engine_is_isolated(client: TestClient, op: dict[str, str]) ->
     assert ada_body["citations"]
     assert ada_body["citations"][0]["scope"] == ada_ws_kind
     assert ada_body["citations"][0]["sensitivity"]
+    # External is allowed by default and the evidence is INTERNAL, so external was permitted (A2).
+    assert ada_body["routed_local"] is False
 
     # Grace can neither ingest into nor query Ada's workspace — she is not a member.
     blocked_ingest = client.post(
