@@ -70,6 +70,18 @@ def test_gateway_binds_all_interfaces() -> None:
     assert gateway["environment"]["METIS_GATEWAY_HOST"] == "0.0.0.0"
 
 
+def test_base_compose_wires_the_cred_store_key_optionally() -> None:
+    # The base stack wires the secret-store key (gateway + ingest worker, same source) so durable
+    # connector secrets + the runtime provider UI work without the Telegram overlay — but *optional*
+    # (the `:-` default), so a clean machine with no key still comes up. A required form here would
+    # break the no-secrets clean start the rest of this module asserts.
+    services = _load("docker-compose.yml")["services"]
+    gateway = services["gateway"]["environment"]["METIS_GATEWAY_CRED_STORE_KEY"]
+    worker = services["ingest-worker"]["environment"]["METIS_INGEST_WORKER_CRED_STORE_KEY"]
+    assert gateway == "${METIS_CRED_STORE_KEY:-}"  # same source, optional (empty default)
+    assert worker == "${METIS_CRED_STORE_KEY:-}"  # so the worker can decrypt what the gateway wrote
+
+
 def test_maintainer_worker_points_at_the_stack_postgres() -> None:
     # The maintainer worker reads its own settings prefix (not METIS_CORE_*), so its DB url must be
     # set explicitly to the stack's Postgres host rather than the localhost default.
