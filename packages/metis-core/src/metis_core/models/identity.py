@@ -59,3 +59,15 @@ class WorkspaceModelPolicyRow(Base, VersionMixin, BodyMixin):
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), primary_key=True)
     allow_external_models: Mapped[bool] = mapped_column(Boolean)
     daily_cost_cap_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class InviteRow(Base, IdMixin, VersionMixin, BodyMixin):
+    """A single-use invite link, looked up by its unique ``token`` on redeem. Redemption state
+    (redeemed_by/at) lives in ``body``; the columns are just the mint/lookup keys."""
+
+    __tablename__ = "invites"
+
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), index=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    token: Mapped[str] = mapped_column(unique=True, index=True)
+    created_at: Mapped[TZDateTime] = mapped_column(index=True)

@@ -10,12 +10,14 @@ matching the rest of the stores.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from metis_core.db.session import unit_of_work
 from metis_core.mappers import (
+    invite_to_row,
     membership_to_row,
     model_policy_to_row,
     organization_to_row,
@@ -24,6 +26,7 @@ from metis_core.mappers import (
     workspace_to_row,
 )
 from metis_core.models import (
+    InviteRow,
     OrganizationRow,
     UserRow,
     WorkspaceMembershipRow,
@@ -31,6 +34,8 @@ from metis_core.models import (
     WorkspaceRow,
 )
 from metis_protocol import (
+    Invite,
+    InviteId,
     Organization,
     Role,
     User,
@@ -162,3 +167,28 @@ class PostgresIdentityStore:
             user = to_model(row, User).model_copy(update={"active": False})
             row.body = user.model_dump(mode="json")
         return user
+
+    async def create_invite(self, invite: Invite) -> Invite:
+        async with unit_of_work(self._sessionmaker) as session:
+            existing = await session.get(InviteRow, str(invite.id))
+            if existing is not None:
+                return to_model(existing, Invite)
+            session.add(invite_to_row(invite))
+        return invite
+
+    async def get_invite_by_token(self, token: str) -> Invite | None:
+        stmt = select(InviteRow).where(InviteRow.token == token)
+        async with unit_of_work(self._sessionmaker) as session:
+            row = (await session.scalars(stmt)).first()
+        return to_model(row, Invite) if row is not None else None
+
+    async def mark_invite_redeemed(self, invite_id: InviteId, *, user_id: UserId) -> Invite | None:
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(InviteRow, str(invite_id))
+            if row is None:
+                return None
+            invite = to_model(row, Invite).model_copy(
+                update={"redeemed_by": user_id, "redeemed_at": datetime.now(UTC)}
+            )
+            row.body = invite.model_dump(mode="json")
+        return invite

@@ -12,6 +12,7 @@ from metis_gateway.routers import (
     contradictions,
     evidence,
     ingestion,
+    invites,
     jobs,
     memory,
     oauth,
@@ -30,6 +31,7 @@ from metis_gateway.routers import (
 ALL_ROUTERS = (
     users.router,
     workspaces.router,
+    invites.router,
     actions.router,
     sources.router,
     telegram.router,

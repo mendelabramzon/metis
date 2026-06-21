@@ -14,6 +14,7 @@ from metis_protocol.artifacts import NormalizedDoc, ParsedDoc, RawArtifact, Segm
 from metis_protocol.claims import Claim, ClaimWriteResult, ExtractionBatch
 from metis_protocol.enums import ActionStatus, Role
 from metis_protocol.identity import (
+    Invite,
     Organization,
     User,
     Workspace,
@@ -26,6 +27,7 @@ from metis_protocol.ids import (
     ContradictionId,
     DocId,
     ForesightId,
+    InviteId,
     MemCellId,
     MemSceneId,
     ParsedDocId,
@@ -158,6 +160,16 @@ class IdentityStore(Protocol):
 
     # Soft-disable a user (active=False) so the auth boundary rejects them; their audit trail stays.
     # Returns the updated user, or None if unknown.
+
+    async def create_invite(self, invite: Invite) -> Invite: ...
+
+    async def get_invite_by_token(self, token: str) -> Invite | None: ...
+
+    async def mark_invite_redeemed(
+        self, invite_id: InviteId, *, user_id: UserId
+    ) -> Invite | None: ...
+
+    # Single-use invite links: mint one (admin), look it up on redeem, and stamp it redeemed.
 
 
 @runtime_checkable
