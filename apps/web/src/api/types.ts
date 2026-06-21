@@ -33,6 +33,51 @@ export interface InviteRedeemView {
   workspace_id: string;
 }
 
+/** `POST /workspaces/{ws}/query` body. */
+export interface QueryRequestBody {
+  text: string;
+  top_k?: number;
+}
+
+/** A cited claim behind an answer (A1 added scope + sensitivity). */
+export interface Citation {
+  claim_id: string;
+  source_span_id: string | null;
+  artifact_id: string | null;
+  /** Personal/shared/external origin of the cited source's workspace (A1). */
+  scope: WorkspaceKind | null;
+  sensitivity: Sensitivity | null;
+}
+
+/** One side of an answer-time disagreement (A3). */
+export interface ConflictSideView {
+  claim_id: string;
+  text: string;
+  source_span_id: string | null;
+  artifact_id: string | null;
+  sensitivity: Sensitivity | null;
+}
+
+/** Conflicting evidence surfaced at answer time (A3): same subject+predicate, differing claims. */
+export interface DisagreementView {
+  predicate: string;
+  sides: ConflictSideView[];
+}
+
+export interface QueryResponse {
+  run_id: string;
+  status: string;
+  answer: string;
+  sufficient: boolean;
+  /** True when the answer's cited evidence stayed on local/on-device models (A2); null on legacy path. */
+  routed_local: boolean | null;
+  citations: Citation[];
+  contradictions: string[];
+  disagreements: DisagreementView[];
+  filebacks: number;
+  pending_approvals: string[];
+}
+
 /** The gateway's error envelope (see install_error_handlers). */
 export interface ApiErrorBody {
   error?: { message?: string; code?: string };

@@ -1,0 +1,17 @@
+/* The default scrollable, centered, padded page body. Pages that need a full-height layout (e.g.
+   Ask, with a pinned composer) skip this and manage their own scroll. */
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.inner {
+  max-width: var(--layout-content-max);
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-8);
+}
+
+.wide .inner {
+  max-width: none;
+}

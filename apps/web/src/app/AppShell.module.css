@@ -116,6 +116,9 @@
   min-height: 0;
 }
 
+/* The content cell is a flex column; pages fill it and own their own scroll (so e.g. Ask can pin
+   its composer at the bottom). Section pages use <PageContainer> for the default scroll + padding. */
+
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -153,12 +156,10 @@
 
 .content {
   min-width: 0;
-  overflow-y: auto;
-}
-.contentInner {
-  max-width: var(--layout-content-max);
-  margin: 0 auto;
-  padding: var(--space-5) var(--space-4) var(--space-8);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ---- Mobile: header stays; nav becomes a scrollable row above content ------------------- */
@@ -166,6 +167,9 @@
   .body {
     display: flex;
     flex-direction: column;
+  }
+  .content {
+    flex: 1;
   }
   .sidebar {
     flex-direction: row;
