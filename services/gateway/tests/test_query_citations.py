@@ -27,6 +27,7 @@ def test_citations_point_to_claims_and_source_spans(client, op, user) -> None:
     assert citation["claim_id"]
     assert citation["source_span_id"]  # traceable to a source span
     assert citation["artifact_id"]
+    assert citation["sensitivity"] == "internal"  # the cited claim's tier travels with the citation
 
 
 def test_insufficient_evidence_is_honest_and_uncited(client, user) -> None:

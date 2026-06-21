@@ -243,7 +243,7 @@ class Workspace(Protocol):
 
     async def citation_rows(
         self, claim_refs: Sequence[ClaimRef]
-    ) -> list[tuple[str, str | None, str | None]]: ...
+    ) -> list[tuple[str, str | None, str | None, Sensitivity | None]]: ...
 
     # Returns None when no such artifact exists *in this workspace* (the isolation guard → 404).
     async def erase_artifact(self, artifact_id: str) -> ErasureResult | None: ...
@@ -643,9 +643,9 @@ class InMemoryWorkspace:
 
     async def citation_rows(
         self, claim_refs: Sequence[ClaimRef]
-    ) -> list[tuple[str, str | None, str | None]]:
-        """Resolve claim refs back to (claim_id, source_span_id, artifact_id) for the API."""
-        rows: list[tuple[str, str | None, str | None]] = []
+    ) -> list[tuple[str, str | None, str | None, Sensitivity | None]]:
+        """Resolve claim refs to citation rows (+ the claim's sensitivity) for the API."""
+        rows: list[tuple[str, str | None, str | None, Sensitivity | None]] = []
         for ref in claim_refs:
             claim = self._by_id.get(str(ref.claim_id))
             span = claim.source_spans[0] if claim and claim.source_spans else None
@@ -654,6 +654,7 @@ class InMemoryWorkspace:
                     str(ref.claim_id),
                     str(span.source_span_id) if span else None,
                     str(span.artifact_id) if span else None,
+                    claim.policy.sensitivity if claim is not None else None,
                 )
             )
         return rows
@@ -1076,8 +1077,8 @@ class PostgresWorkspace:
 
     async def citation_rows(
         self, claim_refs: Sequence[ClaimRef]
-    ) -> list[tuple[str, str | None, str | None]]:
-        rows: list[tuple[str, str | None, str | None]] = []
+    ) -> list[tuple[str, str | None, str | None, Sensitivity | None]]:
+        rows: list[tuple[str, str | None, str | None, Sensitivity | None]] = []
         for ref in claim_refs:
             claim = await self._claims.get(ref.claim_id)
             span = claim.source_spans[0] if claim and claim.source_spans else None
@@ -1086,6 +1087,7 @@ class PostgresWorkspace:
                     str(ref.claim_id),
                     str(span.source_span_id) if span else None,
                     str(span.artifact_id) if span else None,
+                    claim.policy.sensitivity if claim is not None else None,
                 )
             )
         return rows

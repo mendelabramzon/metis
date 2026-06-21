@@ -322,6 +322,8 @@ class Citation(BaseModel):
     claim_id: str
     source_span_id: str | None = None
     artifact_id: str | None = None
+    scope: WorkspaceKind | None = None  # personal/shared origin of the cited source's workspace
+    sensitivity: Sensitivity | None = None  # the cited claim's sensitivity tier
 
 
 class QueryResponse(BaseModel):

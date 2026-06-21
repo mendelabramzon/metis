@@ -59,8 +59,10 @@ class ExecutionOutcome:
     detail: str  # human-readable "what happened" (always set)
     answer: str | None = None
     sufficient: bool | None = None
-    # (claim_id, source_span_id, artifact_id) rows, mirroring the query router's flat citations.
-    citations: list[tuple[str, str | None, str | None]] = field(default_factory=list)
+    # (claim_id, source_span_id, artifact_id, sensitivity) rows, mirroring the query router.
+    citations: list[tuple[str, str | None, str | None, Sensitivity | None]] = field(
+        default_factory=list
+    )
     job_id: str | None = None  # for START_SYNC: the queued connector-sync job
     doc_id: str | None = None  # for CREATE_MEMORY: the doc the assertion was ingested as
     patch_id: str | None = None  # for CREATE_WIKI_PATCH: the patch queued for review
@@ -131,7 +133,7 @@ async def _run_query(
         )
     )
     answer = run.answer
-    citations: list[tuple[str, str | None, str | None]] = []
+    citations: list[tuple[str, str | None, str | None, Sensitivity | None]] = []
     if answer is not None:
         workspace = backend.workspace_for(ws_id, allow_external=allow_external)
         citations = list(await workspace.citation_rows(answer.claims))
