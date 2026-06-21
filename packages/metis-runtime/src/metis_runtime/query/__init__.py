@@ -22,6 +22,7 @@ from metis_runtime.query.plan import QueryPlan, plan_query
 from metis_runtime.query.prompts import query_registry
 from metis_runtime.query.retrievers import MemoryRetriever
 from metis_runtime.query.rewrite import rewrite_query
+from metis_runtime.query.starter import StarterQuestions
 from metis_runtime.query.sufficiency import Sufficiency, assess_sufficiency
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "MemoryRetriever",
     "QueryEngine",
     "QueryPlan",
+    "StarterQuestions",
     "Sufficiency",
     "assess_sufficiency",
     "conflict_notes",

@@ -275,6 +275,7 @@
         "query_rewrite",
         "query_answer",
         "query_verify",
+        "suggest_questions",
         "skill_plan",
         "skill_execute",
         "interpret_command"

@@ -135,7 +135,7 @@ from metis_protocol import (
     Workspace as WorkspaceEntity,
 )
 from metis_runtime.agent import AgentLoop
-from metis_runtime.query import Answer, MemoryRetriever, QueryEngine
+from metis_runtime.query import Answer, MemoryRetriever, QueryEngine, StarterQuestions
 from metis_runtime.skills import (
     ApprovalQueue,
     ApprovalRequest,
@@ -282,6 +282,11 @@ class Workspace(Protocol):
     async def revise_mem_cell(
         self, mem_cell_id: str, *, op: MemoryOp, reason: str, actor: str
     ) -> MemCell | None: ...
+
+    # Grounded onboarding nudge: a few questions answerable from this workspace's recent evidence.
+    async def starter_questions(
+        self, *, max_sensitivity: Sensitivity, count: int = 3
+    ) -> list[str]: ...
 
 
 @runtime_checkable
@@ -460,6 +465,7 @@ class InMemoryWorkspace:
         self._spans: dict[str, SourceSpan] = {}  # span_id -> span, to resolve a claim's quotes
         # With a caller wired, answers are LLM-generated over the matched evidence (cited);
         # otherwise a deterministic extractive answer.
+        self._caller = caller
         self._generator = FallbackAnswerGenerator(caller=caller) if caller is not None else None
 
     async def ingest_bytes(
@@ -619,6 +625,19 @@ class InMemoryWorkspace:
         self, mem_cell_id: str, *, op: MemoryOp, reason: str, actor: str
     ) -> MemCell | None:
         return None
+
+    async def starter_questions(self, *, max_sensitivity: Sensitivity, count: int = 3) -> list[str]:
+        notes = [
+            claim.text
+            for claim in reversed(self._claims)  # most recently ingested first
+            if is_at_least(max_sensitivity, claim.policy.sensitivity)
+        ]
+        return await StarterQuestions(caller=self._caller).generate(
+            workspace_id=self._workspace_id,
+            notes=notes,
+            count=count,
+            max_sensitivity=max_sensitivity,
+        )
 
     async def answer(self, query: QueryRequest) -> Answer:
         wanted = terms(query.text)
@@ -1013,10 +1032,12 @@ class PostgresWorkspace:
         query_engine: QueryEngine,
         embedding_router: EmbeddingRouter,
         ocr_transcribe: Transcribe | None = None,
+        caller: ModelCaller | None = None,
     ) -> None:
         self._workspace_id = workspace_id
         self._sessionmaker = sessionmaker
         self._object_store = object_store
+        self._caller = caller
         self._artifacts = PostgresMinioArtifactStore(sessionmaker, object_store)
         self._documents = PostgresDocumentStore(sessionmaker)
         self._claims = PostgresClaimStore(sessionmaker)
@@ -1238,6 +1259,18 @@ class PostgresWorkspace:
             )
         )
         return cell
+
+    async def starter_questions(self, *, max_sensitivity: Sensitivity, count: int = 3) -> list[str]:
+        cells = await self._memory.query_cells(MemoryScope(workspace_id=self._workspace_id))
+        notes = [
+            cell.summary for cell in cells if is_at_least(max_sensitivity, cell.policy.sensitivity)
+        ]
+        return await StarterQuestions(caller=self._caller).generate(
+            workspace_id=self._workspace_id,
+            notes=notes,
+            count=count,
+            max_sensitivity=max_sensitivity,
+        )
 
 
 class PostgresAuditLog:
@@ -1523,6 +1556,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
             query_engine=query_engine,
             embedding_router=embedding_router,
             ocr_transcribe=transcribe,
+            caller=caller,
         )
 
     workspace = _workspace_factory(workspace_id, allow_external=True)

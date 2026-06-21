@@ -32,6 +32,7 @@ from metis_gateway.schemas import (
     QueryRequestBody,
     QueryResponse,
     SpendView,
+    StarterQuestionsView,
     WorkspaceCreate,
     WorkspaceView,
 )
@@ -216,6 +217,20 @@ async def query_workspace(
         filebacks=len(run.filebacks),
         pending_approvals=[request.key for request in run.pending_approvals],
     )
+
+
+@router.get("/{workspace_id}/starter-questions", response_model=StarterQuestionsView)
+async def starter_questions(context: MemberDep, backend: BackendDep) -> StarterQuestionsView:
+    """A few grounded questions answerable from this workspace's recent evidence — the onboarding
+    "first value" nudge (A5). Generated over recent claims/memory under the workspace's model policy
+    (local model when external is disallowed); falls back to deterministic questions with no model.
+    """
+    policy = await backend.identity.get_model_policy(context.workspace.id)
+    workspace = backend.workspace_for(
+        context.workspace.id, allow_external=policy.allow_external_models
+    )
+    questions = await workspace.starter_questions(max_sensitivity=Sensitivity.RESTRICTED, count=3)
+    return StarterQuestionsView(questions=questions)
 
 
 @router.delete("/{workspace_id}/artifacts/{artifact_id}", response_model=ErasureView)
