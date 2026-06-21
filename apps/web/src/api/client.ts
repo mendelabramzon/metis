@@ -17,7 +17,10 @@ import type {
   ConnectorView,
   ContradictionStatus,
   ContradictionView,
+  HealthView,
   InboxItemView,
+  JobView,
+  ProviderView,
   InviteRedeemView,
   InviteView,
   MembershipRole,
@@ -186,6 +189,26 @@ export async function uploadFiles(
   }
   return data as UploadResponse;
 }
+
+// --- operations (operator-only) -------------------------------------------------------------
+
+export const getHealth = (signal?: AbortSignal): Promise<HealthView> =>
+  request<HealthView>("/health", { ...(signal ? { signal } : {}) });
+
+export const listProviders = (
+  operatorToken: string,
+  signal?: AbortSignal,
+): Promise<ProviderView[]> =>
+  request<ProviderView[]>("/providers", { bearer: operatorToken, ...(signal ? { signal } : {}) });
+
+export const listJobs = (operatorToken: string, signal?: AbortSignal): Promise<JobView[]> =>
+  request<JobView[]>("/jobs", { bearer: operatorToken, ...(signal ? { signal } : {}) });
+
+export const retryJob = (operatorToken: string, jobId: string): Promise<JobView> =>
+  request<JobView>(`/jobs/${encodeURIComponent(jobId)}/retry`, {
+    method: "POST",
+    bearer: operatorToken,
+  });
 
 /** The audit/event log (operator-gated; global). The Activity view filters it client-side. */
 export const listAudit = (
