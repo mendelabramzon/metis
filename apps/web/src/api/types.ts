@@ -7,7 +7,13 @@ import type { ActionRisk, Sensitivity } from "@/domain/types";
 
 export type WorkspaceKind = "personal" | "shared" | "external";
 
-/** `GET /users/me` — the user-id bearer resolves to this. */
+/** `POST /organizations` (operator) — the deployment's organization. */
+export interface OrganizationView {
+  id: string;
+  name: string;
+}
+
+/** `GET /users/me` / `POST /users` — the user-id bearer resolves to this. */
 export interface UserView {
   id: string;
   organization_id: string;
