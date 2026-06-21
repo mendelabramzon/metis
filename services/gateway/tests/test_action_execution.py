@@ -134,8 +134,10 @@ def test_external_side_effects_are_blocked(client: TestClient, op: dict[str, str
         status=ActionStatus.APPROVED,  # even approved, external stays out of Stage 1
     )
     resp = client.post(f"/actions/{action_id}/execute", headers=op)
-    assert resp.status_code == 409
-    assert "external" in resp.json()["error"]["message"].lower()
+    assert resp.status_code == 403  # a typed policy block, not a generic conflict (A4)
+    body = resp.json()["error"]
+    assert body["code"] == "policy_blocked"
+    assert "external" in body["message"].lower()
 
 
 def test_create_memory_ingests_through_the_pipeline(client: TestClient, op: dict[str, str]) -> None:

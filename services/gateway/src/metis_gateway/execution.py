@@ -23,7 +23,12 @@ from pydantic import ValidationError
 
 from metis_core.wiki.approval import WikiPatchReview
 from metis_gateway.backend import Backend
-from metis_gateway.errors import ConflictError, NotFoundError, TooManyRequestsError
+from metis_gateway.errors import (
+    ConflictError,
+    NotFoundError,
+    PolicyBlockedError,
+    TooManyRequestsError,
+)
 from metis_gateway.models import over_daily_cap
 from metis_ingestion import ConnectorScheduler
 from metis_protocol import (
@@ -77,7 +82,7 @@ def guard_executable(action: ProposedAction) -> None:
     if action.status in (ActionStatus.EXECUTED, ActionStatus.REJECTED):
         raise ConflictError(f"action is already {action.status.value}")
     if action.risk is ActionRisk.EXTERNAL:
-        raise ConflictError("external side effects are out of scope for Stage 1")
+        raise PolicyBlockedError("external side effects are blocked by policy in this deployment")
     if action.risk is not ActionRisk.READ_ONLY and action.status is not ActionStatus.APPROVED:
         raise ConflictError(f"{action.risk.value} actions must be approved before execution")
 
