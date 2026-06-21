@@ -7,7 +7,14 @@
  * in production the gateway serves the SPA from the same origin.
  */
 
-import type { ApiErrorBody, InviteRedeemView, UserView, WorkspaceView } from "./types";
+import type {
+  ApiErrorBody,
+  InviteRedeemView,
+  QueryRequestBody,
+  QueryResponse,
+  UserView,
+  WorkspaceView,
+} from "./types";
 
 /** A non-2xx response, carrying the gateway's status + decoded error message/code. */
 export class ApiError extends Error {
@@ -86,6 +93,20 @@ export const listWorkspaces = (bearer: string, signal?: AbortSignal): Promise<Wo
 export const probeOperator = async (token: string, signal?: AbortSignal): Promise<void> => {
   await request<unknown>("/providers", { bearer: token, ...(signal ? { signal } : {}) });
 };
+
+/** Ask the active workspace for a grounded answer (membership-gated). A policy block is a 403. */
+export const queryWorkspace = (
+  bearer: string,
+  workspaceId: string,
+  body: QueryRequestBody,
+  signal?: AbortSignal,
+): Promise<QueryResponse> =>
+  request<QueryResponse>(`/workspaces/${encodeURIComponent(workspaceId)}/query`, {
+    method: "POST",
+    body,
+    bearer,
+    ...(signal ? { signal } : {}),
+  });
 
 /** Redeem an invite (unauthenticated). The returned `user_id` is the new user's bearer (A6). */
 export const redeemInvite = (

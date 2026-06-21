@@ -89,9 +89,7 @@ export function AppShell() {
       <div className={styles.body}>
         <Sidebar />
         <main id="main" className={styles.content}>
-          <div className={styles.contentInner}>
-            <Outlet />
-          </div>
+          <Outlet />
         </main>
       </div>
     </div>
