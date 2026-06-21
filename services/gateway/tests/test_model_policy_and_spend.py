@@ -121,3 +121,24 @@ def test_spend_visible_and_cap_blocks_query(client: TestClient, op: dict[str, st
         f"/workspaces/{ws}/query", json={"text": "anything"}, headers=_bearer(ada)
     )
     assert blocked.status_code == 429
+
+
+def test_routing_outcome_is_local_when_external_forbidden(
+    client: TestClient, op: dict[str, str]
+) -> None:
+    ada, ws = _ada_and_workspace(client, op)
+    client.put(
+        f"/workspaces/{ws}/model-policy",
+        json={"allow_external_models": False},
+        headers=_bearer(ada),
+    )
+    client.post(
+        f"/workspaces/{ws}/ingest",
+        json={"filename": "n.md", "content": "Ada leads the Apollo project."},
+        headers=_bearer(ada),
+    )
+    body = client.post(
+        f"/workspaces/{ws}/query", json={"text": "Apollo"}, headers=_bearer(ada)
+    ).json()
+    # External is forbidden by policy, so the answer is guaranteed on-device (A2).
+    assert body["routed_local"] is True

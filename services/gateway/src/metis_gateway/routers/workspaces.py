@@ -43,6 +43,7 @@ from metis_protocol import (
     WorkspaceId,
     WorkspaceMembership,
     WorkspaceModelPolicy,
+    is_at_least,
     new_id,
 )
 from metis_runtime.agent import AgentRequest
@@ -193,11 +194,17 @@ async def query_workspace(
                 answer.claims
             )
         ]
+    restricted_evidence = any(
+        c.sensitivity is not None and is_at_least(c.sensitivity, Sensitivity.RESTRICTED)
+        for c in citations
+    )
+    routed_local = (not allow_external) or restricted_evidence
     return QueryResponse(
         run_id=str(run.run_id),
         status=run.status.value,
         answer=answer.text if answer is not None else run.summary,
         sufficient=answer.sufficient if answer is not None else False,
+        routed_local=routed_local,
         citations=citations,
         contradictions=list(answer.contradictions) if answer is not None else [],
         filebacks=len(run.filebacks),
