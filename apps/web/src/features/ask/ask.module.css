@@ -281,6 +281,42 @@
   color: var(--color-text-muted);
 }
 
+/* ---- Onboarding: starter questions + verify nudge (H3) ---------------------------------- */
+.starterLabel {
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+.starters {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 40rem;
+}
+.starterChip {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.starterChip:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-subtle-fg);
+}
+.verifyNudge {
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
 /* ---- Composer (pinned) ------------------------------------------------------------------ */
 .composer {
   border-top: 1px solid var(--color-border);

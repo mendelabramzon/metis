@@ -169,6 +169,11 @@ export interface DisagreementView {
   sides: ConflictSideView[];
 }
 
+/** `GET /workspaces/{ws}/starter-questions` (A5) — grounded onboarding questions. */
+export interface StarterQuestionsView {
+  questions: string[];
+}
+
 export interface QueryResponse {
   run_id: string;
   status: string;

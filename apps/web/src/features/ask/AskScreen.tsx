@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { Citation } from "@/api/types";
 import {
@@ -20,6 +21,7 @@ import { CitationDrawerBody } from "./CitationDrawerBody";
 import { InsufficientActions } from "./InsufficientActions";
 import type { AskOutcome } from "./useAsk";
 import { useAsk } from "./useAsk";
+import { useStarterQuestions } from "./useStarterQuestions";
 import styles from "./ask.module.css";
 
 const MAX_TEXTAREA_PX = 192; // 12rem, matches the CSS max-height
@@ -36,6 +38,7 @@ const FRAMING: Record<AskOutcome, { label: string; variant: BadgeVariant }> = {
 export function AskScreen() {
   const { activeWorkspace, scope } = useSession();
   const { state, canAsk, ask, decideAction, reset } = useAsk();
+  const starterQuestions = useStarterQuestions();
   const [draft, setDraft] = useState("");
   const [selected, setSelected] = useState<{ citation: Citation; index: number } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -69,6 +72,8 @@ export function AskScreen() {
           <AnswerArea
             state={state}
             canAsk={canAsk}
+            starterQuestions={starterQuestions}
+            onAsk={(q) => void ask(q)}
             onPickCitation={(citation, index) => setSelected({ citation, index })}
             onDecide={(approve) => void decideAction(approve)}
             onReset={reset}
@@ -127,12 +132,24 @@ export function AskScreen() {
 interface AnswerAreaProps {
   state: ReturnType<typeof useAsk>["state"];
   canAsk: boolean;
+  starterQuestions: string[];
+  onAsk: (question: string) => void;
   onPickCitation: (citation: Citation, index: number) => void;
   onDecide: (approve: boolean) => void;
   onReset: () => void;
 }
 
-function AnswerArea({ state, canAsk, onPickCitation, onDecide, onReset }: AnswerAreaProps) {
+function AnswerArea({
+  state,
+  canAsk,
+  starterQuestions,
+  onAsk,
+  onPickCitation,
+  onDecide,
+  onReset,
+}: AnswerAreaProps) {
+  const navigate = useNavigate();
+
   if (!canAsk) {
     return (
       <EmptyState
@@ -144,11 +161,42 @@ function AnswerArea({ state, canAsk, onPickCitation, onDecide, onReset }: Answer
 
   switch (state.kind) {
     case "idle":
+      // First Value loop (H3): suggest grounded questions once there's evidence; otherwise
+      // foreground adding the first source.
+      if (starterQuestions.length > 0) {
+        return (
+          <>
+            <EmptyState
+              glyph="◆"
+              title="Ask anything about your sources"
+              description="Every answer is grounded in your evidence and shows the citations behind it — never a black-box reply."
+            />
+            <div className={styles.starterLabel}>Try one of these to get started</div>
+            <div className={styles.starters}>
+              {starterQuestions.map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  className={styles.starterChip}
+                  onClick={() => onAsk(question)}
+                >
+                  {question}
+                </button>
+              ))}
+            </div>
+          </>
+        );
+      }
       return (
         <EmptyState
           glyph="◆"
-          title="Ask anything about your sources"
-          description="Every answer is grounded in your evidence and shows the citations behind it — never a black-box reply."
+          title="Let’s get your first answer"
+          description="Add a source — upload a few documents or connect a mailbox — and Metis will suggest questions you can ask over it, each answer citing the evidence."
+          actions={
+            <Button variant="primary" onClick={() => navigate("/sources")}>
+              Add your first source
+            </Button>
+          }
         />
       );
 
@@ -297,6 +345,11 @@ function AnswerArea({ state, canAsk, onPickCitation, onDecide, onReset }: Answer
                 {response.citations.length} citation{response.citations.length === 1 ? "" : "s"}
               </div>
               <CitationCards citations={response.citations} onOpen={onPickCitation} />
+              {outcome === "sufficient" && (
+                <div className={styles.verifyNudge}>
+                  Tap a source to see the exact line it came from — that’s how you verify an answer.
+                </div>
+              )}
             </>
           )}
         </>
