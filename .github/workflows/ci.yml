@@ -42,3 +42,34 @@ jobs:
 
       - name: Test (pytest)
         run: make test
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      # Mirrors `npm run check`, split into steps for readable CI logs.
+      - name: Typecheck (tsc)
+        run: npm run typecheck
+
+      - name: Lint (eslint + jsx-a11y)
+        run: npm run lint
+
+      - name: Contrast (WCAG AA tokens)
+        run: npm run check:contrast
+
+      - name: Build (vite)
+        run: npm run build
