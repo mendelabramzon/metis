@@ -21,6 +21,7 @@ from metis_gateway.errors import NotFoundError, TooManyRequestsError
 from metis_gateway.models import over_daily_cap
 from metis_gateway.schemas import (
     Citation,
+    DisagreementView,
     ErasureView,
     IngestRequest,
     IngestResponse,
@@ -207,6 +208,11 @@ async def query_workspace(
         routed_local=routed_local,
         citations=citations,
         contradictions=list(answer.contradictions) if answer is not None else [],
+        disagreements=(
+            [DisagreementView.from_conflict(c) for c in answer.conflicts]
+            if answer is not None
+            else []
+        ),
         filebacks=len(run.filebacks),
         pending_approvals=[request.key for request in run.pending_approvals],
     )

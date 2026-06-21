@@ -9,7 +9,7 @@ matches the engine's.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, JsonValue
 
@@ -28,6 +28,9 @@ from metis_protocol import (
     SkillOutcome,
     WorkspaceKind,
 )
+
+if TYPE_CHECKING:  # runtime conflict value objects the disagreement views are built from
+    from metis_runtime.query import Conflict, ConflictSide
 
 # --- sources + ingestion -----------------------------------------------------------------------
 
@@ -326,6 +329,40 @@ class Citation(BaseModel):
     sensitivity: Sensitivity | None = None  # the cited claim's sensitivity tier
 
 
+class ConflictSideView(BaseModel):
+    """One position in an answer-time disagreement, with the source span behind it."""
+
+    claim_id: str
+    text: str
+    source_span_id: str | None = None
+    artifact_id: str | None = None
+    sensitivity: Sensitivity | None = None
+
+    @classmethod
+    def from_side(cls, side: ConflictSide) -> ConflictSideView:
+        return cls(
+            claim_id=side.claim_id,
+            text=side.text,
+            source_span_id=side.source_span_id,
+            artifact_id=side.artifact_id,
+            sensitivity=side.sensitivity,
+        )
+
+
+class DisagreementView(BaseModel):
+    """Conflicting evidence surfaced at answer time: same subject+predicate, differing claims."""
+
+    predicate: str
+    sides: list[ConflictSideView]
+
+    @classmethod
+    def from_conflict(cls, conflict: Conflict) -> DisagreementView:
+        return cls(
+            predicate=conflict.predicate,
+            sides=[ConflictSideView.from_side(s) for s in conflict.sides],
+        )
+
+
 class QueryResponse(BaseModel):
     run_id: str
     status: str
@@ -336,6 +373,7 @@ class QueryResponse(BaseModel):
     routed_local: bool | None = None
     citations: list[Citation] = Field(default_factory=list)
     contradictions: list[str] = Field(default_factory=list)
+    disagreements: list[DisagreementView] = Field(default_factory=list)
     filebacks: int = 0
     pending_approvals: list[str] = Field(default_factory=list)
 
