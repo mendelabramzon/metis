@@ -294,6 +294,40 @@ export interface SpendView {
   today_by_task: Record<string, number>;
 }
 
+// --- operations (operator-only) -------------------------------------------------------------
+
+export interface HealthView {
+  status: string;
+  service: string;
+}
+
+/** `GET /providers` — a model enabled by its capability manifest (operator). */
+export interface ProviderView {
+  provider: string;
+  model_id: string;
+  kind: string;
+  privacy_tier: string;
+  context_window: number;
+  supports_tools: boolean;
+}
+
+export type JobState =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "retrying";
+
+/** `GET /jobs` — a background job (operator). */
+export interface JobView {
+  id: string;
+  kind: string;
+  state: JobState;
+  attempts: number;
+  error: string | null;
+}
+
 /** `GET /audit` — an audit/event row (operator-gated; global, no workspace field). */
 export interface AuditView {
   id: string;
