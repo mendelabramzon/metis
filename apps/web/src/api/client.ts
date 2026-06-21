@@ -22,6 +22,8 @@ import type {
   InviteView,
   MembershipRole,
   MembershipView,
+  ModelPolicyView,
+  SpendView,
   ProposedActionView,
   QueryRequestBody,
   QueryResponse,
@@ -193,6 +195,39 @@ export const listAudit = (
 ): Promise<AuditView[]> =>
   request<AuditView[]>(`/audit?limit=${limit}`, {
     bearer: operatorToken,
+    ...(signal ? { signal } : {}),
+  });
+
+// --- model policy + spend (workspace member/admin; user bearer) -----------------------------
+
+export const getModelPolicy = (
+  bearer: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<ModelPolicyView> =>
+  request<ModelPolicyView>(`/workspaces/${encodeURIComponent(workspaceId)}/model-policy`, {
+    bearer,
+    ...(signal ? { signal } : {}),
+  });
+
+export const setModelPolicy = (
+  bearer: string,
+  workspaceId: string,
+  body: { allow_external_models: boolean; daily_cost_cap_usd: number | null },
+): Promise<ModelPolicyView> =>
+  request<ModelPolicyView>(`/workspaces/${encodeURIComponent(workspaceId)}/model-policy`, {
+    method: "PUT",
+    body,
+    bearer,
+  });
+
+export const getSpend = (
+  bearer: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<SpendView> =>
+  request<SpendView>(`/workspaces/${encodeURIComponent(workspaceId)}/spend`, {
+    bearer,
     ...(signal ? { signal } : {}),
   });
 

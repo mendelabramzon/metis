@@ -136,3 +136,36 @@
   margin-top: var(--space-3);
   flex-wrap: wrap;
 }
+
+.toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: 30rem;
+  cursor: pointer;
+}
+.toggleText {
+  font-size: var(--text-sm);
+}
+.toggleHint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.spendTotal {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+}
+.spendRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  max-width: 26rem;
+}
+.spendTask {
+  color: var(--color-text-secondary);
+}
