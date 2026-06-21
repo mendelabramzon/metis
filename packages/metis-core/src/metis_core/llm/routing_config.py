@@ -23,6 +23,7 @@ _TASK_TIER: dict[ModelTaskClass, ModelTier] = {
     ModelTaskClass.QUERY_REWRITE: ModelTier.LOCAL,
     ModelTaskClass.QUERY_ANSWER: ModelTier.FRONTIER,
     ModelTaskClass.QUERY_VERIFY: ModelTier.STANDARD,
+    ModelTaskClass.SUGGEST_QUESTIONS: ModelTier.LOCAL,
     ModelTaskClass.SKILL_PLAN: ModelTier.FRONTIER,
     ModelTaskClass.SKILL_EXECUTE: ModelTier.STANDARD,
     ModelTaskClass.INTERPRET_COMMAND: ModelTier.STANDARD,
