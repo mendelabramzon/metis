@@ -13,6 +13,7 @@ import {
   RoutingBadge,
 } from "@/components";
 import type { BadgeVariant } from "@/components/Badge";
+import { WhileYouWereAway } from "@/features/digest/WhileYouWereAway";
 import { useSession } from "@/session/SessionContext";
 
 import { ActionCard } from "./ActionCard";
@@ -67,6 +68,8 @@ export function AskScreen() {
         <span className={styles.stripLabel}>· scope</span>
         <span className={styles.stripValue}>{scope}</span>
       </div>
+
+      <WhileYouWereAway />
 
       <div className={styles.scroll}>
         <div className={styles.inner}>
