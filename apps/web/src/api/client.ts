@@ -19,6 +19,7 @@ import type {
   QueryRequestBody,
   QueryResponse,
   SourceCreate,
+  SourceErasureView,
   SourceView,
   TelegramChatView,
   UploadResponse,
@@ -216,6 +217,16 @@ export const getOAuthAuthorizeUrl = (
   connector: string,
 ): Promise<AuthorizeView> =>
   request<AuthorizeView>(`/oauth/${encodeURIComponent(connector)}/authorize`, {
+    bearer: operatorToken,
+  });
+
+/** Permanently delete a source: erase its artifacts (tombstone + blob) and remove it (operator). */
+export const deleteSource = (
+  operatorToken: string,
+  sourceId: string,
+): Promise<SourceErasureView> =>
+  request<SourceErasureView>(`/sources/${encodeURIComponent(sourceId)}`, {
+    method: "DELETE",
     bearer: operatorToken,
   });
 

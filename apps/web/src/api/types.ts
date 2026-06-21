@@ -38,6 +38,14 @@ export interface SourceView {
   auth_method: string;
 }
 
+/** `DELETE /sources/{id}` — what the cascade erased (derived graphs tombstoned + blobs deleted). */
+export interface SourceErasureView {
+  artifacts: number;
+  claims: number;
+  mem_cells: number;
+  blobs_erased: number;
+}
+
 /** `GET /sources/connectors` — the catalog the add-source form is built from. */
 export interface ConnectorView {
   name: string;

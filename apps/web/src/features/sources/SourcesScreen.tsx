@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { listSources, syncSource } from "@/api/client";
+import { deleteSource, listSources, syncSource } from "@/api/client";
 import type { SourceView } from "@/api/types";
 import {
   Badge,
@@ -23,12 +23,26 @@ function SourceCard({
   source,
   onSync,
   queued,
+  onDelete,
 }: {
   source: SourceView;
   onSync: () => void;
   queued: boolean;
+  onDelete: () => Promise<void>;
 }) {
   const meta = SOURCE_STATE_META[sourceState(source)];
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function remove() {
+    setDeleting(true);
+    try {
+      await onDelete(); // the card unmounts when the list reloads
+    } catch {
+      setDeleting(false);
+    }
+  }
+
   return (
     <Card compact>
       <div className={styles.sourceHead}>
@@ -42,11 +56,36 @@ function SourceCard({
         <SensitivityBadge level={source.sensitivity} />
         <span>{source.auth_method}</span>
       </div>
-      <div style={{ marginTop: "var(--space-3)" }}>
+      <div className={styles.cardActions}>
         <Button variant="secondary" size="sm" onClick={onSync} disabled={queued}>
           {queued ? "Sync queued" : "Sync now"}
         </Button>
+        <Button variant="danger" size="sm" onClick={() => setConfirming(true)}>
+          Delete
+        </Button>
       </div>
+      {confirming && (
+        <div className={styles.confirmBox}>
+          <div className={styles.confirmText}>
+            Permanently delete “{source.name}” everywhere? This tombstones every claim, memory, and
+            document derived from it — erased content stops appearing in answers and evidence. This
+            can’t be undone.
+          </div>
+          <div className={styles.confirmActions}>
+            <Button variant="danger" size="sm" onClick={() => void remove()} disabled={deleting}>
+              {deleting ? "Deleting…" : "Permanently delete"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirming(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -92,6 +131,12 @@ export function SourcesScreen() {
     } catch {
       /* surfaced via the jobs/operations view; the card simply doesn't flip to queued */
     }
+  }
+
+  async function onDelete(id: string) {
+    if (!operatorToken) return;
+    await deleteSource(operatorToken, id);
+    await load();
   }
 
   const workspaceName = (id: string) => workspaces.find((w) => w.id === id)?.name ?? "Other workspace";
@@ -157,6 +202,7 @@ export function SourcesScreen() {
                   source={source}
                   onSync={() => void onSync(source.id)}
                   queued={queued.has(source.id)}
+                  onDelete={() => onDelete(source.id)}
                 />
               ))}
             </div>
