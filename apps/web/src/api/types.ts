@@ -52,12 +52,48 @@ export interface SourceErasureView {
   blobs_erased: number;
 }
 
+/** `DELETE /workspaces/{ws}/documents/{id}` — the tombstone cascade for one uploaded document. */
+export interface ErasureView {
+  artifact_tombstoned: boolean;
+  normalized_docs: number;
+  parsed_docs: number;
+  segments: number;
+  claims: number;
+  mem_cells: number;
+  blobs_erased: number;
+}
+
 /** `GET /sources/connectors` — the catalog the add-source form is built from. */
 export interface ConnectorView {
   name: string;
   auth_method: string;
   default_sensitivity: Sensitivity;
   requires_config: boolean;
+  /** Whether this deployment can use the connector now (e.g. oauth2 needs Google configured). */
+  available: boolean;
+  unavailable_reason: string | null;
+}
+
+/** `GET/PUT /admin/config` — the deployment's model + connector-auth readiness (operator). */
+export interface ConfigStatusView {
+  chat_provider: string | null; // null => answers are extractive (no model configured)
+  embeddings_source: string;
+  google_oauth_configured: boolean;
+  telegram_tdlib_configured: boolean;
+  runtime_config_enabled: boolean; // false => PUT is disabled (no credential-store key)
+}
+
+/** One configurable field's effective state; secret values are masked to a last-4 hint. */
+export interface ConfigFieldView {
+  key: string;
+  secret: boolean;
+  set: boolean;
+  value: string | null;
+}
+
+export interface DeploymentConfigView {
+  status: ConfigStatusView;
+  fields: ConfigFieldView[];
 }
 
 /** `POST /sources` body. `config` is connector-specific (empty for OAuth/no-auth connectors). */
@@ -216,6 +252,8 @@ export interface QueryResponse {
   sufficient: boolean;
   /** True when the answer's cited evidence stayed on local/on-device models (A2); null on legacy path. */
   routed_local: boolean | null;
+  /** Whether a model produced the answer, or it was extractive because no provider is configured. */
+  answer_mode: "model" | "extractive" | null;
   citations: Citation[];
   contradictions: string[];
   disagreements: DisagreementView[];

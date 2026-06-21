@@ -331,6 +331,13 @@ function AnswerArea({
             </div>
           )}
 
+          {response.answer_mode === "extractive" && (
+            <div className={styles.note}>
+              Answered without a model — this is pulled straight from your sources. An operator can
+              connect a model in Settings → Operations for synthesized answers.
+            </div>
+          )}
+
           {outcome === "conflicting" && response.disagreements.length > 0 && (
             <DisagreementPanel
               disagreements={response.disagreements}

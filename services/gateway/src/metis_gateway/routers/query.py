@@ -43,6 +43,7 @@ async def query(body: QueryRequestBody, backend: BackendDep, principal: UserDep)
         status=run.status.value,
         answer=answer.text if answer is not None else run.summary,
         sufficient=answer.sufficient if answer is not None else False,
+        answer_mode="model" if backend.workspace.answers_with_model else "extractive",
         citations=citations,
         contradictions=list(answer.contradictions) if answer is not None else [],
         disagreements=(

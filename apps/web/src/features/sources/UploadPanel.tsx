@@ -7,6 +7,7 @@ import { Badge, Button } from "@/components";
 import type { BadgeVariant } from "@/components/Badge";
 import { useSession } from "@/session/SessionContext";
 
+import { DocumentsList } from "./DocumentsList";
 import { UploadCard } from "./UploadCard";
 import styles from "./sources.module.css";
 
@@ -80,6 +81,8 @@ function FileRow({ item, onRetry }: { item: UploadItem; onRetry: () => void }) {
 export function UploadPanel() {
   const { userBearer, activeWorkspace, activeWorkspaceId, user } = useSession();
   const [items, setItems] = useState<UploadItem[]>([]);
+  // Bumped on each successful upload so the persisted documents list below reloads.
+  const [docsRefresh, setDocsRefresh] = useState(0);
 
   function patch(id: string, status: ParseStatus | null) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status } : it)));
@@ -94,8 +97,9 @@ export function UploadPanel() {
         toUpload.map((it) => it.file),
       );
       toUpload.forEach((it, i) => patch(it.id, res.files[i] ?? null));
-      if (user && res.files.some((f) => f.status === "parsed")) {
-        trackActivation(user.id, "connected_source"); // a dense source landed
+      if (res.files.some((f) => f.status === "parsed")) {
+        setDocsRefresh((n) => n + 1); // a new document landed — refresh the list
+        if (user) trackActivation(user.id, "connected_source"); // a dense source landed
       }
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Upload failed.";
@@ -125,6 +129,7 @@ export function UploadPanel() {
           ))}
         </div>
       )}
+      <DocumentsList refreshKey={docsRefresh} />
     </>
   );
 }

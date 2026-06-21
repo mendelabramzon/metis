@@ -182,9 +182,9 @@ async def query_workspace(
         )
     )
     answer = run.answer
+    workspace = backend.workspace_for(ws_id, allow_external=allow_external)
     citations: list[Citation] = []
     if answer is not None:
-        workspace = backend.workspace_for(ws_id, allow_external=allow_external)
         scope = context.workspace.kind
         citations = [
             Citation(
@@ -209,6 +209,7 @@ async def query_workspace(
         answer=answer.text if answer is not None else run.summary,
         sufficient=answer.sufficient if answer is not None else False,
         routed_local=routed_local,
+        answer_mode="model" if workspace.answers_with_model else "extractive",
         citations=citations,
         contradictions=list(answer.contradictions) if answer is not None else [],
         disagreements=(

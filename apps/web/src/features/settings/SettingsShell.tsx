@@ -8,6 +8,7 @@ import { MembersSection } from "./sections/MembersSection";
 import { ModelPolicySection } from "./sections/ModelPolicySection";
 import { OperationsSection } from "./sections/OperationsSection";
 import { PermissionsSection } from "./sections/PermissionsSection";
+import { ProvidersSection } from "./sections/ProvidersSection";
 import { WorkspaceSection } from "./sections/WorkspaceSection";
 import styles from "./settings.module.css";
 
@@ -23,6 +24,7 @@ const SECTIONS: SectionLink[] = [
   { path: "permissions", label: "Permissions" },
   { path: "model-policy", label: "Model policy" },
   { path: "data", label: "Data & erasure" },
+  { path: "providers", label: "Providers", operatorOnly: true },
   { path: "operations", label: "Operations", operatorOnly: true },
 ];
 
@@ -60,6 +62,10 @@ export function SettingsShell() {
             <Route path="permissions" element={<PermissionsSection />} />
             <Route path="model-policy" element={<ModelPolicySection />} />
             <Route path="data" element={<DataSection />} />
+            <Route
+              path="providers"
+              element={isOperator ? <ProvidersSection /> : <Navigate to="/settings/workspace" replace />}
+            />
             <Route
               path="operations"
               element={isOperator ? <OperationsSection /> : <Navigate to="/settings/workspace" replace />}

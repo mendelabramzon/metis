@@ -137,6 +137,39 @@ The `local` profile wires this to the `model-runtime` service — pull the model
 **Skills / web search.** Point `METIS_GATEWAY_SKILLS_ROOT` at a skills directory (e.g. `skills/`,
 which ships `web_search`) to register skills; run one via `POST /skills/run` (operator scope).
 
+## Providers & connector auth (env or runtime)
+
+The chat-model provider and the Google/Telegram credentials can be set **two ways**: as environment
+variables (below), or at runtime from **Settings → Providers** (operator-only) / `PUT /admin/config`.
+Runtime overrides persist encrypted in the shared `connector_secrets` table and are overlaid on the
+env settings; applying one rebuilds the chat plane + OAuth/Telegram wiring **in place — no restart**.
+Runtime config requires a credential-store key (set `METIS_CRED_STORE_KEY` in `.env`; compose maps it
+to `METIS_GATEWAY_CRED_STORE_KEY`); without one, the screen is read-only and reflects the environment.
+
+**Chat model.** Pick one — none of these set means answers are **extractive** (pulled straight from
+sources, no synthesis) and the query response reports `answer_mode: "extractive"` so the UI says so:
+
+- **Anthropic** — `METIS_GATEWAY_ANTHROPIC_API_KEY` (serves the upper tiers; restricted data still
+  routes local, never to the cloud).
+- **OpenAI-compatible** (incl. a self-hosted vLLM/TGI URL) — `METIS_GATEWAY_OPENAI_API_KEY`,
+  `METIS_GATEWAY_OPENAI_BASE_URL`, `METIS_GATEWAY_OPENAI_CHAT_MODEL`.
+- **Local Ollama** — `METIS_GATEWAY_MODEL_ENDPOINT` + `METIS_GATEWAY_CHAT_MODEL` (above).
+
+Check what's active with `GET /admin/config` (operator) — it reports the answering provider,
+embeddings source, and Google/Telegram readiness, with secrets masked.
+
+**Embeddings are env-only and *not* runtime-configurable.** Changing the embedding model/endpoint is a
+re-index under the version-gating invariant (ADR 0014), so it stays on `METIS_GATEWAY_MODEL_ENDPOINT`
++ `METIS_GATEWAY_EMBEDDING_MODEL` (or an embed-kind capability manifest) and a restart.
+
+**Google OAuth (Drive, Gmail, Calendar).** These connectors stay disabled — shown as "Not configured"
+in the add-source catalog, and `GET /oauth/{connector}/authorize` 409s — until a Google client is set:
+`METIS_GATEWAY_GOOGLE_CLIENT_ID`, `METIS_GATEWAY_GOOGLE_CLIENT_SECRET`,
+`METIS_GATEWAY_GOOGLE_REDIRECT_URI` (must match the deployment host's `/oauth/callback`), and
+optionally `METIS_GATEWAY_GOOGLE_SCOPES`. Create the client in Google Cloud → APIs & Services →
+Credentials → OAuth client ID (Web application), add the redirect URI, and enable the Drive/Gmail/
+Calendar APIs. Once set (env or runtime), the connectors become available and the consent flow works.
+
 ## Telegram ingestion (opt-in)
 
 Two transports behind one connector seam (per-chat source config, cursoring, and erasure are

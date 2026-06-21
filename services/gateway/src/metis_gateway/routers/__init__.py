@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from metis_gateway.routers import (
     actions,
+    admin,
     approvals,
     audit,
     contradictions,
+    documents,
     evidence,
     ingestion,
     invites,
@@ -37,6 +39,7 @@ ALL_ROUTERS = (
     telegram.router,
     ingestion.router,
     upload.router,
+    documents.router,
     query.router,
     runtime.router,
     evidence.router,
@@ -49,6 +52,7 @@ ALL_ROUTERS = (
     audit.router,
     providers.router,
     oauth.router,
+    admin.router,
 )
 
 __all__ = ["ALL_ROUTERS"]
