@@ -280,6 +280,20 @@ export interface InboxItemView {
   status: string;
 }
 
+/** `GET/PUT /workspaces/{ws}/model-policy` — whether external models may see this workspace's data. */
+export interface ModelPolicyView {
+  workspace_id: string;
+  allow_external_models: boolean;
+  daily_cost_cap_usd: number | null;
+}
+
+/** `GET /workspaces/{ws}/spend` — today's model spend (admin-gated). */
+export interface SpendView {
+  workspace_id: string;
+  today_total_usd: number;
+  today_by_task: Record<string, number>;
+}
+
 /** `GET /audit` — an audit/event row (operator-gated; global, no workspace field). */
 export interface AuditView {
   id: string;
