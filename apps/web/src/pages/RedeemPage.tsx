@@ -20,13 +20,14 @@ function friendlyError(err: unknown): string {
 }
 
 /**
- * Invite redemption (B3, consumes A6). Provisions the invitee's user + personal workspace, joins
- * the invited workspace, and signs them straight in with the returned bearer. H2/H3 build the
- * richer first-run around this; here it's the redeem → session path.
+ * Invited-member path (H2, consumes A6). Redeem → provision the user + personal workspace → join
+ * the invited shared workspace → sign straight in, with no org/setup steps. On success the active
+ * workspace switches to the one they joined (it has the team's content) and a one-line note confirms
+ * which workspace before they start asking.
  */
 export function RedeemPage() {
   const { token } = useParams<{ token: string }>();
-  const { status, signIn } = useSession();
+  const { status, signIn, setActiveWorkspace, workspaces } = useSession();
   const navigate = useNavigate();
   const emailField = useId();
   const nameField = useId();
@@ -34,6 +35,25 @@ export function RedeemPage() {
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [joinedWorkspaceId, setJoinedWorkspaceId] = useState<string | null>(null);
+
+  // Just joined — confirm which workspace, then send them in to ask.
+  if (joinedWorkspaceId !== null) {
+    const name = workspaces.find((w) => w.id === joinedWorkspaceId)?.name ?? "your team’s workspace";
+    return (
+      <div className={styles.screen}>
+        <div className={styles.card}>
+          <div className={styles.brand}>You’re in</div>
+          <p className={styles.subtitle}>
+            You’ve joined <strong>{name}</strong>. Ask it anything — answers cite the team’s sources.
+          </p>
+          <Button variant="primary" block onClick={() => navigate("/ask")}>
+            Start asking
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (status === "authenticated") return <Navigate to="/" replace />;
   if (!token) return <Navigate to="/" replace />;
@@ -49,7 +69,8 @@ export function RedeemPage() {
         display_name: displayName.trim(),
       });
       await signIn({ userId: res.user_id });
-      navigate("/", { replace: true });
+      setActiveWorkspace(res.workspace_id); // land where the team's content is
+      setJoinedWorkspaceId(res.workspace_id);
     } catch (err) {
       setError(friendlyError(err));
       setBusy(false);
@@ -61,7 +82,8 @@ export function RedeemPage() {
       <div className={styles.card}>
         <div className={styles.brand}>Join on Metis</div>
         <p className={styles.subtitle}>
-          You’ve been invited to a shared workspace. Tell us who you are to get started.
+          You’ve been invited to a shared workspace. Tell us who you are to get started — no setup
+          steps.
         </p>
 
         <form className={styles.form} onSubmit={(e) => void onSubmit(e)}>
