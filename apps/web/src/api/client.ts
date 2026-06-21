@@ -9,6 +9,8 @@
 
 import type {
   ApiErrorBody,
+  ArtifactEvidenceView,
+  ClaimEvidenceView,
   InviteRedeemView,
   QueryRequestBody,
   QueryResponse,
@@ -107,6 +109,30 @@ export const queryWorkspace = (
     bearer,
     ...(signal ? { signal } : {}),
   });
+
+/** A citation's claim + the source spans (with quotes) behind it. */
+export const getClaimEvidence = (
+  bearer: string,
+  workspaceId: string,
+  claimId: string,
+  signal?: AbortSignal,
+): Promise<ClaimEvidenceView> =>
+  request<ClaimEvidenceView>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/claims/${encodeURIComponent(claimId)}`,
+    { bearer, ...(signal ? { signal } : {}) },
+  );
+
+/** The source artifact (filename, type, ingest date) a span points back to. */
+export const getArtifactEvidence = (
+  bearer: string,
+  workspaceId: string,
+  artifactId: string,
+  signal?: AbortSignal,
+): Promise<ArtifactEvidenceView> =>
+  request<ArtifactEvidenceView>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}`,
+    { bearer, ...(signal ? { signal } : {}) },
+  );
 
 /** Redeem an invite (unauthenticated). The returned `user_id` is the new user's bearer (A6). */
 export const redeemInvite = (
