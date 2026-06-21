@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter
 
+from metis_gateway.backend import Backend
 from metis_gateway.deps import BackendDep, CurrentUserDep, OperatorDep
 from metis_gateway.errors import ConflictError, NotFoundError
 from metis_gateway.schemas import (
@@ -57,26 +58,25 @@ async def create_organization(
     return OrganizationView(id=str(org.id), name=org.name)
 
 
-@router.post("/users", response_model=UserView, status_code=201)
-async def create_user(body: UserCreate, backend: BackendDep, _principal: OperatorDep) -> UserView:
-    if await backend.identity.get_user_by_email(body.email) is not None:
-        raise ConflictError(f"a user with email {body.email!r} already exists")
+async def provision_user(
+    backend: Backend, *, organization_id: OrganizationId, email: str, display_name: str
+) -> User:
+    """Create a user with their personal workspace + owner membership — the identity graph the
+    workspace gate reads, never empty. Shared by direct provisioning and invite redemption."""
     now = datetime.now(UTC)
-    org_id = OrganizationId(body.organization_id)
     user = await backend.identity.create_user(
         User(
             id=new_id(UserId),
-            organization_id=org_id,
-            email=body.email,
-            display_name=body.display_name,
+            organization_id=organization_id,
+            email=email,
+            display_name=display_name,
             created_at=now,
         )
     )
-    # Every user gets a personal workspace they own — the default home for their context.
     workspace = await backend.identity.create_workspace(
         Workspace(
             id=new_id(WorkspaceId),
-            organization_id=org_id,
+            organization_id=organization_id,
             kind=WorkspaceKind.PERSONAL,
             name=f"{user.display_name} (personal)",
             owner_id=user.id,
@@ -91,6 +91,19 @@ async def create_user(body: UserCreate, backend: BackendDep, _principal: Operato
             role=Role.OWNER,
             created_at=now,
         )
+    )
+    return user
+
+
+@router.post("/users", response_model=UserView, status_code=201)
+async def create_user(body: UserCreate, backend: BackendDep, _principal: OperatorDep) -> UserView:
+    if await backend.identity.get_user_by_email(body.email) is not None:
+        raise ConflictError(f"a user with email {body.email!r} already exists")
+    user = await provision_user(
+        backend,
+        organization_id=OrganizationId(body.organization_id),
+        email=body.email,
+        display_name=body.display_name,
     )
     return _user_view(user)
 

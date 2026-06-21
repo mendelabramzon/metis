@@ -70,6 +70,7 @@ from metis_protocol.events import (
     payload_spec,
 )
 from metis_protocol.identity import (
+    Invite,
     Organization,
     User,
     Workspace,
@@ -91,6 +92,7 @@ from metis_protocol.ids import (
     EventId,
     EvidenceSetId,
     ForesightId,
+    InviteId,
     JobId,
     MembershipId,
     MemCellId,
@@ -275,6 +277,8 @@ __all__ = [
     "IdValidationError",
     "IdentityStore",
     "ImagePart",
+    "Invite",
+    "InviteId",
     "Job",
     "JobId",
     "JobQueue",

@@ -14,6 +14,7 @@ from metis_core.models.artifacts import (
 from metis_core.models.audit import AuditEventRow
 from metis_core.models.claims import ClaimRow, EntityRow, EventRow, ExtractionBatchRow
 from metis_core.models.identity import (
+    InviteRow,
     OrganizationRow,
     UserRow,
     WorkspaceMembershipRow,
@@ -48,6 +49,7 @@ __all__ = [
     "EventRow",
     "ExtractionBatchRow",
     "ForesightRow",
+    "InviteRow",
     "JobRow",
     "MemCellRow",
     "MemSceneRow",

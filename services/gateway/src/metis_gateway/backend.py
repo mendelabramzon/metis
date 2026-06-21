@@ -92,6 +92,8 @@ from metis_protocol import (
     ContradictionId,
     ContradictionStatus,
     IdentityStore,
+    Invite,
+    InviteId,
     Job,
     JobId,
     JobState,
@@ -370,6 +372,7 @@ class InMemoryIdentityStore:
         self._workspaces: dict[str, WorkspaceEntity] = {}
         self._memberships: dict[str, WorkspaceMembership] = {}
         self._policies: dict[str, WorkspaceModelPolicy] = {}
+        self._invites: dict[str, Invite] = {}  # keyed by token (the redeem lookup)
 
     async def create_organization(self, org: Organization) -> Organization:
         return self._orgs.setdefault(str(org.id), org)
@@ -421,6 +424,22 @@ class InMemoryIdentityStore:
         deactivated = user.model_copy(update={"active": False})
         self._users[str(user_id)] = deactivated
         return deactivated
+
+    async def create_invite(self, invite: Invite) -> Invite:
+        return self._invites.setdefault(invite.token, invite)
+
+    async def get_invite_by_token(self, token: str) -> Invite | None:
+        return self._invites.get(token)
+
+    async def mark_invite_redeemed(self, invite_id: InviteId, *, user_id: UserId) -> Invite | None:
+        for token, invite in self._invites.items():
+            if invite.id == invite_id:
+                updated = invite.model_copy(
+                    update={"redeemed_by": user_id, "redeemed_at": datetime.now(UTC)}
+                )
+                self._invites[token] = updated
+                return updated
+        return None
 
 
 class InMemoryWorkspace:

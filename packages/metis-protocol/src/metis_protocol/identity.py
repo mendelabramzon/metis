@@ -12,7 +12,7 @@ from __future__ import annotations
 from pydantic import AwareDatetime, Field
 
 from metis_protocol.enums import Role, Sensitivity, WorkspaceKind
-from metis_protocol.ids import MembershipId, OrganizationId, UserId, WorkspaceId
+from metis_protocol.ids import InviteId, MembershipId, OrganizationId, UserId, WorkspaceId
 from metis_protocol.versioning import VersionedModel, schema
 
 
@@ -80,3 +80,22 @@ class WorkspaceModelPolicy(VersionedModel):
     workspace_id: WorkspaceId
     allow_external_models: bool = True
     daily_cost_cap_usd: float | None = Field(default=None, ge=0.0)
+
+
+class Invite(VersionedModel):
+    """A single-use link to join an organization and one of its shared workspaces.
+
+    Redeeming it provisions the invitee's user + personal workspace and a membership in
+    ``workspace_id`` with ``role``. Operational, single-use control-plane state (like
+    ``WorkspaceModelPolicy``), so it is not registered in the schema snapshot set.
+    """
+
+    id: InviteId
+    organization_id: OrganizationId
+    workspace_id: WorkspaceId
+    role: Role = Role.MEMBER
+    token: str
+    created_by: UserId
+    created_at: AwareDatetime
+    redeemed_by: UserId | None = None
+    redeemed_at: AwareDatetime | None = None

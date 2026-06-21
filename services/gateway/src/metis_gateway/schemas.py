@@ -508,6 +508,32 @@ class MembershipView(BaseModel):
     role: Role
 
 
+class InviteCreate(BaseModel):
+    role: Role = Role.MEMBER
+
+
+class InviteView(BaseModel):
+    id: str
+    workspace_id: str
+    role: Role
+    token: str
+    redeemed: bool
+
+
+class InviteRedeem(BaseModel):
+    email: str
+    display_name: str
+
+
+class InviteRedeemView(BaseModel):
+    """The result of redeeming an invite: the provisioned user (whose id is the bearer token) and
+    the shared workspace they joined."""
+
+    user_id: str
+    organization_id: str
+    workspace_id: str
+
+
 class ModelPolicyView(BaseModel):
     workspace_id: str
     allow_external_models: bool

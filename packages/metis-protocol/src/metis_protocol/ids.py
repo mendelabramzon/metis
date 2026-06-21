@@ -203,5 +203,9 @@ class MembershipId(PrefixedId):
     prefix = "mbr"
 
 
+class InviteId(PrefixedId):
+    prefix = "inv"
+
+
 class ConnectorRunId(PrefixedId):
     prefix = "cnr"

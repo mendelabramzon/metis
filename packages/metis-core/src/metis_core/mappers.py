@@ -18,6 +18,7 @@ from metis_core.models import (
     EventRow,
     ExtractionBatchRow,
     ForesightRow,
+    InviteRow,
     JobRow,
     MemCellRow,
     MemoryPatchRow,
@@ -51,6 +52,7 @@ from metis_protocol import (
     Event,
     ExtractionBatch,
     Foresight,
+    Invite,
     Job,
     MemCell,
     MemoryPatch,
@@ -277,6 +279,18 @@ def model_policy_to_row(m: WorkspaceModelPolicy) -> WorkspaceModelPolicyRow:
         schema_version=m.schema_version,
         allow_external_models=m.allow_external_models,
         daily_cost_cap_usd=m.daily_cost_cap_usd,
+        body=m.model_dump(mode="json"),
+    )
+
+
+def invite_to_row(m: Invite) -> InviteRow:
+    return InviteRow(
+        id=str(m.id),
+        schema_version=m.schema_version,
+        organization_id=str(m.organization_id),
+        workspace_id=str(m.workspace_id),
+        token=m.token,
+        created_at=m.created_at,
         body=m.model_dump(mode="json"),
     )
 
