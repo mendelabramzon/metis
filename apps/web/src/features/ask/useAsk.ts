@@ -21,7 +21,7 @@ export type AskState =
   | { kind: "action"; question: string; action: ProposedActionView }
   | { kind: "executing"; question: string; action: ProposedActionView }
   | { kind: "executed"; question: string; result: ActionExecutionView }
-  | { kind: "blocked"; question: string; message: string }
+  | { kind: "blocked"; question: string; message: string; reason: "policy" | "external" }
   | { kind: "error"; question: string; message: string };
 
 /** Conflicting evidence and pending approvals take precedence over the plain sufficiency framing. */
@@ -63,7 +63,7 @@ export function useAsk(): UseAsk {
       } catch (err) {
         if (signal.aborted) return;
         if (err instanceof ApiError && err.status === 403 && err.code === "policy_blocked") {
-          setState({ kind: "blocked", question: text, message: err.message });
+          setState({ kind: "blocked", question: text, message: err.message, reason: "policy" });
         } else {
           const message =
             err instanceof ApiError ? err.message : "Something went wrong reaching the workspace.";
@@ -98,7 +98,8 @@ export function useAsk(): UseAsk {
               kind: "blocked",
               question: text,
               message:
-                "This would take an external action, which Metis won’t do automatically. Review it under Operations.",
+                "This would take an external action, which Metis won’t do automatically.",
+              reason: "external",
             });
             return;
           }

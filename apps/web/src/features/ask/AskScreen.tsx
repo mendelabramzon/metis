@@ -213,11 +213,16 @@ function AnswerArea({ state, canAsk, onPickCitation, onDecide, onReset }: Answer
       );
     }
 
-    case "blocked":
+    case "blocked": {
+      const isExternal = state.reason === "external";
       return (
         <BlockedState
-          title="Held back by policy"
-          description={state.message}
+          title={isExternal ? "This needs approval" : "Held back by policy"}
+          description={
+            isExternal
+              ? `${state.message} An operator can review and approve it in Operations.`
+              : `${state.message || "This request touches restricted data, so it was held back."} Try narrowing your question, or ask an admin about the workspace’s model policy.`
+          }
           actions={
             <Button variant="secondary" onClick={onReset}>
               Ask something else
@@ -225,6 +230,7 @@ function AnswerArea({ state, canAsk, onPickCitation, onDecide, onReset }: Answer
           }
         />
       );
+    }
 
     case "error":
       return (
