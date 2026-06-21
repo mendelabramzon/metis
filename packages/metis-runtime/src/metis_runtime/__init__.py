@@ -17,6 +17,15 @@ from metis_runtime.agent import (
     TaskStatus,
     Trust,
 )
+from metis_runtime.jobs import (
+    RESEARCH_JOB_KIND,
+    RuntimeDeps,
+    RuntimeJobOutcome,
+    RuntimeWorker,
+    build_research_job,
+    build_runtime_deps,
+    build_runtime_registry,
+)
 from metis_runtime.query import (
     Answer,
     AnswerGenerator,
@@ -31,6 +40,7 @@ from metis_runtime.query import (
 __version__ = "0.0.0"
 
 __all__ = [
+    "RESEARCH_JOB_KIND",
     "AgentLoop",
     "AgentRequest",
     "AgentRun",
@@ -39,9 +49,15 @@ __all__ = [
     "BudgetedContextPacker",
     "MemoryRetriever",
     "QueryEngine",
+    "RuntimeDeps",
+    "RuntimeJobOutcome",
+    "RuntimeWorker",
     "TaskStatus",
     "Trust",
     "__version__",
+    "build_research_job",
+    "build_runtime_deps",
+    "build_runtime_registry",
     "propose_fileback",
     "query_registry",
     "verify_citations",
