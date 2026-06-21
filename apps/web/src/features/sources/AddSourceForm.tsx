@@ -9,6 +9,7 @@ import { SENSITIVITY_ORDER } from "@/domain/types";
 import { useSession } from "@/session/SessionContext";
 
 import { TelegramChatPicker } from "./TelegramChatPicker";
+import { TelegramLogin } from "./TelegramLogin";
 import styles from "./sources.module.css";
 
 /**
@@ -114,10 +115,15 @@ export function AddSourceForm({
       </div>
 
       {selected?.name === "telegram" ? (
-        <TelegramChatPicker
-          defaultSensitivity={selected.default_sensitivity}
-          onChanged={onChanged}
-        />
+        <>
+          <h3 className={styles.subhead}>Connect your account</h3>
+          <TelegramLogin />
+          <h3 className={styles.subhead}>Add specific chats (via the bot)</h3>
+          <TelegramChatPicker
+            defaultSensitivity={selected.default_sensitivity}
+            onChanged={onChanged}
+          />
+        </>
       ) : selected ? (
         <>
           <div className={styles.field}>

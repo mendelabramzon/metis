@@ -272,3 +272,44 @@
   color: var(--status-warning-fg);
   margin-top: 2px;
 }
+
+/* Telegram add-source: two sub-flows (E5 account login + E4 chat picker) under headings. */
+.subhead {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+/* TDLib login sub-flow (E5). */
+.loginGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+.qrBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-sunken);
+}
+.qrToken {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  word-break: break-all;
+  color: var(--color-accent);
+}
+.loginStatus {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}

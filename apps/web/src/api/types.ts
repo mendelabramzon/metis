@@ -78,6 +78,27 @@ export interface TelegramChatView {
   last_message_id: number;
 }
 
+/** A step in the TDLib personal-account login (E5); mirrors the backend AuthState. A login that
+ *  errors surfaces as an API error rather than a state, so there is no "failed" here — `closed`
+ *  is the logged-out / revoked / cancelled terminal. */
+export type TelegramConnectState =
+  | "wait_parameters"
+  | "wait_phone"
+  | "wait_qr"
+  | "wait_code"
+  | "wait_password"
+  | "ready"
+  | "closed";
+
+/**
+ * `…/telegram/tdlib/connect*` (E5) — where the personal-account login is + what to do next.
+ * `qr_link` is a `tg://login` token to scan or open while in `wait_qr`.
+ */
+export interface TelegramConnectView {
+  state: TelegramConnectState;
+  qr_link: string | null;
+}
+
 /** `GET /oauth/{connector}/authorize` — the consent URL to send the user to. */
 export interface AuthorizeView {
   authorize_url: string;
