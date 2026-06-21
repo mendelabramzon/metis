@@ -42,6 +42,17 @@ class ConflictError(ApiError):
         super().__init__(409, "conflict", message)
 
 
+class PolicyBlockedError(ApiError):
+    """A request refused on policy/sensitivity grounds — not auth, not a server error.
+
+    Distinct from ConflictError so the UI can render a calm "blocked" state with the reason and
+    offer no naive retry, rather than treating it as a generic failure.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(403, "policy_blocked", message)
+
+
 class TooManyRequestsError(ApiError):
     def __init__(self, message: str) -> None:
         super().__init__(429, "too_many_requests", message)
