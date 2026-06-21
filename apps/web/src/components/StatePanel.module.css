@@ -1,0 +1,55 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+/* The blocked state is calm and distinct from an error: a solid info-tinted panel, not a dashed
+   empty well and not an alarm. */
+.blocked {
+  border-style: solid;
+  border-color: var(--sensitivity-restricted-fg);
+  background: var(--sensitivity-restricted-bg);
+  color: var(--sensitivity-restricted-fg);
+}
+
+.error {
+  border-style: solid;
+  border-color: var(--status-danger-fg);
+  background: var(--status-danger-bg);
+  color: var(--status-danger-fg);
+}
+
+.glyph {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+.blocked .title,
+.error .title {
+  color: inherit;
+}
+
+.description {
+  max-width: 34rem;
+}
+
+.actions {
+  margin-top: var(--space-3);
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+}

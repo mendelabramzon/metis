@@ -1,0 +1,108 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--_bg, var(--status-neutral-bg));
+  color: var(--_fg, var(--status-neutral-fg));
+}
+
+.dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* Generic semantic tones */
+.neutral {
+  --_bg: var(--status-neutral-bg);
+  --_fg: var(--status-neutral-fg);
+}
+.success {
+  --_bg: var(--status-success-bg);
+  --_fg: var(--status-success-fg);
+}
+.warning {
+  --_bg: var(--status-warning-bg);
+  --_fg: var(--status-warning-fg);
+}
+.danger {
+  --_bg: var(--status-danger-bg);
+  --_fg: var(--status-danger-fg);
+}
+.info {
+  --_bg: var(--status-info-bg);
+  --_fg: var(--status-info-fg);
+}
+.accent {
+  --_bg: var(--color-accent-subtle-bg);
+  --_fg: var(--color-accent-subtle-fg);
+}
+
+/* Domain: scope */
+.scope-personal {
+  --_bg: var(--scope-personal-bg);
+  --_fg: var(--scope-personal-fg);
+}
+.scope-shared {
+  --_bg: var(--scope-shared-bg);
+  --_fg: var(--scope-shared-fg);
+}
+
+/* Domain: sensitivity */
+.sensitivity-public {
+  --_bg: var(--sensitivity-public-bg);
+  --_fg: var(--sensitivity-public-fg);
+}
+.sensitivity-internal {
+  --_bg: var(--sensitivity-internal-bg);
+  --_fg: var(--sensitivity-internal-fg);
+}
+.sensitivity-confidential {
+  --_bg: var(--sensitivity-confidential-bg);
+  --_fg: var(--sensitivity-confidential-fg);
+}
+.sensitivity-restricted {
+  --_bg: var(--sensitivity-restricted-bg);
+  --_fg: var(--sensitivity-restricted-fg);
+}
+
+/* Domain: routing */
+.routing-local {
+  --_bg: var(--routing-local-bg);
+  --_fg: var(--routing-local-fg);
+}
+.routing-external {
+  --_bg: var(--routing-external-bg);
+  --_fg: var(--routing-external-fg);
+}
+
+/* Domain: risk */
+.risk-read_only {
+  --_bg: var(--risk-read-only-bg);
+  --_fg: var(--risk-read-only-fg);
+}
+.risk-reversible {
+  --_bg: var(--risk-reversible-bg);
+  --_fg: var(--risk-reversible-fg);
+}
+.risk-memory_write {
+  --_bg: var(--risk-memory-bg);
+  --_fg: var(--risk-memory-fg);
+}
+.risk-wiki_write {
+  --_bg: var(--risk-wiki-bg);
+  --_fg: var(--risk-wiki-fg);
+}
+.risk-external {
+  --_bg: var(--risk-external-bg);
+  --_fg: var(--risk-external-fg);
+}

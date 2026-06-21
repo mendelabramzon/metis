@@ -28,6 +28,11 @@ htmlcov/
 # Transient boundary-enforcement probe (see tests/architecture); never commit it
 **/_boundary_violation_probe.py
 
+# Node / frontend (apps/web) — build output (dist/) is already covered above
+node_modules/
+*.tsbuildinfo
+apps/web/.vite/
+
 # Editors / OS
 .idea/
 .vscode/

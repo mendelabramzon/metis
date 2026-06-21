@@ -1,0 +1,94 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  background: rgba(16, 22, 33, 0.4);
+  animation: fade var(--motion-base) var(--ease-out);
+}
+
+.panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-drawer);
+  width: min(var(--layout-drawer-w), 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-raised);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+  animation: slide-in var(--motion-base) var(--ease-out);
+}
+
+/* On narrow screens the drawer becomes a bottom sheet (matches D2's mobile note). */
+@media (max-width: 640px) {
+  .panel {
+    top: auto;
+    left: 0;
+    width: 100vw;
+    max-height: 85vh;
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation: slide-up var(--motion-base) var(--ease-out);
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.close:hover {
+  background: var(--color-sunken);
+  color: var(--color-text);
+}
+
+.body {
+  padding: var(--space-4);
+  overflow-y: auto;
+  flex: 1;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+}
