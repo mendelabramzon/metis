@@ -3,7 +3,7 @@
  * pydantic views verbatim (snake_case) — mapping to camelCase domain shapes happens at the edges.
  */
 
-import type { Sensitivity } from "@/domain/types";
+import type { ActionRisk, Sensitivity } from "@/domain/types";
 
 export type WorkspaceKind = "personal" | "shared" | "external";
 
@@ -112,6 +112,49 @@ export interface ArtifactEvidenceView {
   source_id: string | null;
   created_at: string;
   tombstoned: boolean;
+}
+
+// --- proposed actions (the command surface; operator/scope-token gated) ---------------------
+
+export type ActionKind =
+  | "answer"
+  | "find_evidence"
+  | "inspect_source"
+  | "draft_response"
+  | "create_memory"
+  | "create_wiki_patch"
+  | "start_sync"
+  | "propose_source_change";
+
+export type ActionStatus = "proposed" | "approved" | "rejected" | "executed" | "failed";
+
+/** A proposed-action card: what the system understood, its risk, and the recorded decision. */
+export interface ProposedActionView {
+  id: string;
+  workspace_id: string;
+  kind: ActionKind;
+  risk: ActionRisk;
+  command: string;
+  summary: string;
+  parameters: Record<string, unknown>;
+  sensitivity: Sensitivity;
+  audit_target: string;
+  status: ActionStatus;
+  decided_by: string | null;
+  decision_note: string;
+}
+
+/** The result of executing an action: the new status + what the run produced. */
+export interface ActionExecutionView {
+  action: ProposedActionView;
+  detail: string;
+  answer: string | null;
+  sufficient: boolean | null;
+  citations: Citation[];
+  job_id: string | null;
+  doc_id: string | null;
+  patch_id: string | null;
+  source_id: string | null;
 }
 
 /** The gateway's error envelope (see install_error_handlers). */

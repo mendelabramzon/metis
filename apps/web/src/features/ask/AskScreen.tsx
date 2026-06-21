@@ -5,6 +5,7 @@ import { Badge, BlockedState, Button, Drawer, EmptyState, ErrorState } from "@/c
 import type { BadgeVariant } from "@/components/Badge";
 import { useSession } from "@/session/SessionContext";
 
+import { ActionCard } from "./ActionCard";
 import { CitationCards } from "./CitationCards";
 import { CitationDrawerBody } from "./CitationDrawerBody";
 import { InsufficientActions } from "./InsufficientActions";
@@ -25,7 +26,7 @@ const FRAMING: Record<AskOutcome, { label: string; variant: BadgeVariant }> = {
  *  pinned composer. Citations render as scope/sensitivity cards that open a source drawer (D2). */
 export function AskScreen() {
   const { activeWorkspace, scope } = useSession();
-  const { state, canAsk, ask, reset } = useAsk();
+  const { state, canAsk, ask, decideAction, reset } = useAsk();
   const [draft, setDraft] = useState("");
   const [selected, setSelected] = useState<{ citation: Citation; index: number } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -60,6 +61,7 @@ export function AskScreen() {
             state={state}
             canAsk={canAsk}
             onPickCitation={(citation, index) => setSelected({ citation, index })}
+            onDecide={(approve) => void decideAction(approve)}
             onReset={reset}
           />
         </div>
@@ -117,10 +119,11 @@ interface AnswerAreaProps {
   state: ReturnType<typeof useAsk>["state"];
   canAsk: boolean;
   onPickCitation: (citation: Citation, index: number) => void;
+  onDecide: (approve: boolean) => void;
   onReset: () => void;
 }
 
-function AnswerArea({ state, canAsk, onPickCitation, onReset }: AnswerAreaProps) {
+function AnswerArea({ state, canAsk, onPickCitation, onDecide, onReset }: AnswerAreaProps) {
   if (!canAsk) {
     return (
       <EmptyState
@@ -149,6 +152,57 @@ function AnswerArea({ state, canAsk, onPickCitation, onReset }: AnswerAreaProps)
           </p>
         </>
       );
+
+    case "action":
+      return (
+        <>
+          <p className={styles.question}>{state.question}</p>
+          <div className={styles.framing}>
+            <Badge variant="info" dot>
+              Needs your approval
+            </Badge>
+          </div>
+          <ActionCard
+            action={state.action}
+            busy={false}
+            onApprove={() => onDecide(true)}
+            onReject={() => onDecide(false)}
+          />
+        </>
+      );
+
+    case "executing":
+      return (
+        <>
+          <p className={styles.question}>{state.question}</p>
+          <ActionCard action={state.action} busy onApprove={() => {}} onReject={() => {}} />
+        </>
+      );
+
+    case "executed": {
+      const { result } = state;
+      const resultId = result.job_id
+        ? `Queued sync job ${result.job_id.slice(0, 12)}…`
+        : result.doc_id
+          ? `Created memory ${result.doc_id.slice(0, 12)}…`
+          : result.patch_id
+            ? `Wiki patch ${result.patch_id.slice(0, 12)}… proposed for review`
+            : result.source_id
+              ? `Source ${result.source_id.slice(0, 12)}… registered`
+              : null;
+      return (
+        <>
+          <p className={styles.question}>{state.question}</p>
+          <div className={styles.resultDetail}>
+            <span aria-hidden="true">✓</span> {result.detail}
+          </div>
+          {resultId && <div className={styles.resultMeta}>{resultId}</div>}
+          <Button variant="secondary" onClick={onReset}>
+            Ask something else
+          </Button>
+        </>
+      );
+    }
 
     case "blocked":
       return (

@@ -1,7 +1,14 @@
 import { useCallback, useRef, useState } from "react";
 
-import { ApiError, queryWorkspace } from "@/api/client";
-import type { QueryResponse } from "@/api/types";
+import {
+  ApiError,
+  approveAction,
+  executeAction,
+  proposeAction,
+  queryWorkspace,
+  rejectAction,
+} from "@/api/client";
+import type { ActionExecutionView, ProposedActionView, QueryResponse } from "@/api/types";
 import { useSession } from "@/session/SessionContext";
 
 /** The headline framing of an answer (the answered state's sub-outcome). */
@@ -11,6 +18,9 @@ export type AskState =
   | { kind: "idle" }
   | { kind: "asking"; question: string }
   | { kind: "answered"; question: string; response: QueryResponse; outcome: AskOutcome }
+  | { kind: "action"; question: string; action: ProposedActionView }
+  | { kind: "executing"; question: string; action: ProposedActionView }
+  | { kind: "executed"; question: string; result: ActionExecutionView }
   | { kind: "blocked"; question: string; message: string }
   | { kind: "error"; question: string; message: string };
 
@@ -23,42 +33,35 @@ function deriveOutcome(response: QueryResponse): AskOutcome {
 
 interface UseAsk {
   state: AskState;
-  /** Whether a question can be asked (a workspace is active and we're signed in). */
   canAsk: boolean;
   ask: (question: string) => Promise<void>;
+  /** Approve+execute (true) or reject (false) the proposed action in the current `action` state. */
+  decideAction: (approve: boolean) => Promise<void>;
   reset: () => void;
 }
 
 /**
- * The Ask state machine (D1). Drives the screen through idle → asking → answered (sufficient /
- * insufficient / conflicting / action-proposal) | blocked | error. A policy/sensitivity block (A4,
- * 403 `policy_blocked`) is a distinct calm state, not an error.
+ * The Ask state machine (D1) with the operator-gated command merge (D7). Without the operator
+ * principal, input goes straight to the grounded `/query` path. With it, input is first interpreted
+ * via `/actions`: read-only routes back to `/query` (keeping the rich A1 citations), an EXTERNAL
+ * action is blocked, and an effectful action surfaces a card for approve→execute / reject.
  */
 export function useAsk(): UseAsk {
-  const { userBearer, activeWorkspaceId } = useSession();
+  const { userBearer, activeWorkspaceId, operatorToken } = useSession();
   const [state, setState] = useState<AskState>({ kind: "idle" });
+  const stateRef = useRef<AskState>(state);
+  stateRef.current = state;
   const controllerRef = useRef<AbortController | null>(null);
   const canAsk = userBearer !== null && activeWorkspaceId !== null;
 
-  const ask = useCallback(
-    async (question: string) => {
-      const text = question.trim();
-      if (!text || !userBearer || !activeWorkspaceId) return;
-      controllerRef.current?.abort();
-      const controller = new AbortController();
-      controllerRef.current = controller;
-      setState({ kind: "asking", question: text });
+  const runQuery = useCallback(
+    async (bearer: string, workspaceId: string, text: string, signal: AbortSignal) => {
       try {
-        const response = await queryWorkspace(
-          userBearer,
-          activeWorkspaceId,
-          { text },
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
+        const response = await queryWorkspace(bearer, workspaceId, { text }, signal);
+        if (signal.aborted) return;
         setState({ kind: "answered", question: text, response, outcome: deriveOutcome(response) });
       } catch (err) {
-        if (controller.signal.aborted) return;
+        if (signal.aborted) return;
         if (err instanceof ApiError && err.status === 403 && err.code === "policy_blocked") {
           setState({ kind: "blocked", question: text, message: err.message });
         } else {
@@ -68,7 +71,78 @@ export function useAsk(): UseAsk {
         }
       }
     },
-    [userBearer, activeWorkspaceId],
+    [],
+  );
+
+  const ask = useCallback(
+    async (question: string) => {
+      const text = question.trim();
+      if (!text || !userBearer || !activeWorkspaceId) return;
+      controllerRef.current?.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      setState({ kind: "asking", question: text });
+
+      // Operator-gated merge: interpret the input first, then route by the action's risk tier.
+      if (operatorToken) {
+        try {
+          const action = await proposeAction(
+            operatorToken,
+            text,
+            activeWorkspaceId,
+            controller.signal,
+          );
+          if (controller.signal.aborted) return;
+          if (action.risk === "external") {
+            setState({
+              kind: "blocked",
+              question: text,
+              message:
+                "This would take an external action, which Metis won’t do automatically. Review it under Operations.",
+            });
+            return;
+          }
+          if (action.risk !== "read_only") {
+            setState({ kind: "action", question: text, action });
+            return;
+          }
+          // read-only → fall through to the grounded query for the rich, cited answer.
+        } catch {
+          if (controller.signal.aborted) return;
+          // Interpretation failed (flaky model / bad token) — treat the input as a plain question.
+        }
+      }
+
+      await runQuery(userBearer, activeWorkspaceId, text, controller.signal);
+    },
+    [userBearer, activeWorkspaceId, operatorToken, runQuery],
+  );
+
+  const decideAction = useCallback(
+    async (approve: boolean) => {
+      const current = stateRef.current;
+      if (current.kind !== "action" || !operatorToken) return;
+      const { question, action } = current;
+      if (!approve) {
+        try {
+          await rejectAction(operatorToken, action.id, "rejected from Ask");
+        } catch {
+          /* best-effort; the proposal is dropped from the UI regardless */
+        }
+        setState({ kind: "idle" });
+        return;
+      }
+      setState({ kind: "executing", question, action });
+      try {
+        await approveAction(operatorToken, action.id, "approved from Ask");
+        const result = await executeAction(operatorToken, action.id);
+        setState({ kind: "executed", question, result });
+      } catch (err) {
+        const message = err instanceof ApiError ? err.message : "Couldn’t run this action.";
+        setState({ kind: "error", question, message });
+      }
+    },
+    [operatorToken],
   );
 
   const reset = useCallback(() => {
@@ -76,5 +150,5 @@ export function useAsk(): UseAsk {
     setState({ kind: "idle" });
   }, []);
 
-  return { state, canAsk, ask, reset };
+  return { state, canAsk, ask, decideAction, reset };
 }
