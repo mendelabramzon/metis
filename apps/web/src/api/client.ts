@@ -17,6 +17,7 @@ import type {
   ConnectorView,
   ContradictionStatus,
   ContradictionView,
+  DigestView,
   HealthView,
   InboxItemView,
   JobView,
@@ -161,6 +162,20 @@ export const getStarterQuestions = (
     `/workspaces/${encodeURIComponent(workspaceId)}/starter-questions`,
     { bearer, ...(signal ? { signal } : {}) },
   );
+
+/** "While you were away" summary since `since` (A7); the return-loop digest (F4). */
+export const getDigest = (
+  bearer: string,
+  workspaceId: string,
+  since: string | null,
+  signal?: AbortSignal,
+): Promise<DigestView> => {
+  const query = since ? `?since=${encodeURIComponent(since)}` : "";
+  return request<DigestView>(`/workspaces/${encodeURIComponent(workspaceId)}/digest${query}`, {
+    bearer,
+    ...(signal ? { signal } : {}),
+  });
+};
 
 /** A citation's claim + the source spans (with quotes) behind it. */
 export const getClaimEvidence = (

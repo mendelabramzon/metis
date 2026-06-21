@@ -174,6 +174,20 @@ export interface StarterQuestionsView {
   questions: string[];
 }
 
+/**
+ * `GET /workspaces/{ws}/digest?since=<iso>` (A7) — a "while you were away" summary of the
+ * member-gated, per-workspace surfaces since the caller's last visit. `highlights` are ready-to-show
+ * one-liners; the counts + capped summary lists back them. Empty `highlights` = nothing to report.
+ */
+export interface DigestView {
+  since: string | null;
+  new_contradictions: number;
+  contradictions: string[];
+  new_facts: number;
+  facts: string[];
+  highlights: string[];
+}
+
 export interface QueryResponse {
   run_id: string;
   status: string;

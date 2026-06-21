@@ -1,0 +1,57 @@
+/* The return-loop digest line (F4): a calm, dismissible banner under the Ask context strip. Uses the
+   vetted accent-subtle pair (bg + fg) so all text meets WCAG AA. */
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  max-width: var(--layout-content-max);
+  margin: var(--space-3) auto 0;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-subtle-fg);
+  font-size: var(--text-sm);
+}
+
+.body {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+  margin: 0;
+}
+
+.label {
+  font-weight: 600;
+}
+
+.summary {
+  color: var(--color-accent-subtle-fg);
+}
+
+.link {
+  color: var(--color-accent-subtle-fg);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.dismiss {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-subtle-fg);
+  font-size: var(--text-lg);
+  line-height: 1;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.dismiss:hover {
+  background: var(--color-accent-subtle-fg);
+  color: var(--color-accent-subtle-bg);
+}
