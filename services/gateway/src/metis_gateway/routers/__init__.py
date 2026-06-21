@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from metis_gateway.routers import (
     actions,
+    admin,
     approvals,
     audit,
     contradictions,
@@ -51,6 +52,7 @@ ALL_ROUTERS = (
     audit.router,
     providers.router,
     oauth.router,
+    admin.router,
 )
 
 __all__ = ["ALL_ROUTERS"]

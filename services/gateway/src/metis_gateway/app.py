@@ -93,7 +93,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         if backend.telegram_connect is not None:
             backend.telegram_connect.close_all()  # release any in-flight TDLib login clients
-        for close in backend.model_closers:
+        for close in (*backend.model_closers, *backend.embedding_closers):
             await close()
         if backend.http_client is not None:
             await backend.http_client.aclose()

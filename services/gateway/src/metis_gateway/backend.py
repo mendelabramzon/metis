@@ -31,7 +31,7 @@ from metis_core.mappers import to_model
 from metis_core.memory_index import EmbeddingRouter, MemoryIndexer, MemoryIndexLookup
 from metis_core.models import RawArtifactRow, SkillApprovalRow
 from metis_core.objectstore import S3ObjectStore
-from metis_core.security import Cryptobox, PostgresSecretStore
+from metis_core.security import Cryptobox, EncryptedSecretStore, PostgresSecretStore, SecretStore
 from metis_core.security.deletion import ErasureResult, ErasureSummary
 from metis_core.security.deletion import erase_artifact as erase_artifact_core
 from metis_core.security.deletion import erase_source as erase_source_core
@@ -48,11 +48,14 @@ from metis_core.stores import (
 from metis_core.tombstone import TombstoneResult
 from metis_core.wiki import PostgresWikiReviewInbox
 from metis_core.wiki.approval import WikiPatchReview, WikiPatchStatus
+from metis_gateway.config_store import DeploymentConfigStore, effective_settings
 from metis_gateway.errors import ConflictError, NotFoundError
 from metis_gateway.models import (
     FallbackAnswerGenerator,
+    ModelState,
     SpendTracker,
     build_embedding_router,
+    build_http_client,
     build_model_plane,
 )
 from metis_gateway.settings import GatewaySettings
@@ -105,6 +108,7 @@ from metis_protocol import (
     MemoryPatchId,
     MemoryScope,
     ModelCapability,
+    ModelKind,
     NormalizedDoc,
     ObjectStore,
     Organization,
@@ -1368,21 +1372,26 @@ class GoogleOAuthConfig:
         return f"{self.auth_url}?{urlencode(params)}"
 
 
-def _build_credentials(
+def _build_secret_store(
     settings: GatewaySettings, *, database_url: str | None = None
-) -> EncryptedCredentialStore | None:
-    """The encrypted credential store the OAuth callback + TDLib login write secrets into.
+) -> SecretStore | None:
+    """The encrypted-at-rest secret store backing both connector credentials and operator config.
 
     With ``database_url`` (the Postgres backend) it is durable and shared across processes — the
     ingest worker reads the same secrets, and they survive a restart; without it (the in-memory
-    backend) it is per-process (dev/tests).
+    backend) it is per-process (dev/tests). ``None`` when no ``cred_store_key`` is set.
     """
     if not settings.cred_store_key:
         return None
     crypto = Cryptobox(settings.cred_store_key)
     if database_url:
-        return EncryptedCredentialStore(store=PostgresSecretStore(database_url, crypto))
-    return EncryptedCredentialStore(crypto)
+        return PostgresSecretStore(database_url, crypto)
+    return EncryptedSecretStore(crypto)
+
+
+def _build_credentials(secret_store: SecretStore | None) -> EncryptedCredentialStore | None:
+    """The connector credential store (OAuth tokens, TDLib db-keys) over the shared secret store."""
+    return EncryptedCredentialStore(store=secret_store) if secret_store is not None else None
 
 
 def _build_telegram_connect(
@@ -1446,13 +1455,22 @@ class Backend:
     http_client: httpx.AsyncClient | None = (
         None  # the local model client (chat + embeddings); closed at shutdown
     )
-    model_closers: tuple[Callable[[], Awaitable[None]], ...] = ()  # cloud clients to close
+    model_closers: tuple[Callable[[], Awaitable[None]], ...] = ()  # chat plane clients; swapped on
+    # reconfigure (closed there). Embedding clients are kept separate so a chat-plane reconfigure
+    # never disturbs retrieval embeddings; these are closed only at shutdown.
+    embedding_closers: tuple[Callable[[], Awaitable[None]], ...] = ()
     spend: SpendTracker | None = None  # per-workspace model spend (None when no model is wired)
     model_manifests: tuple[ModelCapability, ...] = ()  # registered capability manifests (operators)
     credentials: EncryptedCredentialStore | None = None  # encrypted connector secrets at rest
     google_oauth: GoogleOAuthConfig | None = None  # the Google consent config (None = disabled)
     oauth_states: dict[str, str] = field(default_factory=dict)  # pending CSRF state -> connector
     telegram_connect: TelegramConnectManager | None = None  # per-user TDLib login (None = disabled)
+    # Operator runtime config: the durable override store + the env base they overlay. The live
+    # chat plane lives in ``model_state`` so ``reconfigure_models`` can swap it in place; ``None``
+    # when no credential-store key is set (runtime config + durable secrets are then disabled).
+    config_store: DeploymentConfigStore | None = None
+    base_settings: GatewaySettings | None = None
+    model_state: ModelState | None = None
     # Builds a per-workspace engine for (workspace_id, allow_external) on demand (set by the build
     # functions); ``workspace``/``agent`` above are the configured workspace's default engine.
     workspace_factory: Callable[[WorkspaceId, bool], Workspace] | None = None
@@ -1492,15 +1510,51 @@ class Backend:
             self._agents[key] = agent
         return agent
 
+    async def reconfigure_models(self, effective: GatewaySettings) -> None:
+        """Swap the live chat plane + Google/Telegram wiring to match ``effective`` in place — no
+        restart. Embeddings are untouched (changing them is a re-index, ADR 0014). Cached
+        per-workspace engines/agents are dropped so the next request rebuilds against the new plane;
+        the configured workspace's eager refs are rebuilt now; the previous plane's HTTP clients are
+        closed once nothing points at them. Spend tracking resets, as it would on a restart."""
+        if self.model_state is None:
+            return
+        old = self.model_state.plane
+        new = build_model_plane(effective, audit_sink=self.audit)
+        self.model_state.plane = new
+        self.spend = new.spend
+        self.model_manifests = new.manifests
+        self.model_caller = new.make_caller(allow_external=True)
+        self.http_client = new.local_client
+        self.model_closers = new.closers
+        self._workspaces.clear()
+        self._agents.clear()
+        if self.workspace_factory is not None:
+            self.workspace = self.workspace_factory(self.workspace_id, True)
+            self.agent = AgentLoop(
+                answerer=self.workspace,
+                skill_runner=self.skill_runner,
+                registry=self.skills,
+                audit_sink=self.audit,
+            )
+        self.google_oauth = _build_google_oauth(effective)
+        self.telegram_connect = _build_telegram_connect(effective, self.credentials)
+        for close in old.closers:
+            await close()
+        if old.local_client is not None:
+            await old.local_client.aclose()
+
 
 def build_backend(settings: GatewaySettings) -> Backend:
     """Assemble the in-memory backend from settings (the swap point for durable wiring)."""
     workspace_id = WorkspaceId(settings.workspace_id)
     audit = RecordingAuditSink()
     object_store = InMemoryObjectStore()
-    credentials = _build_credentials(settings)  # shared by the OAuth callback + the TDLib login
+    secret_store = _build_secret_store(settings)  # shared by credentials + operator config
+    credentials = _build_credentials(secret_store)
+    config_store = DeploymentConfigStore(secret_store) if secret_store is not None else None
+    effective = effective_settings(settings, config_store.overrides()) if config_store else settings
 
-    plane = build_model_plane(settings, audit_sink=audit)
+    state = ModelState(plane=build_model_plane(effective, audit_sink=audit))
 
     skills = (
         SkillRegistry.discover(Path(settings.skills_root))
@@ -1512,7 +1566,9 @@ def build_backend(settings: GatewaySettings) -> Backend:
     )
 
     def _workspace_factory(ws_id: WorkspaceId, allow_external: bool) -> Workspace:
-        return InMemoryWorkspace(ws_id, caller=plane.make_caller(allow_external=allow_external))
+        return InMemoryWorkspace(
+            ws_id, caller=state.plane.make_caller(allow_external=allow_external)
+        )
 
     workspace = _workspace_factory(workspace_id, allow_external=True)
     agent = AgentLoop(
@@ -1531,17 +1587,20 @@ def build_backend(settings: GatewaySettings) -> Backend:
         audit=audit,
         sources=InMemorySourceStore(),
         actions=InMemoryActionStore(),
-        model_caller=plane.make_caller(allow_external=True),
+        model_caller=state.plane.make_caller(allow_external=True),
         wiki=wiki,
         inbox=inbox,
         object_store=object_store,
-        http_client=plane.local_client,
-        model_closers=plane.closers,
-        spend=plane.spend,
-        model_manifests=plane.manifests,
+        http_client=state.plane.local_client,
+        model_closers=state.plane.closers,
+        spend=state.plane.spend,
+        model_manifests=state.plane.manifests,
         credentials=credentials,
-        google_oauth=_build_google_oauth(settings),
-        telegram_connect=_build_telegram_connect(settings, credentials),
+        config_store=config_store,
+        base_settings=settings,
+        model_state=state,
+        google_oauth=_build_google_oauth(effective),
+        telegram_connect=_build_telegram_connect(effective, credentials),
         workspace_factory=_workspace_factory,
     )
 
@@ -1555,7 +1614,10 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
     core = CoreSettings()
     workspace_id = WorkspaceId(settings.workspace_id)
     # Durable + shared across processes (the worker reads the same secrets): the Postgres backend.
-    credentials = _build_credentials(settings, database_url=core.database_url)
+    secret_store = _build_secret_store(settings, database_url=core.database_url)
+    credentials = _build_credentials(secret_store)
+    config_store = DeploymentConfigStore(secret_store) if secret_store is not None else None
+    effective = effective_settings(settings, config_store.overrides()) if config_store else settings
 
     engine = make_engine(core.database_url)
     sessionmaker = make_sessionmaker(engine)
@@ -1570,17 +1632,32 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
 
     audit = PostgresAuditLog(sessionmaker, workspace_id)
 
-    # Model wiring (optional). Chat: Anthropic/OpenAI-compatible cloud + local fallback assembled by
-    # the plane. Embeddings: an embed-kind manifest (self-hosted TEI) when registered, else local
-    # bge-m3 when an endpoint is set, else stub vectors. The answer generator degrades to extractive
-    # on a model error.
-    plane = build_model_plane(settings, audit_sink=audit)
+    # Chat plane (runtime-reconfigurable): Anthropic/OpenAI-compatible cloud + local fallback,
+    # driven by the *effective* settings (env overlaid with operator overrides), held in a
+    # ``ModelState`` so it can be swapped in place. The answer generator degrades to extractive on a
+    # model error.
+    state = ModelState(plane=build_model_plane(effective, audit_sink=audit))
+
+    # Embeddings (env-only, fixed at startup — changing them is a re-index, ADR 0014) get their own
+    # HTTP clients so a chat-plane reconfigure never disturbs retrieval. An embed-kind manifest
+    # (self-hosted TEI) when registered, else local bge-m3 if an endpoint is set, else stub vectors.
+    embed_local_client = build_http_client() if settings.model_endpoint else None
+    embed_manifest_client = (
+        build_http_client()
+        if any(cap.kind is ModelKind.EMBED for cap in settings.model_manifests)
+        else None
+    )
     embedding_router: EmbeddingRouter = build_embedding_router(
-        manifests=plane.manifests,
-        manifest_client=plane.manifest_client,
-        local_client=plane.local_client,
+        manifests=settings.model_manifests,
+        manifest_client=embed_manifest_client,
+        local_client=embed_local_client,
         local_endpoint=settings.model_endpoint,
         local_model=settings.embedding_model,
+    )
+    embedding_closers = tuple(
+        client.aclose
+        for client in (embed_local_client, embed_manifest_client)
+        if client is not None
     )
 
     # Retriever + claim store are workspace-agnostic (they scope by the request's workspace_id), so
@@ -1590,7 +1667,7 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
     claim_store = PostgresClaimStore(sessionmaker)
 
     def _workspace_factory(ws_id: WorkspaceId, allow_external: bool) -> Workspace:
-        caller = plane.make_caller(allow_external=allow_external)
+        caller = state.plane.make_caller(allow_external=allow_external)
         query_engine = QueryEngine(
             retriever=retriever,
             claim_store=claim_store,
@@ -1638,18 +1715,22 @@ async def build_postgres_backend(settings: GatewaySettings) -> Backend:
         audit=audit,
         sources=PostgresSourceStore(sessionmaker),  # durable: source configs/cursors/runs persist
         actions=PostgresActionStore(sessionmaker),  # durable: proposed actions + decisions persist
-        model_caller=plane.make_caller(allow_external=True),
+        model_caller=state.plane.make_caller(allow_external=True),
         wiki=wiki,
         inbox=inbox,
         identity=PostgresIdentityStore(sessionmaker),
         object_store=object_store,
         engine=engine,
-        http_client=plane.local_client,
-        model_closers=plane.closers,
-        spend=plane.spend,
-        model_manifests=plane.manifests,
+        http_client=state.plane.local_client,
+        model_closers=state.plane.closers,
+        embedding_closers=embedding_closers,
+        spend=state.plane.spend,
+        model_manifests=state.plane.manifests,
         credentials=credentials,
-        google_oauth=_build_google_oauth(settings),
-        telegram_connect=_build_telegram_connect(settings, credentials),
+        config_store=config_store,
+        base_settings=settings,
+        model_state=state,
+        google_oauth=_build_google_oauth(effective),
+        telegram_connect=_build_telegram_connect(effective, credentials),
         workspace_factory=_workspace_factory,
     )

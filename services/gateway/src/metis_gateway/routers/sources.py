@@ -72,18 +72,32 @@ async def list_sources(backend: BackendDep, _principal: UserDep) -> list[SourceV
 
 @router.get("/connectors", response_model=list[ConnectorView])
 async def list_connectors(backend: BackendDep, _principal: UserDep) -> list[ConnectorView]:
-    """The connectors a source can be configured for — the catalog the setup form is built from."""
+    """The connectors a source can be configured for — the catalog the setup form is built from.
+
+    Each carries whether the deployment can actually use it now: an ``oauth2`` connector needs
+    Google OAuth configured (else its Connect button would just 409), so the UI shows it as
+    unavailable with an operator pointer instead. Connectors that take per-source credentials
+    (IMAP, Slack, web clip, Telegram) are always available — you supply credentials when adding one.
+    """
+    google_ready = backend.google_oauth is not None
     catalog: list[ConnectorView] = []
     for name in backend.connectors.names():
         spec = backend.connectors.get(name)
         if spec is None:  # names() and get() are consistent; the guard satisfies the type checker
             continue
+        oauth_unconfigured = spec.auth.method.value == "oauth2" and not google_ready
         catalog.append(
             ConnectorView(
                 name=spec.name,
                 auth_method=spec.auth.method.value,
                 default_sensitivity=spec.default_sensitivity,
                 requires_config=spec.config_model is not None,
+                available=not oauth_unconfigured,
+                unavailable_reason=(
+                    "Google OAuth is not configured on this deployment"
+                    if oauth_unconfigured
+                    else None
+                ),
             )
         )
     return catalog

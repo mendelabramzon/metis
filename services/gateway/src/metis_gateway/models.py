@@ -181,6 +181,16 @@ class ModelPlane:
         return ModelCaller(MetisModelRouter(list(providers)), self.spend, registry=query_registry())
 
 
+@dataclass
+class ModelState:
+    """A mutable holder for the live chat ``ModelPlane`` so the per-workspace factory and the
+    runtime-reconfigure path share one reference — the operator config surface can swap the plane
+    (new provider keys) without rebuilding the backend. Embeddings are not held here: changing one
+    is a re-index (ADR 0014), so it stays env-config and untouched by reconfigure."""
+
+    plane: ModelPlane
+
+
 def build_model_plane(settings: GatewaySettings, *, audit_sink: AuditSink) -> ModelPlane:
     """Assemble the chat provider plane from settings: Anthropic and/or any OpenAI-compatible cloud
     (incl. a Hugging Face model behind vLLM/TGI) for the upper tiers, and a local Ollama endpoint

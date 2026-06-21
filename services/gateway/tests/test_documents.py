@@ -30,9 +30,13 @@ def _bearer(user_id: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {user_id}"}
 
 
-def _ada_workspace(client: TestClient, op: dict[str, str]) -> tuple[str, dict[str, str], str]:
+def _ada_workspace(
+    client: TestClient, op: dict[str, str], email: str = "ada@acme.example"
+) -> tuple[str, dict[str, str], str]:
+    # The Postgres backend shares a session-scoped container across the suite and emails are
+    # globally unique, so the durable test passes a distinct email to avoid colliding with peers.
     org_id = client.post("/organizations", json={"name": "Acme"}, headers=op).json()["id"]
-    ada = _provision(client, op, org_id, "ada@acme.example")
+    ada = _provision(client, op, org_id, email)
     ws = client.get("/workspaces", headers=_bearer(ada)).json()[0]["id"]
     return org_id, _bearer(ada), ws
 
@@ -94,7 +98,7 @@ def test_delete_uploaded_document_durably_erases_evidence(pg_settings: GatewaySe
     """Against Postgres: the JSONB scoping lists exactly the uploads, and deleting one runs the
     real tombstone cascade so its evidence stops backing answers."""
     with TestClient(create_app(pg_settings)) as client:
-        _, ada, ws = _ada_workspace(client, _OP)
+        _, ada, ws = _ada_workspace(client, _OP, email="ada-docs-pg@acme.example")
         _upload(client, ws, ada, "acme.txt", b"Ada Lovelace is the CTO of Acme Inc.")
 
         [doc] = client.get(f"/workspaces/{ws}/documents", headers=ada).json()

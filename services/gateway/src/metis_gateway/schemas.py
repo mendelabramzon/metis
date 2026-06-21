@@ -93,6 +93,11 @@ class ConnectorView(BaseModel):
     auth_method: str
     default_sensitivity: Sensitivity
     requires_config: bool
+    # Whether this deployment can actually use the connector right now (e.g. an oauth2 connector
+    # needs Google OAuth configured) — the UI shows unavailable connectors as such instead of a
+    # Connect button that 409s. ``None`` reason when available.
+    available: bool = True
+    unavailable_reason: str | None = None
 
 
 class SyncResponse(BaseModel):
@@ -298,6 +303,39 @@ class ProviderView(BaseModel):
     supports_tools: bool
     supports_json: bool
     embedding_dim: int | None = None
+
+
+# --- deployment config (operator runtime config: provider keys, OAuth/Telegram credentials) -----
+
+
+class ConfigStatusView(BaseModel):
+    """The deployment's model + connector-auth readiness — drives the operator status surface."""
+
+    chat_provider: str | None = None  # None => answers are extractive (no model configured)
+    embeddings_source: str
+    google_oauth_configured: bool
+    telegram_tdlib_configured: bool
+    runtime_config_enabled: bool  # False when no credential-store key is set (PUT then 409s)
+
+
+class ConfigFieldView(BaseModel):
+    """One configurable field's effective state; secret values are masked to a last-4 hint."""
+
+    key: str
+    secret: bool
+    set: bool
+    value: str | None = None
+
+
+class DeploymentConfigView(BaseModel):
+    status: ConfigStatusView
+    fields: list[ConfigFieldView]
+
+
+class ConfigUpdate(BaseModel):
+    """Operator config overrides to persist: field -> value (null/empty clears it)."""
+
+    values: dict[str, str | None]
 
 
 # --- query / chat ------------------------------------------------------------------------------
