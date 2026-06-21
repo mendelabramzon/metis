@@ -87,7 +87,8 @@ def test_base_compose_wires_the_operator_and_user_tokens_optionally() -> None:
     # .env, else a deployment is left authenticating on the well-known dev defaults. Optional (the
     # `:-` default) so a clean machine with no .env still comes up — like the cred-store key above.
     env = _load("docker-compose.yml")["services"]["gateway"]["environment"]
-    assert env["METIS_GATEWAY_OPERATOR_TOKEN"] == "${METIS_GATEWAY_OPERATOR_TOKEN:-operator-dev-token}"
+    operator = env["METIS_GATEWAY_OPERATOR_TOKEN"]
+    assert operator == "${METIS_GATEWAY_OPERATOR_TOKEN:-operator-dev-token}"
     assert env["METIS_GATEWAY_USER_TOKEN"] == "${METIS_GATEWAY_USER_TOKEN:-user-dev-token}"
 
 
