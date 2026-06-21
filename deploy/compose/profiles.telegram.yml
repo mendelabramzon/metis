@@ -20,6 +20,7 @@ x-app-env: &app-env
   METIS_CORE_OBJECT_STORE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
   METIS_MODEL_PROFILE: ${METIS_MODEL_PROFILE:-local}
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  OPENSSL_armcap: "${OPENSSL_ARMCAP:-0}"  # see docker-compose.yml: avoids a virtualized-ARM SIGILL
 
 services:
   # One-shot: build libtdjson and publish it into the shared lib volume, then exit.

@@ -109,6 +109,14 @@ broken backup chain surfaces before it is needed.
 - **Restricted-data routing**: the Stage 4 router blocks external providers for restricted data in
   **every** profile, so switching to `cloud` never weakens data residency. Confirm denials on the
   policy-denials panel.
+- **A service exits with "Illegal instruction" (SIGILL) on startup**: OpenSSL's ARM crypto-extension
+  detection misfires on some virtualized CPUs (notably Docker Desktop on Apple Silicon), and
+  `cryptography` SIGILLs the moment it touches secrets/auth. The stack ships `OPENSSL_armcap=0` (the
+  software path — correct, and fast enough for our light crypto) to avoid it; if you overrode
+  `OPENSSL_ARMCAP`, unset it. A no-op on x86 hosts.
+- **`runtime-worker` shows `Restarting`**: it is still a Stage-0 stub ("no runtime wired yet") that
+  wires and exits cleanly, so `restart: unless-stopped` re-runs it — see the wiring follow-up below.
+  It is the only such stub; the gateway, ingest-worker, and maintainer-worker run real loops.
 
 ## Gateway backend
 
@@ -196,10 +204,10 @@ no Premium and carries no ban risk, so prefer it and reserve TDLib for backfill/
 
 ## Known wiring follow-up
 
-The `ingest-worker` runs real long-running loops: a durable lease/dispatch drain for connector-sync
-jobs (`MODE=queue`, the default) and the dedicated Telegram drains (`MODE=telegram` /
-`telegram_tdlib`, wired by the Telegram overlay above). The `maintainer-worker` and `runtime-worker`
-still run their Stage-0 entrypoints (wire-and-exit); the engine logic lives in the packages and the
-core `Worker` lease/handle loop exists, so turning each into a long-running loop is a code change, not
-new infrastructure — the Compose stack already defines and wires them. The gateway is a fully serving
-uvicorn process.
+The `ingest-worker` (queue + the Telegram drains) and the `maintainer-worker` (its scheduled
+job-kind poll loop) run real long-running loops; the gateway is a fully serving uvicorn process. Only
+the `runtime-worker` still runs its Stage-0 entrypoint (wire-and-exit) — the engine logic lives in
+the packages and the core `Worker` lease/handle loop exists, so turning it into a long-running loop is
+a code change, not new infrastructure (the Compose stack already defines and wires it). Until then it
+exits cleanly and Compose re-runs it (a harmless `Restarting` churn); set `restart: "no"` on that one
+service if the churn is noisy.

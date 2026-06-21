@@ -12,6 +12,12 @@ x-app-env: &app-env
   METIS_CORE_OBJECT_STORE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
   METIS_MODEL_PROFILE: ${METIS_MODEL_PROFILE:-local}
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+  # Disable OpenSSL's ARM crypto-extension path. Some virtualized CPUs (notably Docker Desktop on
+  # Apple Silicon) mis-detect these and cryptography's OpenSSL SIGILLs ("Illegal instruction") on
+  # first use — which would crash every service that touches secrets/auth. The software path is
+  # correct and plenty fast for our light crypto. A no-op on x86 hosts. Set OPENSSL_ARMCAP to a
+  # real capability value on bare-metal ARM if you want hardware crypto and don't hit the fault.
+  OPENSSL_armcap: "${OPENSSL_ARMCAP:-0}"
 
 services:
   postgres:
@@ -67,6 +73,7 @@ services:
       <<: *app-env
       METIS_GATEWAY_BACKEND: postgres  # use the durable stores (Postgres + MinIO + memory index)
       METIS_GATEWAY_SKILLS_ROOT: skills  # register the shipped skills (web_search, ...)
+      METIS_GATEWAY_HOST: "0.0.0.0"  # bind all interfaces so the published port is reachable
     ports:
       - "8000:8000"
     depends_on:
@@ -106,7 +113,11 @@ services:
     build:
       context: ..
       dockerfile: deploy/images/maintainer-worker.Dockerfile
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # The maintainer worker reads its own settings prefix (not METIS_CORE_*), so point its DB at
+      # the stack's Postgres (default is localhost).
+      METIS_MAINTAINER_WORKER_DATABASE_URL: postgresql+asyncpg://metis:${POSTGRES_PASSWORD:-metis}@postgres:5432/metis
     depends_on:
       postgres:
         condition: service_healthy

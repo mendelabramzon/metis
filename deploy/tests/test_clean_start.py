@@ -64,6 +64,26 @@ def test_dockerfiles_and_entrypoints_present() -> None:
     assert (_DEPLOY / "runbook.md").is_file()
 
 
+def test_gateway_binds_all_interfaces() -> None:
+    # 127.0.0.1 (the default) is unreachable through the published port; it must bind 0.0.0.0.
+    gateway = _load("docker-compose.yml")["services"]["gateway"]
+    assert gateway["environment"]["METIS_GATEWAY_HOST"] == "0.0.0.0"
+
+
+def test_maintainer_worker_points_at_the_stack_postgres() -> None:
+    # The maintainer worker reads its own settings prefix (not METIS_CORE_*), so its DB url must be
+    # set explicitly to the stack's Postgres host rather than the localhost default.
+    env = _load("docker-compose.yml")["services"]["maintainer-worker"]["environment"]
+    assert "postgres:5432" in env["METIS_MAINTAINER_WORKER_DATABASE_URL"]
+
+
+def test_app_env_disables_arm_crypto_extensions() -> None:
+    # OPENSSL_armcap avoids a cryptography SIGILL on virtualized ARM (e.g. Docker Desktop on Apple
+    # Silicon); without it every service that touches secrets/auth crashes on startup.
+    app_env = _load("docker-compose.yml")["x-app-env"]
+    assert "OPENSSL_armcap" in app_env
+
+
 def test_profiles_select_a_model_runtime() -> None:
     local = _load("compose/profiles.local.yml")["services"]
     gpu = _load("compose/profiles.gpu.yml")["services"]
