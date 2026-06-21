@@ -337,7 +337,9 @@ function AnswerArea({
             </div>
           )}
 
-          {outcome === "insufficient" && <InsufficientActions />}
+          {outcome === "insufficient" && (
+            <InsufficientActions onRetry={() => onAsk(question)} />
+          )}
 
           {response.citations.length > 0 && (
             <>
