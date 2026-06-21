@@ -11,11 +11,14 @@ import type {
   ActionExecutionView,
   ApiErrorBody,
   ArtifactEvidenceView,
+  AuthorizeView,
   ClaimEvidenceView,
+  ConnectorView,
   InviteRedeemView,
   ProposedActionView,
   QueryRequestBody,
   QueryResponse,
+  SourceCreate,
   SourceView,
   UploadResponse,
   UserView,
@@ -178,6 +181,32 @@ export async function uploadFiles(
 /** All configured sources for the deployment. */
 export const listSources = (operatorToken: string, signal?: AbortSignal): Promise<SourceView[]> =>
   request<SourceView[]>("/sources", { bearer: operatorToken, ...(signal ? { signal } : {}) });
+
+/** The connector catalog the add-source form is built from. */
+export const listConnectors = (
+  operatorToken: string,
+  signal?: AbortSignal,
+): Promise<ConnectorView[]> =>
+  request<ConnectorView[]>("/sources/connectors", {
+    bearer: operatorToken,
+    ...(signal ? { signal } : {}),
+  });
+
+/** Register a source (operator-gated). */
+export const createSource = (
+  operatorToken: string,
+  body: SourceCreate,
+): Promise<SourceView> =>
+  request<SourceView>("/sources", { method: "POST", body, bearer: operatorToken });
+
+/** Start a Google OAuth consent flow for a connector; returns the consent URL (or 409 if off). */
+export const getOAuthAuthorizeUrl = (
+  operatorToken: string,
+  connector: string,
+): Promise<AuthorizeView> =>
+  request<AuthorizeView>(`/oauth/${encodeURIComponent(connector)}/authorize`, {
+    bearer: operatorToken,
+  });
 
 /** Enqueue a connector-sync job for a source (operator-gated). */
 export const syncSource = (
