@@ -69,7 +69,7 @@ export function App() {
             }
           />
           <Route
-            path="settings"
+            path="settings/*"
             element={
               <RequireRole navId="settings">
                 <SettingsPage />
