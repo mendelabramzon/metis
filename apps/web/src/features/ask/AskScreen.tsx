@@ -7,6 +7,7 @@ import { useSession } from "@/session/SessionContext";
 
 import { CitationCards } from "./CitationCards";
 import { CitationDrawerBody } from "./CitationDrawerBody";
+import { InsufficientActions } from "./InsufficientActions";
 import type { AskOutcome } from "./useAsk";
 import { useAsk } from "./useAsk";
 import styles from "./ask.module.css";
@@ -207,6 +208,8 @@ function AnswerArea({ state, canAsk, onPickCitation, onReset }: AnswerAreaProps)
               arrive with D7.)
             </div>
           )}
+
+          {outcome === "insufficient" && <InsufficientActions />}
 
           {response.citations.length > 0 && (
             <>
