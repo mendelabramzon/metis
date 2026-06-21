@@ -170,6 +170,7 @@ export function SourcesScreen() {
             setAddOpen(false);
             void load();
           }}
+          onChanged={() => void load()}
         />
       </Drawer>
     </PageContainer>

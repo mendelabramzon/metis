@@ -20,6 +20,7 @@ import type {
   QueryResponse,
   SourceCreate,
   SourceView,
+  TelegramChatView,
   UploadResponse,
   UserView,
   WorkspaceView,
@@ -198,6 +199,16 @@ export const createSource = (
   body: SourceCreate,
 ): Promise<SourceView> =>
   request<SourceView>("/sources", { method: "POST", body, bearer: operatorToken });
+
+/** Chats the Telegram bot has seen on its Business connections (the selection list for E4). */
+export const listTelegramChats = (
+  operatorToken: string,
+  signal?: AbortSignal,
+): Promise<TelegramChatView[]> =>
+  request<TelegramChatView[]>("/telegram/chats", {
+    bearer: operatorToken,
+    ...(signal ? { signal } : {}),
+  });
 
 /** Start a Google OAuth consent flow for a connector; returns the consent URL (or 409 if off). */
 export const getOAuthAuthorizeUrl = (
