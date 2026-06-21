@@ -24,6 +24,7 @@ class ModelTaskClass(StrEnum):
     QUERY_REWRITE = "query_rewrite"
     QUERY_ANSWER = "query_answer"
     QUERY_VERIFY = "query_verify"
+    SUGGEST_QUESTIONS = "suggest_questions"
     SKILL_PLAN = "skill_plan"
     SKILL_EXECUTE = "skill_execute"
     INTERPRET_COMMAND = "interpret_command"

@@ -378,6 +378,12 @@ class QueryResponse(BaseModel):
     pending_approvals: list[str] = Field(default_factory=list)
 
 
+class StarterQuestionsView(BaseModel):
+    """Grounded starter questions for a freshly-populated workspace (the onboarding nudge, A5)."""
+
+    questions: list[str] = Field(default_factory=list)
+
+
 # --- skills ------------------------------------------------------------------------------------
 
 
