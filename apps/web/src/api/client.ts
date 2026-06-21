@@ -14,6 +14,9 @@ import type {
   AuthorizeView,
   ClaimEvidenceView,
   ConnectorView,
+  ContradictionStatus,
+  ContradictionView,
+  InboxItemView,
   InviteRedeemView,
   ProposedActionView,
   QueryRequestBody,
@@ -177,6 +180,52 @@ export async function uploadFiles(
   }
   return data as UploadResponse;
 }
+
+// --- review queue: contradictions (user bearer) + approvals (operator token) ----------------
+
+export const listContradictions = (
+  bearer: string,
+  workspaceId: string,
+  status: ContradictionStatus,
+  signal?: AbortSignal,
+): Promise<ContradictionView[]> =>
+  request<ContradictionView[]>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/contradictions?status=${status}`,
+    { bearer, ...(signal ? { signal } : {}) },
+  );
+
+/** Resolve or dismiss a contradiction (workspace writer). */
+export const reviewContradiction = (
+  bearer: string,
+  workspaceId: string,
+  contradictionId: string,
+  status: ContradictionStatus,
+): Promise<ContradictionView> =>
+  request<ContradictionView>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/contradictions/${encodeURIComponent(contradictionId)}`,
+    { method: "PATCH", body: { status }, bearer },
+  );
+
+/** The approval inbox: pending agent/skill actions + wiki patches (operator-gated). */
+export const listApprovals = (
+  operatorToken: string,
+  signal?: AbortSignal,
+): Promise<InboxItemView[]> =>
+  request<InboxItemView[]>("/approvals", {
+    bearer: operatorToken,
+    ...(signal ? { signal } : {}),
+  });
+
+export const approveInboxItem = (
+  operatorToken: string,
+  kind: string,
+  itemId: string,
+  note = "",
+): Promise<InboxItemView> =>
+  request<InboxItemView>(
+    `/approvals/${encodeURIComponent(kind)}/${encodeURIComponent(itemId)}/approve`,
+    { method: "POST", body: { note }, bearer: operatorToken },
+  );
 
 // --- sources (deployment sources; pass the operator/scope token) ----------------------------
 
