@@ -26,6 +26,46 @@ export interface WorkspaceView {
   default_sensitivity: Sensitivity;
 }
 
+// --- sources (deployment sources; scope-token gated) ----------------------------------------
+
+/** `GET /sources` item. No health/state field yet — derive a default "connected". */
+export interface SourceView {
+  id: string;
+  workspace_id: string;
+  name: string;
+  connector: string;
+  sensitivity: Sensitivity;
+  auth_method: string;
+}
+
+/** `GET /sources/connectors` — the catalog the add-source form is built from. */
+export interface ConnectorView {
+  name: string;
+  auth_method: string;
+  default_sensitivity: Sensitivity;
+  requires_config: boolean;
+}
+
+/** Per-file parse status from `POST /workspaces/{ws}/upload` (E2). */
+export interface ParseStatus {
+  filename: string;
+  status: string;
+  doc_id?: string;
+  media_type?: string;
+  segments?: number;
+  claims?: number;
+  coverage?: number | null;
+  page_count?: number | null;
+  tables?: number;
+  warnings?: string[];
+  parse_path?: string;
+  error?: string;
+}
+
+export interface UploadResponse {
+  files: ParseStatus[];
+}
+
 /** `POST /invites/{token}/redeem` (A6). `user_id` is the new user's bearer token. */
 export interface InviteRedeemView {
   user_id: string;

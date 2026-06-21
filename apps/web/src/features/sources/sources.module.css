@@ -1,0 +1,92 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+.title {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+}
+.spacer {
+  flex: 1;
+}
+
+/* ---- Health summary --------------------------------------------------------------------- */
+.summary {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+.summaryItem {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.summaryCount {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+}
+.summaryLabel {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+/* ---- Workspace groups + source cards ---------------------------------------------------- */
+.group {
+  margin-bottom: var(--space-5);
+}
+.groupTitle {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+.sourceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--space-3);
+}
+.sourceHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.sourceName {
+  font-weight: var(--weight-semibold);
+}
+.sourceMeta {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ---- Upload card ------------------------------------------------------------------------ */
+.uploadCard {
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: var(--space-5);
+  text-align: center;
+  margin-bottom: var(--space-5);
+}
+.uploadTitle {
+  font-weight: var(--weight-semibold);
+  margin-bottom: var(--space-1);
+}
+.uploadHint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-3);
+}

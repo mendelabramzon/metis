@@ -16,6 +16,7 @@ import type {
   ProposedActionView,
   QueryRequestBody,
   QueryResponse,
+  SourceView,
   UserView,
   WorkspaceView,
 } from "./types";
@@ -134,6 +135,22 @@ export const getArtifactEvidence = (
   request<ArtifactEvidenceView>(
     `/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}`,
     { bearer, ...(signal ? { signal } : {}) },
+  );
+
+// --- sources (deployment sources; pass the operator/scope token) ----------------------------
+
+/** All configured sources for the deployment. */
+export const listSources = (operatorToken: string, signal?: AbortSignal): Promise<SourceView[]> =>
+  request<SourceView[]>("/sources", { bearer: operatorToken, ...(signal ? { signal } : {}) });
+
+/** Enqueue a connector-sync job for a source (operator-gated). */
+export const syncSource = (
+  operatorToken: string,
+  sourceId: string,
+): Promise<{ job_id: string; source_id: string }> =>
+  request<{ job_id: string; source_id: string }>(
+    `/sources/${encodeURIComponent(sourceId)}/sync`,
+    { method: "POST", bearer: operatorToken },
   );
 
 // --- proposed actions (the command surface; pass the operator/scope token) ------------------
