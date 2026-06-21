@@ -1,0 +1,63 @@
+/* Header controls (B4): the workspace switcher (native select) + the scope segmented control. */
+
+.wsSelect {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  max-width: 14rem;
+}
+.wsSelect:hover {
+  background: var(--color-sunken);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.segment {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.6rem;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-right: 1px solid var(--color-border);
+  user-select: none;
+}
+.segment:last-child {
+  border-right: none;
+}
+.segment:hover:not(.segmentActive):not(.segmentDisabled) {
+  background: var(--color-sunken);
+}
+.segment:focus-within {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.segmentActive {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-subtle-fg);
+  font-weight: var(--weight-medium);
+}
+
+.segmentDisabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* On mobile the scope labels get terse to fit the header. */
+@media (max-width: 640px) {
+  .segment {
+    padding: 0.3rem 0.45rem;
+  }
+}

@@ -1,11 +1,11 @@
 import { NavLink, Outlet } from "react-router-dom";
 
-import type { WorkspaceKind } from "@/api/types";
-import { Badge, Button, ScopeBadge } from "@/components";
-import type { WorkspaceScope } from "@/domain/types";
+import { Badge, Button } from "@/components";
 import { useSession } from "@/session/SessionContext";
 
 import { navForRole } from "./nav";
+import { ScopeSelector } from "./ScopeSelector";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import styles from "./AppShell.module.css";
 
 function initials(email: string): string {
@@ -13,11 +13,9 @@ function initials(email: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-const scopeForKind = (kind: WorkspaceKind): WorkspaceScope => (kind === "personal" ? "personal" : "shared");
-
-/** Header: brand, the active workspace + scope (B4 makes the switcher interactive), and the user menu. */
+/** Header: brand, the workspace switcher + scope selector, and the user menu. */
 function Header() {
-  const { user, role, isOperator, activeWorkspace, signOut } = useSession();
+  const { user, role, isOperator, signOut } = useSession();
   if (!user) return null;
 
   return (
@@ -28,11 +26,8 @@ function Header() {
       </span>
 
       <div className={styles.headerSlot}>
-        {/* Shows the real active workspace; B4 turns this into the switcher dropdown. */}
-        <button type="button" className={styles.wsButton} disabled aria-label="Active workspace">
-          {activeWorkspace?.name ?? "No workspace"}
-        </button>
-        {activeWorkspace && <ScopeBadge scope={scopeForKind(activeWorkspace.kind)} />}
+        <WorkspaceSwitcher />
+        <ScopeSelector />
       </div>
 
       <span className={styles.spacer} />

@@ -30,6 +30,11 @@ export interface WorkspaceSummary {
 
 export type SessionStatus = "loading" | "anonymous" | "authenticated";
 
+/** The query lens (B4): personal context, shared context, or both. M2's Ask routes queries by it. */
+export type ScopeSelection = "personal" | "shared" | "mixed";
+
+export const SCOPE_SELECTIONS: readonly ScopeSelection[] = ["personal", "shared", "mixed"];
+
 export interface SignInInput {
   /** The user-id bearer (a dev stand-in for a real session; sessions/SSO are a backend follow-up). */
   userId: string;
@@ -51,8 +56,12 @@ export interface Session {
   userBearer: string | null;
   operatorToken: string | null;
 
+  /** The active query lens (B4), always visible and persisted across sessions. */
+  scope: ScopeSelection;
+
   signIn: (input: SignInInput) => Promise<void>;
   signOut: () => void;
   setActiveWorkspace: (id: string) => void;
+  setScope: (scope: ScopeSelection) => void;
   refreshWorkspaces: () => Promise<void>;
 }

@@ -12,9 +12,21 @@ import {
   loadPersisted,
   persistActiveWorkspaceId,
   persistOperatorToken,
+  persistScope,
   persistUserId,
 } from "./storage";
-import type { Role, Session, SessionUser, SignInInput, WorkspaceSummary } from "./types";
+import type {
+  Role,
+  ScopeSelection,
+  Session,
+  SessionUser,
+  SignInInput,
+  WorkspaceSummary,
+} from "./types";
+import { SCOPE_SELECTIONS } from "./types";
+
+const isScope = (value: string | null): value is ScopeSelection =>
+  value !== null && (SCOPE_SELECTIONS as readonly string[]).includes(value);
 
 const SessionCtx = createContext<Session | null>(null);
 
@@ -51,6 +63,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string | null>(null);
   const [userBearer, setUserBearer] = useState<string | null>(null);
   const [operatorToken, setOperatorToken] = useState<string | null>(null);
+  const [scope, setScopeState] = useState<ScopeSelection>(() => {
+    const persisted = loadPersisted().scope;
+    return isScope(persisted) ? persisted : "personal";
+  });
 
   // Restore a persisted session on load: validate the user bearer, then (best-effort) the operator
   // token. An invalid user bearer → anonymous; a stale operator token is simply dropped.
@@ -119,12 +135,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUserBearer(null);
     setOperatorToken(null);
     setActiveWorkspaceIdState(null);
+    setScopeState("personal");
     setStatus("anonymous");
   }, []);
 
   const setActiveWorkspace = useCallback((id: string) => {
     setActiveWorkspaceIdState(id);
     persistActiveWorkspaceId(id);
+  }, []);
+
+  const setScope = useCallback((next: ScopeSelection) => {
+    setScopeState(next);
+    persistScope(next);
   }, []);
 
   const refreshWorkspaces = useCallback(async () => {
@@ -146,9 +168,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       isOperator: operatorToken !== null,
       userBearer,
       operatorToken,
+      scope,
       signIn,
       signOut,
       setActiveWorkspace,
+      setScope,
       refreshWorkspaces,
     };
   }, [
@@ -158,9 +182,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     activeWorkspaceId,
     operatorToken,
     userBearer,
+    scope,
     signIn,
     signOut,
     setActiveWorkspace,
+    setScope,
     refreshWorkspaces,
   ]);
 
