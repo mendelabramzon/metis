@@ -1687,11 +1687,17 @@ name = "metis-runtime-worker"
 version = "0.0.0"
 source = { editable = "services/runtime-worker" }
 dependencies = [
+    { name = "metis-core" },
+    { name = "metis-runtime" },
     { name = "pydantic-settings" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic-settings", specifier = ">=2.4" }]
+requires-dist = [
+    { name = "metis-core", editable = "packages/metis-core" },
+    { name = "metis-runtime", editable = "packages/metis-runtime" },
+    { name = "pydantic-settings", specifier = ">=2.4" },
+]
 
 [[package]]
 name = "metis-skills"

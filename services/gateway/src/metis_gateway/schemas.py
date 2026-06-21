@@ -305,6 +305,19 @@ class QueryRequestBody(BaseModel):
     top_k: int | None = None
 
 
+class ResearchRequest(BaseModel):
+    """Enqueue a background research job: answer ``query`` and file a grounded proposal back."""
+
+    query: str
+
+
+class RuntimeJobView(BaseModel):
+    """The queued runtime job; its result surfaces in the wiki review inbox once processed."""
+
+    job_id: str
+    kind: str
+
+
 class Citation(BaseModel):
     claim_id: str
     source_span_id: str | None = None

@@ -77,6 +77,12 @@ def test_maintainer_worker_points_at_the_stack_postgres() -> None:
     assert "postgres:5432" in env["METIS_MAINTAINER_WORKER_DATABASE_URL"]
 
 
+def test_runtime_worker_points_at_the_stack_postgres() -> None:
+    # Same as the maintainer worker: the runtime worker leases jobs over its own DB url.
+    env = _load("docker-compose.yml")["services"]["runtime-worker"]["environment"]
+    assert "postgres:5432" in env["METIS_RUNTIME_WORKER_DATABASE_URL"]
+
+
 def test_app_env_disables_arm_crypto_extensions() -> None:
     # OPENSSL_armcap avoids a cryptography SIGILL on virtualized ARM (e.g. Docker Desktop on Apple
     # Silicon); without it every service that touches secrets/auth crashes on startup.
