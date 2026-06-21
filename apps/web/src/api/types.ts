@@ -46,6 +46,21 @@ export interface ConnectorView {
   requires_config: boolean;
 }
 
+/** `POST /sources` body. `config` is connector-specific (empty for OAuth/no-auth connectors). */
+export interface SourceCreate {
+  name: string;
+  connector: string;
+  sensitivity: Sensitivity;
+  config: Record<string, unknown>;
+  workspace_id?: string;
+}
+
+/** `GET /oauth/{connector}/authorize` — the consent URL to send the user to. */
+export interface AuthorizeView {
+  authorize_url: string;
+  state: string;
+}
+
 /** Per-file parse status from `POST /workspaces/{ws}/upload` (E2). */
 export interface ParseStatus {
   filename: string;

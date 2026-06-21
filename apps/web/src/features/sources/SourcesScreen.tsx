@@ -14,6 +14,7 @@ import {
 } from "@/components";
 import { useSession } from "@/session/SessionContext";
 
+import { AddSourceForm } from "./AddSourceForm";
 import { SOURCE_STATE_META, sourceState, summarize } from "./sourceState";
 import { UploadPanel } from "./UploadPanel";
 import styles from "./sources.module.css";
@@ -164,9 +165,12 @@ export function SourcesScreen() {
       )}
 
       <Drawer open={addOpen} onClose={() => setAddOpen(false)} title="Add a source">
-        <p style={{ color: "var(--color-text-secondary)" }}>
-          Connector catalog, OAuth, and scope selection arrive in E3; Telegram chat selection in E4.
-        </p>
+        <AddSourceForm
+          onCreated={() => {
+            setAddOpen(false);
+            void load();
+          }}
+        />
       </Drawer>
     </PageContainer>
   );
