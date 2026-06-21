@@ -384,6 +384,22 @@ class StarterQuestionsView(BaseModel):
     questions: list[str] = Field(default_factory=list)
 
 
+class DigestView(BaseModel):
+    """A 'while you were away' summary for a workspace since a timestamp (A7, on-demand).
+
+    Scoped to the per-workspace, member-gated surfaces: new contradictions to review and facts
+    added to memory since ``since``. The scheduled weekly digest + operator-scoped items (synced
+    jobs, wiki proposals) are follow-ups.
+    """
+
+    since: str | None = None
+    new_contradictions: int = 0
+    contradictions: list[str] = Field(default_factory=list)  # summaries of the new ones
+    new_facts: int = 0
+    facts: list[str] = Field(default_factory=list)  # summaries of memory cells added
+    highlights: list[str] = Field(default_factory=list)  # human-readable one-liners
+
+
 # --- skills ------------------------------------------------------------------------------------
 
 

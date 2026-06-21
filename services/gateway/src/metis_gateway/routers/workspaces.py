@@ -21,6 +21,7 @@ from metis_gateway.errors import NotFoundError, TooManyRequestsError
 from metis_gateway.models import over_daily_cap
 from metis_gateway.schemas import (
     Citation,
+    DigestView,
     DisagreementView,
     ErasureView,
     IngestRequest,
@@ -37,6 +38,7 @@ from metis_gateway.schemas import (
     WorkspaceView,
 )
 from metis_protocol import (
+    ContradictionStatus,
     MembershipId,
     Role,
     Sensitivity,
@@ -231,6 +233,51 @@ async def starter_questions(context: MemberDep, backend: BackendDep) -> StarterQ
     )
     questions = await workspace.starter_questions(max_sensitivity=Sensitivity.RESTRICTED, count=3)
     return StarterQuestionsView(questions=questions)
+
+
+def _parse_since(since: str | None) -> datetime | None:
+    """Parse the caller's last-visit ISO timestamp; junk/absence -> None (= everything)."""
+    if not since:
+        return None
+    try:
+        parsed = datetime.fromisoformat(since)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+@router.get("/{workspace_id}/digest", response_model=DigestView)
+async def digest(context: MemberDep, backend: BackendDep, since: str | None = None) -> DigestView:
+    """A 'while you were away' summary for this workspace since ``?since=<iso>`` (A7, on-demand).
+
+    The caller (the SPA, per user) passes its last-visit timestamp; this reports what changed on the
+    per-workspace, member-gated surfaces — new contradictions to review and facts added to memory.
+    The scheduled weekly digest and operator-scoped items (synced jobs, wiki proposals) are
+    follow-ups (see A7 notes).
+    """
+    cutoff = _parse_since(since)
+    workspace = backend.workspace_for(context.workspace.id)
+    contradictions = await workspace.list_contradictions(status=ContradictionStatus.OPEN)
+    new_contradictions = [c for c in contradictions if cutoff is None or c.created_at > cutoff]
+    cells = await workspace.list_memory()
+    new_cells = [m for m in cells if cutoff is None or m.created_at > cutoff]
+
+    highlights: list[str] = []
+    if new_contradictions:
+        n = len(new_contradictions)
+        highlights.append(f"{n} new contradiction{'' if n == 1 else 's'} to review")
+    if new_cells:
+        n = len(new_cells)
+        highlights.append(f"{n} fact{'' if n == 1 else 's'} added to memory")
+
+    return DigestView(
+        since=since,
+        new_contradictions=len(new_contradictions),
+        contradictions=[c.summary for c in new_contradictions[:5]],
+        new_facts=len(new_cells),
+        facts=[m.summary for m in new_cells[:5]],
+        highlights=highlights,
+    )
 
 
 @router.delete("/{workspace_id}/artifacts/{artifact_id}", response_model=ErasureView)
