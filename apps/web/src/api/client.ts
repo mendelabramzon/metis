@@ -28,6 +28,7 @@ import type {
   ModelPolicyView,
   OrganizationView,
   SpendView,
+  StarterQuestionsView,
   ProposedActionView,
   QueryRequestBody,
   QueryResponse,
@@ -149,6 +150,17 @@ export const queryWorkspace = (
     bearer,
     ...(signal ? { signal } : {}),
   });
+
+/** Grounded starter questions for onboarding (A5); empty until the workspace has evidence. */
+export const getStarterQuestions = (
+  bearer: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<StarterQuestionsView> =>
+  request<StarterQuestionsView>(
+    `/workspaces/${encodeURIComponent(workspaceId)}/starter-questions`,
+    { bearer, ...(signal ? { signal } : {}) },
+  );
 
 /** A citation's claim + the source spans (with quotes) behind it. */
 export const getClaimEvidence = (
