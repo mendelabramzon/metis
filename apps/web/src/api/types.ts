@@ -55,6 +55,15 @@ export interface SourceCreate {
   workspace_id?: string;
 }
 
+/** `GET /telegram/chats` — a chat the bot has seen on a Business connection (E4). */
+export interface TelegramChatView {
+  business_connection_id: string;
+  chat_id: number;
+  chat_type: string;
+  title: string;
+  last_message_id: number;
+}
+
 /** `GET /oauth/{connector}/authorize` — the consent URL to send the user to. */
 export interface AuthorizeView {
   authorize_url: string;

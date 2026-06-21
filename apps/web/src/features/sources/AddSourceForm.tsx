@@ -7,6 +7,7 @@ import type { Sensitivity } from "@/domain/types";
 import { SENSITIVITY_ORDER } from "@/domain/types";
 import { useSession } from "@/session/SessionContext";
 
+import { TelegramChatPicker } from "./TelegramChatPicker";
 import styles from "./sources.module.css";
 
 /**
@@ -15,7 +16,13 @@ import styles from "./sources.module.css";
  * that need structured config (Telegram, IMAP, …) are pointed at their own flow rather than a raw
  * JSON field. Credentials are stored server-side and never shown back.
  */
-export function AddSourceForm({ onCreated }: { onCreated: () => void }) {
+export function AddSourceForm({
+  onCreated,
+  onChanged,
+}: {
+  onCreated: () => void;
+  onChanged: () => void;
+}) {
   const { operatorToken, activeWorkspaceId } = useSession();
   const nameField = useId();
   const sensField = useId();
@@ -104,7 +111,12 @@ export function AddSourceForm({ onCreated }: { onCreated: () => void }) {
         </div>
       </div>
 
-      {selected && (
+      {selected?.name === "telegram" ? (
+        <TelegramChatPicker
+          defaultSensitivity={selected.default_sensitivity}
+          onChanged={onChanged}
+        />
+      ) : selected ? (
         <>
           <div className={styles.field}>
             <label className={styles.label} htmlFor={nameField}>
@@ -147,9 +159,7 @@ export function AddSourceForm({ onCreated }: { onCreated: () => void }) {
 
           {needsConfig && (
             <div className={styles.formNote}>
-              {selected.name === "telegram"
-                ? "Connect Telegram and pick chats in the Telegram flow (next to this form)."
-                : `The “${selected.name}” connector needs credentials that aren’t set up here yet.`}
+              The “{selected.name}” connector needs credentials that aren’t set up here yet.
             </div>
           )}
 
@@ -161,7 +171,7 @@ export function AddSourceForm({ onCreated }: { onCreated: () => void }) {
             </Button>
           </div>
         </>
-      )}
+      ) : null}
     </div>
   );
 }
