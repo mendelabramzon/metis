@@ -229,6 +229,30 @@ export interface ActionExecutionView {
   source_id: string | null;
 }
 
+// --- review queue (contradictions + approvals) ----------------------------------------------
+
+export type ContradictionStatus = "open" | "resolved" | "dismissed";
+
+/** `GET /workspaces/{ws}/contradictions` — conflicting evidence for review (member-gated). */
+export interface ContradictionView {
+  contradiction_id: string;
+  summary: string;
+  explanation: string;
+  status: ContradictionStatus;
+  claim_ids: string[];
+  sensitivity: Sensitivity;
+  created_at: string;
+}
+
+/** `GET /approvals` — one inbox over agent/skill actions and wiki patches (operator-gated). */
+export interface InboxItemView {
+  /** "action" | "wiki_patch" */
+  kind: string;
+  id: string;
+  summary: string;
+  status: string;
+}
+
 /** The gateway's error envelope (see install_error_handlers). */
 export interface ApiErrorBody {
   error?: { message?: string; code?: string };
