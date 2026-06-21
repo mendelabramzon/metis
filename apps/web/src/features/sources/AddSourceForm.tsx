@@ -100,6 +100,8 @@ export function AddSourceForm({
             <button
               key={connector.name}
               type="button"
+              disabled={!connector.available}
+              title={connector.unavailable_reason ?? undefined}
               className={
                 selected?.name === connector.name
                   ? `${styles.connectorOption} ${styles.connectorOptionOn}`
@@ -108,10 +110,18 @@ export function AddSourceForm({
               onClick={() => select(connector)}
             >
               <span className={styles.connectorName}>{connector.name}</span>
-              <span className={styles.connectorAuth}>{connector.auth_method}</span>
+              <span className={styles.connectorAuth}>
+                {connector.available ? connector.auth_method : "Not configured"}
+              </span>
             </button>
           ))}
         </div>
+        {connectors.some((c) => !c.available) && (
+          <div className={styles.formNote}>
+            Greyed-out connectors aren’t configured on this deployment. An operator can enable them in
+            Settings → Providers.
+          </div>
+        )}
       </div>
 
       {selected?.name === "telegram" ? (

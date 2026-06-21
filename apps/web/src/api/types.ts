@@ -69,6 +69,31 @@ export interface ConnectorView {
   auth_method: string;
   default_sensitivity: Sensitivity;
   requires_config: boolean;
+  /** Whether this deployment can use the connector now (e.g. oauth2 needs Google configured). */
+  available: boolean;
+  unavailable_reason: string | null;
+}
+
+/** `GET/PUT /admin/config` — the deployment's model + connector-auth readiness (operator). */
+export interface ConfigStatusView {
+  chat_provider: string | null; // null => answers are extractive (no model configured)
+  embeddings_source: string;
+  google_oauth_configured: boolean;
+  telegram_tdlib_configured: boolean;
+  runtime_config_enabled: boolean; // false => PUT is disabled (no credential-store key)
+}
+
+/** One configurable field's effective state; secret values are masked to a last-4 hint. */
+export interface ConfigFieldView {
+  key: string;
+  secret: boolean;
+  set: boolean;
+  value: string | null;
+}
+
+export interface DeploymentConfigView {
+  status: ConfigStatusView;
+  fields: ConfigFieldView[];
 }
 
 /** `POST /sources` body. `config` is connector-specific (empty for OAuth/no-auth connectors). */

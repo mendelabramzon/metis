@@ -185,6 +185,13 @@
 .connectorOption:hover {
   background: var(--color-sunken);
 }
+.connectorOption:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.connectorOption:disabled:hover {
+  background: var(--color-surface);
+}
 .connectorOptionOn {
   border-color: var(--color-accent);
   background: var(--color-accent-subtle-bg);

@@ -17,6 +17,7 @@ import type {
   ConnectorView,
   ContradictionStatus,
   ContradictionView,
+  DeploymentConfigView,
   DigestView,
   ErasureView,
   HealthView,
@@ -270,6 +271,27 @@ export const listProviders = (
   signal?: AbortSignal,
 ): Promise<ProviderView[]> =>
   request<ProviderView[]>("/providers", { bearer: operatorToken, ...(signal ? { signal } : {}) });
+
+/** The deployment's effective model + connector-auth config (secrets masked) + readiness status. */
+export const getDeploymentConfig = (
+  operatorToken: string,
+  signal?: AbortSignal,
+): Promise<DeploymentConfigView> =>
+  request<DeploymentConfigView>("/admin/config", {
+    bearer: operatorToken,
+    ...(signal ? { signal } : {}),
+  });
+
+/** Persist provider/connector-auth overrides and apply them live (operator). "" clears a field. */
+export const updateDeploymentConfig = (
+  operatorToken: string,
+  values: Record<string, string | null>,
+): Promise<DeploymentConfigView> =>
+  request<DeploymentConfigView>("/admin/config", {
+    method: "PUT",
+    body: { values },
+    bearer: operatorToken,
+  });
 
 export const listJobs = (operatorToken: string, signal?: AbortSignal): Promise<JobView[]> =>
   request<JobView[]>("/jobs", { bearer: operatorToken, ...(signal ? { signal } : {}) });
