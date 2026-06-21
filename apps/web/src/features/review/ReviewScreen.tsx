@@ -7,76 +7,16 @@ import {
   reviewContradiction,
 } from "@/api/client";
 import type { ContradictionStatus, ContradictionView, InboxItemView } from "@/api/types";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  ErrorState,
-  PageContainer,
-  SensitivityBadge,
-} from "@/components";
+import { Badge, Button, Card, EmptyState, ErrorState, PageContainer } from "@/components";
 import { useSession } from "@/session/SessionContext";
 
+import { ContradictionCard } from "./ContradictionCard";
 import styles from "./review.module.css";
 
 type Filter = "pending" | "completed";
 
 function cx(...parts: (string | false | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? ""
-    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function ContradictionCard({
-  contradiction,
-  onDecide,
-}: {
-  contradiction: ContradictionView;
-  onDecide: (id: string, status: ContradictionStatus) => void;
-}) {
-  return (
-    <Card>
-      <div className={styles.itemHead}>
-        <Badge variant="warning" dot>
-          Contradiction
-        </Badge>
-        <span className={styles.itemSummary}>{contradiction.summary}</span>
-      </div>
-      {contradiction.explanation && <div className={styles.itemBody}>{contradiction.explanation}</div>}
-      <div className={styles.itemMeta}>
-        <SensitivityBadge level={contradiction.sensitivity} />
-        <span>
-          {contradiction.claim_ids.length} claim{contradiction.claim_ids.length === 1 ? "" : "s"}
-        </span>
-        {formatDate(contradiction.created_at) && <span>{formatDate(contradiction.created_at)}</span>}
-        {contradiction.status !== "open" && <Badge variant="neutral">{contradiction.status}</Badge>}
-      </div>
-      {contradiction.status === "open" && (
-        <div className={styles.itemFoot}>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => onDecide(contradiction.contradiction_id, "resolved")}
-          >
-            Resolve
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => onDecide(contradiction.contradiction_id, "dismissed")}
-          >
-            Dismiss
-          </Button>
-        </div>
-      )}
-    </Card>
-  );
 }
 
 function ApprovalCard({ item, onApprove }: { item: InboxItemView; onApprove: () => void }) {
