@@ -115,21 +115,11 @@
   color: var(--color-text-muted);
   margin-bottom: var(--space-2);
 }
-.roleList {
-  display: grid;
-  gap: var(--space-1);
-}
-.roleOption {
+.menuRow {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 0.2rem 0.3rem;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-.roleOption:hover {
-  background: var(--color-sunken);
+  margin-top: var(--space-2);
 }
 .menuDivider {
   height: 1px;

@@ -1,9 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom";
 
-import { ScopeBadge } from "@/components";
+import type { WorkspaceKind } from "@/api/types";
+import { Badge, Button, ScopeBadge } from "@/components";
+import type { WorkspaceScope } from "@/domain/types";
 import { useSession } from "@/session/SessionContext";
-import { ROLES } from "@/session/types";
-import type { Role } from "@/session/types";
 
 import { navForRole } from "./nav";
 import styles from "./AppShell.module.css";
@@ -13,10 +13,12 @@ function initials(email: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-/** Header: brand, the workspace-switcher slot + scope badge (B4 wires these), and the user menu. */
+const scopeForKind = (kind: WorkspaceKind): WorkspaceScope => (kind === "personal" ? "personal" : "shared");
+
+/** Header: brand, the active workspace + scope (B4 makes the switcher interactive), and the user menu. */
 function Header() {
-  const { principal, setRole } = useSession();
-  if (!principal) return null;
+  const { user, role, isOperator, activeWorkspace, signOut } = useSession();
+  if (!user) return null;
 
   return (
     <header className={styles.header}>
@@ -26,11 +28,11 @@ function Header() {
       </span>
 
       <div className={styles.headerSlot}>
-        {/* Placeholder switcher + scope — B4 replaces with the real workspace/scope controls. */}
+        {/* Shows the real active workspace; B4 turns this into the switcher dropdown. */}
         <button type="button" className={styles.wsButton} disabled aria-label="Active workspace">
-          Personal workspace
+          {activeWorkspace?.name ?? "No workspace"}
         </button>
-        <ScopeBadge scope="personal" />
+        {activeWorkspace && <ScopeBadge scope={scopeForKind(activeWorkspace.kind)} />}
       </div>
 
       <span className={styles.spacer} />
@@ -38,31 +40,21 @@ function Header() {
       <details className={styles.menu}>
         <summary aria-label="Account menu">
           <span className={styles.avatar} aria-hidden="true">
-            {initials(principal.email)}
+            {initials(user.email)}
           </span>
-          <span className={styles.menuEmail}>{principal.email}</span>
+          <span className={styles.menuEmail}>{user.email}</span>
         </summary>
         <div className={styles.menuPanel}>
-          <div className={styles.menuLabel}>Active role (demo)</div>
-          <div className={styles.roleList} role="radiogroup" aria-label="Active role">
-            {ROLES.map((role: Role) => (
-              <label key={role} className={styles.roleOption}>
-                <input
-                  type="radio"
-                  name="role"
-                  value={role}
-                  checked={principal.role === role}
-                  onChange={() => setRole(role)}
-                />
-                {role}
-              </label>
-            ))}
+          <div className={styles.menuLabel}>Signed in</div>
+          <div style={{ fontSize: "var(--text-sm)" }}>{user.email}</div>
+          <div className={styles.menuRow}>
+            <Badge variant="neutral">{role}</Badge>
+            {isOperator && <Badge variant="accent">operator</Badge>}
           </div>
           <div className={styles.menuDivider} />
-          <div className={styles.menuNote}>
-            {principal.isOperator ? "Operator principal held" : "User principal only"}. Sign-in and
-            real roles arrive in B3.
-          </div>
+          <Button variant="secondary" block onClick={signOut}>
+            Sign out
+          </Button>
         </div>
       </details>
     </header>
@@ -71,8 +63,8 @@ function Header() {
 
 /** Role-filtered left nav (≤5 persistent sections). */
 function Sidebar() {
-  const { principal } = useSession();
-  const items = principal ? navForRole(principal.role) : [];
+  const { role } = useSession();
+  const items = navForRole(role);
   return (
     <nav className={styles.sidebar} aria-label="Primary">
       {items.map((item) => (
@@ -91,7 +83,7 @@ function Sidebar() {
   );
 }
 
-/** The application shell: header + role-gated nav + routed content (B2). */
+/** The application shell: header + role-gated nav + routed content. */
 export function AppShell() {
   return (
     <div className={styles.shell}>
