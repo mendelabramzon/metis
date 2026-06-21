@@ -4,7 +4,9 @@
 set -eu
 
 echo "metis: migrating database to head..."
-uv run --no-dev python - <<'PY'
+# Run the project venv's python (on PATH from the image) — the image is built with --all-packages,
+# so metis_deploy + metis_core are installed; no `uv run` (which would re-sync/download) needed.
+python - <<'PY'
 import os
 from metis_deploy.migrations import run_migrations
 
