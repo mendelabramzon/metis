@@ -78,6 +78,42 @@ export interface QueryResponse {
   pending_approvals: string[];
 }
 
+// --- evidence drill-down (a citation back through the truth hierarchy) ----------------------
+
+/** One source span behind a claim: its location and the exact quoted source text. */
+export interface SpanView {
+  source_span_id: string;
+  artifact_id: string;
+  doc_id: string | null;
+  char_start: number;
+  char_end: number;
+  page: number | null;
+  quote: string | null;
+}
+
+/** `GET /workspaces/{ws}/claims/{id}` — a claim with its supporting spans expanded. */
+export interface ClaimEvidenceView {
+  claim_id: string;
+  text: string;
+  confidence: number;
+  negated: boolean;
+  sensitivity: Sensitivity;
+  spans: SpanView[];
+}
+
+/** `GET /workspaces/{ws}/artifacts/{id}` — the source document a span points back to. */
+export interface ArtifactEvidenceView {
+  artifact_id: string;
+  filename: string | null;
+  media_type: string;
+  byte_size: number;
+  kind: string;
+  connector: string;
+  source_id: string | null;
+  created_at: string;
+  tombstoned: boolean;
+}
+
 /** The gateway's error envelope (see install_error_handlers). */
 export interface ApiErrorBody {
   error?: { message?: string; code?: string };

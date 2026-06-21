@@ -1,20 +1,12 @@
 import { useRef, useState } from "react";
 
 import type { Citation } from "@/api/types";
-import {
-  Badge,
-  BlockedState,
-  Button,
-  Drawer,
-  EmptyState,
-  ErrorState,
-  ScopeBadge,
-  SensitivityBadge,
-} from "@/components";
+import { Badge, BlockedState, Button, Drawer, EmptyState, ErrorState } from "@/components";
 import type { BadgeVariant } from "@/components/Badge";
-import type { WorkspaceScope } from "@/domain/types";
 import { useSession } from "@/session/SessionContext";
 
+import { CitationCards } from "./CitationCards";
+import { CitationDrawerBody } from "./CitationDrawerBody";
 import type { AskOutcome } from "./useAsk";
 import { useAsk } from "./useAsk";
 import styles from "./ask.module.css";
@@ -28,11 +20,8 @@ const FRAMING: Record<AskOutcome, { label: string; variant: BadgeVariant }> = {
   action_proposal: { label: "Needs your approval", variant: "info" },
 };
 
-const scopeForCitation = (scope: Citation["scope"]): WorkspaceScope | null =>
-  scope === "personal" ? "personal" : scope === null ? null : "shared";
-
 /** The Ask screen (D1): context strip, scrolling answer area with a full state machine, and a
- *  pinned composer. Citations open a drawer (D2 enriches the cards + drawer with source detail). */
+ *  pinned composer. Citations render as scope/sensitivity cards that open a source drawer (D2). */
 export function AskScreen() {
   const { activeWorkspace, scope } = useSession();
   const { state, canAsk, ask, reset } = useAsk();
@@ -117,7 +106,7 @@ export function AskScreen() {
       </form>
 
       <Drawer open={selected !== null} onClose={() => setSelected(null)} title="Citation">
-        {selected && <CitationDetail citation={selected.citation} index={selected.index} />}
+        {selected && <CitationDrawerBody citation={selected.citation} index={selected.index} />}
       </Drawer>
     </div>
   );
@@ -224,43 +213,11 @@ function AnswerArea({ state, canAsk, onPickCitation, onReset }: AnswerAreaProps)
               <div className={styles.sectionLabel}>
                 {response.citations.length} citation{response.citations.length === 1 ? "" : "s"}
               </div>
-              <div className={styles.citations}>
-                {response.citations.map((citation, index) => {
-                  const cScope = scopeForCitation(citation.scope);
-                  return (
-                    <button
-                      key={`${citation.claim_id}-${index}`}
-                      type="button"
-                      className={styles.citationChip}
-                      onClick={() => onPickCitation(citation, index)}
-                    >
-                      Source {index + 1}
-                      {cScope && <ScopeBadge scope={cScope} />}
-                    </button>
-                  );
-                })}
-              </div>
+              <CitationCards citations={response.citations} onOpen={onPickCitation} />
             </>
           )}
         </>
       );
     }
   }
-}
-
-function CitationDetail({ citation, index }: { citation: Citation; index: number }) {
-  const cScope = scopeForCitation(citation.scope);
-  return (
-    <div>
-      <div className={styles.framing}>
-        <strong>Source {index + 1}</strong>
-        {cScope && <ScopeBadge scope={cScope} />}
-        {citation.sensitivity && <SensitivityBadge level={citation.sensitivity} />}
-      </div>
-      <p style={{ color: "var(--color-text-secondary)", fontSize: "var(--text-sm)" }}>
-        This citation points to claim <code>{citation.claim_id.slice(0, 16)}…</code>. The quoted
-        source span, document, date, and page arrive with the evidence drill-down (D2).
-      </p>
-    </div>
-  );
 }
