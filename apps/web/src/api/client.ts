@@ -17,6 +17,7 @@ import type {
   QueryRequestBody,
   QueryResponse,
   SourceView,
+  UploadResponse,
   UserView,
   WorkspaceView,
 } from "./types";
@@ -136,6 +137,41 @@ export const getArtifactEvidence = (
     `/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}`,
     { bearer, ...(signal ? { signal } : {}) },
   );
+
+/** Upload files into a workspace (multipart; user-id bearer / membership). Per-file parse status. */
+export async function uploadFiles(
+  bearer: string,
+  workspaceId: string,
+  files: File[],
+): Promise<UploadResponse> {
+  const form = new FormData();
+  for (const file of files) form.append("files", file);
+  let res: Response;
+  try {
+    // Send only the bearer — the browser sets the multipart Content-Type with its own boundary.
+    res = await fetch(`/workspaces/${encodeURIComponent(workspaceId)}/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${bearer}` },
+      body: form,
+    });
+  } catch {
+    throw new ApiError(0, "Couldn’t reach the server. Check your connection and try again.");
+  }
+  const raw = await res.text();
+  let data: unknown = null;
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = null;
+    }
+  }
+  if (!res.ok) {
+    const envelope = data as ApiErrorBody | null;
+    throw new ApiError(res.status, envelope?.error?.message ?? res.statusText, envelope?.error?.code);
+  }
+  return data as UploadResponse;
+}
 
 // --- sources (deployment sources; pass the operator/scope token) ----------------------------
 
