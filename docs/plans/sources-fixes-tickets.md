@@ -154,3 +154,31 @@ Depends: —
 3. **I2.3 → I2.4 → I3.1** — durable config + status + connector availability (the read/diagnosis side).
 4. **I2.5 → I3.2 → I3.3** — the operator config UIs + runtime apply (the write side).
 5. **I3.4** — docs.
+
+---
+
+## Follow-ups (discovered during implementation)
+
+### F1 — Runtime provider config doesn't reach the ingest/runtime workers · `GW`+`deploy` · `M`
+The runtime provider config (I2.4) and its live `reconfigure_models` apply to the **gateway's
+answering model plane only**. The ingest worker (OCR/vision transcription for low-coverage PDFs) and
+the runtime worker (deep research via the query engine) each build their own model plane from their
+**own env settings** (`METIS_INGEST_WORKER_*` / `METIS_RUNTIME_WORKER_*`) and do not read the shared
+`DeploymentConfigStore`. So a provider key an operator sets in Settings → Providers reaches gateway
+answers but **not** worker OCR or research.
+
+The override is already durable + cross-process (the shared `connector_secrets` table, `cfg:` prefix)
+— the workers just don't consult it. Approach: on worker startup build a `DeploymentConfigStore` over
+the same secret store and overlay settings via `effective_settings(...)` (the gateway's overlay).
+Workers are separate processes with no live-reconfigure path, so **apply-on-startup** (picked up on
+restart) is the simplest; re-read per job-lease only if closer-to-live propagation is needed. Requires
+the cred-store key wired per worker that consumes the store — the ingest worker is base-wired (as of
+the base-compose change); the runtime worker would need
+`METIS_RUNTIME_WORKER_CRED_STORE_KEY: ${METIS_CRED_STORE_KEY:-}` added.
+
+Invariants: embeddings stay env-only (re-index under version-gating, ADR 0014 — never route embedding
+config here); secrets stay encrypted at rest (reuse the existing `SecretStore`).
+
+Acceptance: a provider key set via `PUT /admin/config` (cred key wired) is used by the ingest worker's
+OCR and the runtime worker's research after a worker restart, without editing per-worker env.
+Depends: I2.4
