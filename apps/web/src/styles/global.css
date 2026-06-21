@@ -55,6 +55,14 @@ button {
   outline: none;
 }
 
+/* Full-viewport loading state while the session restores. */
+.loading-screen {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+}
+
 /* Visually hidden, still announced by screen readers. */
 .sr-only {
   position: absolute;

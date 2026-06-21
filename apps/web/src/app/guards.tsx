@@ -8,8 +8,8 @@ import { NAV, navForRole } from "./nav";
 
 /** Land on the first section the current role can reach (Ask for most; Review for an auditor). */
 export function IndexRedirect() {
-  const { principal } = useSession();
-  const first = principal ? navForRole(principal.role)[0] : undefined;
+  const { role } = useSession();
+  const first = navForRole(role)[0];
   if (!first) {
     return (
       <EmptyState
@@ -27,10 +27,10 @@ export function IndexRedirect() {
  * hide cosmetic *and* the access real.
  */
 export function RequireRole({ navId, children }: { navId: string; children: ReactNode }) {
-  const { principal } = useSession();
+  const { role } = useSession();
   const navigate = useNavigate();
   const item = NAV.find((n) => n.id === navId);
-  const allowed = principal != null && item != null && item.allowedRoles.includes(principal.role);
+  const allowed = item != null && item.allowedRoles.includes(role);
 
   if (!allowed) {
     return (
@@ -38,8 +38,8 @@ export function RequireRole({ navId, children }: { navId: string; children: Reac
         title="Not available for your role"
         description={
           item
-            ? `${item.label} isn't accessible with the “${principal?.role}” role.`
-            : "This section isn't accessible with your current role."
+            ? `${item.label} isn’t accessible with the “${role}” role.`
+            : "This section isn’t accessible with your current role."
         }
         actions={
           <Button variant="secondary" onClick={() => navigate("/")}>

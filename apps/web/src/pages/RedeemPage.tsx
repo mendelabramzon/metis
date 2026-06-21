@@ -1,0 +1,114 @@
+import { useId, useState } from "react";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+
+import { ApiError, redeemInvite } from "@/api/client";
+import { Button } from "@/components";
+import { useSession } from "@/session/SessionContext";
+
+import styles from "./auth.module.css";
+
+function friendlyError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 404) return "This invite link is invalid or has expired.";
+    if (err.status === 409) {
+      return "This invite was already used, or an account already exists for that email.";
+    }
+    if (err.status === 0) return err.message;
+    return err.message || "Couldn’t redeem this invite. Please try again.";
+  }
+  return "Something went wrong. Please try again.";
+}
+
+/**
+ * Invite redemption (B3, consumes A6). Provisions the invitee's user + personal workspace, joins
+ * the invited workspace, and signs them straight in with the returned bearer. H2/H3 build the
+ * richer first-run around this; here it's the redeem → session path.
+ */
+export function RedeemPage() {
+  const { token } = useParams<{ token: string }>();
+  const { status, signIn } = useSession();
+  const navigate = useNavigate();
+  const emailField = useId();
+  const nameField = useId();
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (status === "authenticated") return <Navigate to="/" replace />;
+  if (!token) return <Navigate to="/" replace />;
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!email.trim() || !displayName.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await redeemInvite(token as string, {
+        email: email.trim(),
+        display_name: displayName.trim(),
+      });
+      await signIn({ userId: res.user_id });
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(friendlyError(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={styles.screen}>
+      <div className={styles.card}>
+        <div className={styles.brand}>Join on Metis</div>
+        <p className={styles.subtitle}>
+          You’ve been invited to a shared workspace. Tell us who you are to get started.
+        </p>
+
+        <form className={styles.form} onSubmit={(e) => void onSubmit(e)}>
+          {error != null && (
+            <div className={styles.error} role="alert">
+              {error}
+            </div>
+          )}
+
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor={nameField}>
+              Your name
+            </label>
+            <input
+              id={nameField}
+              className={styles.input}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              autoComplete="name"
+            />
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor={emailField}>
+              Email
+            </label>
+            <input
+              id={emailField}
+              className={styles.input}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            variant="primary"
+            block
+            disabled={busy || !email.trim() || !displayName.trim()}
+          >
+            {busy ? "Joining…" : "Join workspace"}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
