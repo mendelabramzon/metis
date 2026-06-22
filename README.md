@@ -1,100 +1,194 @@
 # Metis
 
-A workspace memory/context engine: evidence-first ingestion, structured memory,
-background maintenance, a compiled wiki projection, retrieval/chat, and
-skill-based actions.
+Metis is a **self-hosted, evidence-first memory engine for a team**. Point it at your
+documents and messages and it turns them into cited claims, keeps that memory current in the
+background, and answers questions with the **source evidence attached** — so every answer
+traces back to where it came from, you can see when sources disagree, and you stay in control
+of what data ever leaves your machine.
 
-**All stages (0–15) are implemented.** The monorepo skeleton and machine-enforced package
-boundaries (Stage 0), the `metis-protocol` contracts (Stage 1), the `metis-core` durable
-substrate (Stage 2), local-first ingestion into cited evidence (Stage 3), the policy-bound
-model router (Stage 4), the memory core — maintainer-time consolidation, versioned
-embeddings, and hybrid memory retrieval (Stage 5), the maintainer worker — scheduled,
-idempotent background jobs for contradictions, revision, refresh, foresight, and wiki-patch
-proposal (Stage 6), the wiki compiler — a git-backed, claim-cited markdown projection with
-the WiCER compile→evaluate→refine loop and an approval/commit flow (Stage 7), and the query
-runtime — sensitivity-bounded hybrid retrieval, context packing, sufficiency-gated answering
-with citation verification, and contradiction surfacing (Stage 8), and the skill runtime —
-a Python skill-package format run under a manifest security contract: a subprocess sandbox,
-deny-by-default permissions, approval-by-default for outbound actions, and audited artifact
-capture (Stage 9), and the runtime-agent loop — a ReAct loop that classifies, retrieves, plans,
-and acts: it selects skills by context, contains prompt injection behind a trusted-only control
-plane (untrusted retrieved content is data, never an instruction), gates outbound actions on human
-approval with resumable runs, records an inspectable execution trace, and files useful answers back
-as patch proposals (Stage 10), and external connectors — IMAP/email (with thread reconstruction),
-Slack, web clip, Google Drive, and calendar on a shared spine (cursors, rate limiting, retry/backoff,
-ACL→sensitivity mapping) that emits the same `RawArtifact`/`NormalizedDoc` contract and replays from
-recorded fixtures with no live credentials (Stage 11), and the API gateway — a thin FastAPI layer
-over the packages with scoped auth, source/ingest/query/wiki/skill/jobs/audit routers, one unified
-approval inbox, and a minimal operator console, exercising a real ingest→query→cited-answer loop
-(Stage 12), and the evaluation harness — a deterministic, Docker-free golden-workspace benchmark
-across parse/claim/span/retrieval/groundedness/contradiction/wiki-loss/skill-safety/policy
-dimensions, with regression thresholds, baseline-delta reports, and an LLM-judge calibrated against
-deterministic checks (`make eval`) (Stage 13), and the security/privacy hardening — at-rest secret
-encryption and encrypted connector credentials, restricted-data provider blocking, layered
-prompt-injection defense and a single taint chokepoint, trust-tiered sandbox isolation profiles,
-right-to-erasure across the truth hierarchy, audit hash-chain verification, backup/restore, and
-webhook signature verification (Stage 14), and deployment/operational readiness — a single-node
-Docker Compose stack with local/cloud/GPU model profiles, migrations-on-deploy, real-dependency
-health checks, scheduled backup/restore, an OpenTelemetry observability surface (model spend, policy
-denials, ingestion lag, job failures), and an operator runbook (Stage 15). See
-[`docs/plans/high-level-implementation-plan.md`](docs/plans/high-level-implementation-plan.md)
-for the staged roadmap and [`docs/`](docs/README.md) for the documentation index.
+It is not a generic chatbot. The reasons to trust it over one are made visible: the evidence
+behind each answer, whether the sources agree, and whether the answer was produced on-device
+or sent to an external model.
 
-## Prerequisites
+## What you can do with it
 
-- [uv](https://docs.astral.sh/uv/) (workspace + packaging, ADR 0001)
-- Python 3.12+ (uv will fetch it; the floor is pinned in `.python-version`)
-- `make`
+- **Ask your workspace and get cited answers.** Answers are grounded in source snippets you
+  can open (claim → quote → original document), and gated on having enough evidence to answer
+  at all — no confident guessing.
+- **Connect your team's context.** Upload files, or connect email (IMAP/Gmail), Slack, Google
+  Drive, Calendar, web clips, and Telegram. Metis parses, segments, and indexes them into
+  searchable, cited memory.
+- **See disagreement, not a blended average.** Contradictions between sources are surfaced
+  rather than silently merged.
+- **Keep restricted data on your hardware.** A policy-bound router blocks external model
+  providers for restricted-sensitivity data — even on the cloud profile — and the UI shows
+  whether each answer stayed on-device or went to an external model.
+- **Run it however you want.** Fully local models (CPU or GPU), or a hosted model for
+  non-restricted data — your choice per deployment.
+- **Keep memory fresh automatically.** Background workers consolidate memory, detect
+  contradictions and stale claims, and maintain a git-backed wiki projection of what the
+  workspace knows.
+- **Stay in control of actions.** Skills that take outbound or risky actions are gated on
+  human approval, with an inspectable execution trace.
+- **Operate as a team, safely.** Orgs, workspaces, and roles (owner/admin/member/viewer/
+  auditor); per-source permissions and sensitivity; model-spend caps; a full audit trail; and
+  a right-to-erasure path.
 
-## Quickstart
+## How it works
+
+```text
+sources ─► ingest ─► cited claims + evidence ─► structured memory ─► Ask ─► cited answer
+(files,     (parse,   (every claim links to a    (consolidated,        (sensitivity-bounded
+ email,      segment,   source span / quote)       background-           retrieval → grounded,
+ Slack, …)   extract)                               maintained)          sufficiency-gated)
+```
+
+Two audiences run Metis: **operators** stand up the Docker stack on a server or a laptop;
+**users** open the web app and ask. Both are below.
+
+---
+
+## Run it (operators)
+
+A single-node **Docker Compose** stack: Postgres + object store, the API gateway (which also
+serves the web app), background workers, and a model runtime. Multi-node orchestration is
+deliberately out of scope.
+
+**Prerequisites:** Docker + Docker Compose. The images build from source as part of the stack.
+
+### Quickstart
+
+Pick a **model profile**: `local` (CPU Ollama — nothing leaves the node), `cloud` (a hosted
+provider for non-restricted data), or `gpu` (local vLLM).
 
 ```bash
-make install   # uv sync --all-packages — installs every package + service
+cd deploy
+cp env/.env.example .env       # copy the env template, then fill in secrets (see below)
+docker compose -f docker-compose.yml -f compose/profiles.local.yml up -d
+```
+
+The stack migrates the database once, then starts. Open **http://localhost:8000** — the web
+app — plus `/health` (liveness) and `/docs` (the API).
+
+> **Secrets:** from the repo root, run `make setup`. It prints a ready-to-paste block of
+> strong tokens, infra passwords, and the secret-store key; paste the `KEY=value` lines into
+> `deploy/.env`. Never commit `.env`, and never run a real deployment on the dev defaults.
+
+For the `local` profile, pull the models into the runtime once:
+
+```bash
+docker compose exec model-runtime ollama pull bge-m3      # embeddings
+docker compose exec model-runtime ollama pull gemma4:e4b  # answers
+```
+
+With no model wired, answers are *extractive* — pulled verbatim from sources — and the UI
+says so.
+
+### First run
+
+The web app routes a fresh deployment to **setup**: claim it with your **operator token**
+(generated by `make setup`), name your org, and create yourself as the first admin. From
+there, invite teammates, add sources, and ask.
+
+### Going to production
+
+- **Set real secrets.** Never expose a deployment on the dev defaults; `make setup` generates
+  the operator/user tokens and infra passwords.
+- **Set `METIS_CRED_STORE_KEY`** (also from `make setup`). It encrypts connector secrets at
+  rest and unlocks the runtime provider-config UI — set model/Google/Telegram keys without a
+  redeploy. Keep it **stable and identical** across the gateway and workers; losing it makes
+  stored secrets unrecoverable.
+- **Terminate TLS.** Add the proxy overlay (`-f compose/proxy.yml`) and Caddy auto-issues a
+  Let's Encrypt certificate for your domain.
+- **Back up and drill.** Scheduled Postgres + wiki + object-store backups, with a restore
+  drill that proves the chain actually restores.
+- **Watch it.** An OpenTelemetry surface exports model spend, policy denials, ingestion lag,
+  and job failures to Prometheus / dashboards.
+
+Full operational detail — health, backups, recovery, providers, Telegram ingestion — is in
+the **[operator runbook](deploy/runbook.md)**.
+
+---
+
+## Use it (users)
+
+Open the web app, sign in (pick your account), and work from five sections:
+
+- **Ask** — ask your workspace a question. You get an answer with its **evidence** (the source
+  snippets behind it), an at-a-glance signal of whether the sources **agree**, and a visible
+  **privacy outcome** (kept on-device vs. sent to an external model).
+- **Sources** — connect and manage what Metis knows: upload files or connect Drive, Gmail,
+  Calendar, Slack, web clips, and Telegram, and watch each source's parse/ingest status.
+- **Review** — the approval inbox: approve or reject **proposed actions** and **wiki changes**
+  before they take effect.
+- **Activity** — the workspace timeline and audit trail of ingests, answers, and actions.
+- **Settings** *(admins)* — members + invites, model policy + spend caps, per-source
+  permissions + sensitivity defaults, model/connector providers, and the operator
+  **Operations** dashboard.
+
+Scope and sensitivity stay visible throughout: you always know which workspace you're asking,
+and why an answer can be trusted.
+
+---
+
+## Develop from source
+
+**Prerequisites:** [uv](https://docs.astral.sh/uv/), Python 3.12+ (uv will fetch it), and `make`.
+
+```bash
+make install   # uv sync --all-packages — every package + service
 make check     # boundaries + lint + typecheck + tests (the one gate)
+make eval      # replay the golden workspace (quality-regression gate)
 ```
 
-Individual targets: `make format`, `make lint`, `make typecheck`, `make test`,
-`make boundaries`. Run `make help` for the list.
-
-Run a service in dry-run mode (wire settings and exit without serving):
+Run `make help` for individual targets. Dry-run a service (wire settings and exit without
+serving):
 
 ```bash
-uv run python -m metis_gateway --dry-run
-uv run metis-gateway --dry-run          # installed console script
+uv run metis-gateway --dry-run
 ```
 
-## Layout
+The web app lives in `apps/web` (React + Vite + TypeScript) with its own `npm run dev` /
+`npm run check`; the gateway serves its production build at `/`.
+
+### Layout
 
 ```text
 packages/
   metis-protocol/    shared contracts: schemas, events, interfaces, policy vocabulary
   metis-core/        durable substrate: stores, audit, jobs, policy enforcement
   metis-ingestion/   evidence production: connectors, parsers, segmentation, extraction
-  metis-maintainer/  memory maintenance: contradictions, consolidation, foresight, wiki patches
+  metis-maintainer/  memory maintenance: contradictions, consolidation, foresight, wiki
   metis-runtime/     user-facing intelligence: chat, retrieval, context packing, skills
   metis-skills/      reusable Python skill packages
 services/
-  gateway/           API surface (metis-gateway)
-  ingest-worker/     ingestion jobs (metis-ingest-worker)
-  maintainer-worker/ background maintenance jobs (metis-maintainer-worker)
-  runtime-worker/    retrieval/agent jobs (metis-runtime-worker)
-eval/                evaluation harness: golden fixtures + quality comparisons (metis-eval)
-deploy/              single-node Compose stack, model profiles, health/backup, runbook (metis-deploy)
+  gateway/           API + web-app surface (metis-gateway)
+  ingest-worker/     ingestion jobs
+  maintainer-worker/ background maintenance jobs
+  runtime-worker/    retrieval/agent jobs
+apps/web/            the team-facing React SPA the gateway serves at /
+skills/              installable skill packages (ships web_search)
+eval/                evaluation harness: golden fixtures + quality comparisons
+deploy/              single-node Compose stack, model profiles, health/backup, runbook
 docs/                plans, ADRs, architecture, references
-tests/architecture/  import-boundary enforcement (positive + negative)
-tests/security/      Stage 14 security acceptance tests
+tests/               import-boundary + security acceptance tests
 ```
 
-## Package boundaries
+Package dependencies point inward; `metis-protocol` imports no other Metis package. The rules
+are documented in
+[`docs/architecture/package-boundaries.md`](docs/architecture/package-boundaries.md), encoded
+in [`.importlinter`](.importlinter), and enforced by `make boundaries`.
 
-Dependencies point inward; `metis-protocol` imports no other Metis package. The
-rules are documented in
-[`docs/architecture/package-boundaries.md`](docs/architecture/package-boundaries.md),
-encoded in [`.importlinter`](.importlinter), and enforced by `make boundaries`
-plus the tests under `tests/architecture/` (including a negative test that proves
-a forbidden import is actually caught).
+### Status & docs
+
+All build stages (0–15) are implemented — from the contracts and durable substrate through
+ingestion, the memory core, background maintenance, the wiki compiler, the query runtime, the
+skill/agent runtime, connectors, the API gateway, the evaluation harness, security hardening,
+and the deployment stack. See the staged roadmap in
+[`docs/plans/high-level-implementation-plan.md`](docs/plans/high-level-implementation-plan.md)
+and the documentation index in [`docs/`](docs/README.md).
 
 ## License
 
-See [`LICENSE`](LICENSE). It is currently a proprietary placeholder — pick a real
-license before any external distribution.
+See [`LICENSE`](LICENSE). It is currently a proprietary placeholder — pick a real license
+before any external distribution.
