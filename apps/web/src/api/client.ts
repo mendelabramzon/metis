@@ -8,6 +8,7 @@
  */
 
 import type {
+  AccountView,
   ActionExecutionView,
   ApiErrorBody,
   ArtifactEvidenceView,
@@ -30,6 +31,7 @@ import type {
   MembershipView,
   ModelPolicyView,
   OrganizationView,
+  PreferencesView,
   SpendView,
   StarterQuestionsView,
   ProposedActionView,
@@ -179,6 +181,36 @@ export const getDigest = (
     ...(signal ? { signal } : {}),
   });
 };
+
+/** The recurring weekly digest: the same surface over the trailing 7 days (A7). */
+export const getWeeklyDigest = (
+  bearer: string,
+  workspaceId: string,
+  signal?: AbortSignal,
+): Promise<DigestView> =>
+  request<DigestView>(`/workspaces/${encodeURIComponent(workspaceId)}/digest?window=week`, {
+    bearer,
+    ...(signal ? { signal } : {}),
+  });
+
+/** The signed-in user's preferences (A7: weekly-digest opt-in). */
+export const getPreferences = (bearer: string, signal?: AbortSignal): Promise<PreferencesView> =>
+  request<PreferencesView>("/users/me/preferences", { bearer, ...(signal ? { signal } : {}) });
+
+/** Toggle the weekly-digest opt-in (A7 / H5). */
+export const updatePreferences = (
+  bearer: string,
+  weeklyDigest: boolean,
+): Promise<PreferencesView> =>
+  request<PreferencesView>("/users/me/preferences", {
+    method: "PATCH",
+    body: { weekly_digest: weeklyDigest },
+    bearer,
+  });
+
+/** The selectable accounts for the sign-in selector (C2); pre-auth, so no bearer. */
+export const listAccounts = (signal?: AbortSignal): Promise<AccountView[]> =>
+  request<AccountView[]>("/accounts", { ...(signal ? { signal } : {}) });
 
 /** A citation's claim + the source spans (with quotes) behind it. */
 export const getClaimEvidence = (

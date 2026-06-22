@@ -20,6 +20,19 @@ export interface UserView {
   email: string;
   display_name: string;
   active: boolean;
+  weekly_digest_opt_in: boolean;
+}
+
+/** `GET /accounts` items — the pre-auth sign-in selector (C2); no raw id typing. */
+export interface AccountView {
+  id: string;
+  display_name: string;
+  email: string;
+}
+
+/** `GET/PATCH /users/me/preferences` (A7). */
+export interface PreferencesView {
+  weekly_digest: boolean;
 }
 
 /** `GET /workspaces` items. No per-caller role field — derive owner-vs-member from `owner_id`. */

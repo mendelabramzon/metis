@@ -33,6 +33,11 @@
       "pattern": "^\\d+\\.\\d+$",
       "title": "Schema Version",
       "type": "string"
+    },
+    "weekly_digest_opt_in": {
+      "default": true,
+      "title": "Weekly Digest Opt In",
+      "type": "boolean"
     }
   },
   "required": [

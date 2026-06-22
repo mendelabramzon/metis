@@ -426,11 +426,12 @@ class StarterQuestionsView(BaseModel):
 
 
 class DigestView(BaseModel):
-    """A 'while you were away' summary for a workspace since a timestamp (A7, on-demand).
+    """A summary of recent maintainer output for a workspace (A7).
 
     Scoped to the per-workspace, member-gated surfaces: new contradictions to review and facts
-    added to memory since ``since``. The scheduled weekly digest + operator-scoped items (synced
-    jobs, wiki proposals) are follow-ups.
+    added to memory within the requested window (``?since=`` for 'while you were away', or
+    ``?window=week`` for the weekly digest). Operator-scoped items (synced jobs, wiki proposals)
+    stay in Operations.
     """
 
     since: str | None = None
@@ -543,6 +544,26 @@ class UserView(BaseModel):
     email: str
     display_name: str
     active: bool
+    weekly_digest_opt_in: bool = True
+
+
+class AccountView(BaseModel):
+    """A selectable account for the pre-auth sign-in selector (C2) — no raw id typing. The id is
+    the dev-stand-in bearer until real sessions/SSO land; only active accounts are offered."""
+
+    id: str
+    display_name: str
+    email: str
+
+
+class PreferencesView(BaseModel):
+    """The signed-in user's per-user preferences (A7)."""
+
+    weekly_digest: bool
+
+
+class PreferencesUpdate(BaseModel):
+    weekly_digest: bool
 
 
 class WorkspaceCreate(BaseModel):

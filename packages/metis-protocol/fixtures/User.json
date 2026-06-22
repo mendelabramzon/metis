@@ -5,5 +5,6 @@
   "email": "ada@acme.example",
   "display_name": "Ada Lovelace",
   "created_at": "2026-01-01T12:00:00Z",
-  "active": true
+  "active": true,
+  "weekly_digest_opt_in": true
 }

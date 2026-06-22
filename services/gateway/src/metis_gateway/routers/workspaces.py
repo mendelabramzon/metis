@@ -6,7 +6,7 @@ user's personal workspace stays invisible to another (see ``auth.workspace_conte
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter
 
@@ -247,16 +247,30 @@ def _parse_since(since: str | None) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
-@router.get("/{workspace_id}/digest", response_model=DigestView)
-async def digest(context: MemberDep, backend: BackendDep, since: str | None = None) -> DigestView:
-    """A 'while you were away' summary for this workspace since ``?since=<iso>`` (A7, on-demand).
+def _window_cutoff(window: str | None) -> datetime | None:
+    """A named window's start. ``week`` -> 7 days ago; anything else -> None (no narrowing)."""
+    if window == "week":
+        return datetime.now(UTC) - timedelta(days=7)
+    return None
 
-    The caller (the SPA, per user) passes its last-visit timestamp; this reports what changed on the
-    per-workspace, member-gated surfaces — new contradictions to review and facts added to memory.
-    The scheduled weekly digest and operator-scoped items (synced jobs, wiki proposals) are
-    follow-ups (see A7 notes).
+
+@router.get("/{workspace_id}/digest", response_model=DigestView)
+async def digest(
+    context: MemberDep,
+    backend: BackendDep,
+    since: str | None = None,
+    window: str | None = None,
+) -> DigestView:
+    """A per-workspace summary of recent maintainer output (A7), on the member-gated surfaces — new
+    contradictions to review and facts added to memory.
+
+    Two windows: ``?since=<iso>`` is the on-demand 'while you were away' view (the SPA passes its
+    last-visit timestamp); ``?window=week`` is the recurring weekly digest (the trailing 7 days),
+    whose opt-in is the per-user preference at ``/users/me/preferences``. ``window`` takes
+    precedence when both are given. Operator-scoped items (synced jobs, wiki proposals) stay in
+    Operations.
     """
-    cutoff = _parse_since(since)
+    cutoff = _window_cutoff(window) or _parse_since(since)
     workspace = backend.workspace_for(context.workspace.id)
     contradictions = await workspace.list_contradictions(status=ContradictionStatus.OPEN)
     new_contradictions = [c for c in contradictions if cutoff is None or c.created_at > cutoff]
