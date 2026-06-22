@@ -15,8 +15,11 @@ from metis_gateway.backend import Backend
 from metis_gateway.deps import BackendDep, CurrentUserDep, OperatorDep
 from metis_gateway.errors import ConflictError, NotFoundError
 from metis_gateway.schemas import (
+    AccountView,
     OrganizationCreate,
     OrganizationView,
+    PreferencesUpdate,
+    PreferencesView,
     UserCreate,
     UserErasureView,
     UserView,
@@ -45,6 +48,7 @@ def _user_view(user: User) -> UserView:
         email=user.email,
         display_name=user.display_name,
         active=user.active,
+        weekly_digest_opt_in=user.weekly_digest_opt_in,
     )
 
 
@@ -108,9 +112,38 @@ async def create_user(body: UserCreate, backend: BackendDep, _principal: Operato
     return _user_view(user)
 
 
+@router.get("/accounts", response_model=list[AccountView])
+async def list_accounts(backend: BackendDep) -> list[AccountView]:
+    """The selectable accounts for the sign-in selector (C2) — unauthenticated, since it backs the
+    pre-auth login picker so a user need never type a raw id. Active accounts only. This is a dev
+    stand-in that mirrors the 'bearer == user id' model; real sessions/SSO are Stage 14."""
+    users = await backend.identity.list_users()
+    return [
+        AccountView(id=str(u.id), display_name=u.display_name, email=u.email)
+        for u in users
+        if u.active
+    ]
+
+
 @router.get("/users/me", response_model=UserView)
 async def me(user: CurrentUserDep) -> UserView:
     return _user_view(user)
+
+
+@router.get("/users/me/preferences", response_model=PreferencesView)
+async def get_preferences(user: CurrentUserDep) -> PreferencesView:
+    return PreferencesView(weekly_digest=user.weekly_digest_opt_in)
+
+
+@router.patch("/users/me/preferences", response_model=PreferencesView)
+async def update_preferences(
+    body: PreferencesUpdate, user: CurrentUserDep, backend: BackendDep
+) -> PreferencesView:
+    """Toggle the weekly-digest opt-in (A7). Self-service: a user manages only their own."""
+    updated = await backend.identity.set_weekly_digest_opt_in(user.id, enabled=body.weekly_digest)
+    if updated is None:
+        raise NotFoundError(f"unknown user {user.id}")
+    return PreferencesView(weekly_digest=updated.weekly_digest_opt_in)
 
 
 @router.delete("/users/{user_id}", response_model=UserErasureView)

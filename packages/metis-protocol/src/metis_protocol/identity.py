@@ -35,6 +35,9 @@ class User(VersionedModel):
     display_name: str
     created_at: AwareDatetime
     active: bool = True
+    #: Whether the user receives the weekly digest (A7). Opt-in, defaulted on; toggled in settings
+    #: and offered at onboarding (H5). A preference, not an audited fact — it rides in the body.
+    weekly_digest_opt_in: bool = True
 
 
 @schema

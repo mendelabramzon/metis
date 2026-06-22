@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 
-import { ApiError, createOrganization, createUser } from "@/api/client";
+import { ApiError, createOrganization, createUser, updatePreferences } from "@/api/client";
 import { Button } from "@/components";
 import { useSession } from "@/session/SessionContext";
 
@@ -36,6 +36,7 @@ export function BootstrapPage() {
   const [orgName, setOrgName] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [weeklyDigest, setWeeklyDigest] = useState(true); // opt-in, defaulted on for the admin (H5)
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -56,6 +57,14 @@ export function BootstrapPage() {
         email: email.trim(),
         display_name: name.trim(),
       });
+      // Record the digest choice (default on); a quiet failure shouldn't block onboarding.
+      if (!weeklyDigest) {
+        try {
+          await updatePreferences(user.id, false);
+        } catch {
+          /* non-fatal — the preference defaults on and is changeable in Settings */
+        }
+      }
       // Sign in as the new admin, holding the operator token; the app re-renders into the shell.
       await signIn({ userId: user.id, operatorToken: op });
     } catch (err) {
@@ -133,6 +142,18 @@ export function BootstrapPage() {
               placeholder="you@example.com"
             />
           </div>
+
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              checked={weeklyDigest}
+              onChange={(e) => setWeeklyDigest(e.target.checked)}
+            />
+            <span>
+              Send me a weekly digest — a quiet summary of what synced, what changed, and what needs
+              review. You can change this anytime in Settings.
+            </span>
+          </label>
 
           <Button type="submit" variant="primary" block disabled={busy || !ready}>
             {busy ? "Setting up…" : "Create my workspace"}

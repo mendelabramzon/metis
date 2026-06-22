@@ -144,6 +144,10 @@ class IdentityStore(Protocol):
 
     async def get_user_by_email(self, email: str) -> User | None: ...
 
+    async def list_users(self) -> Sequence[User]: ...
+
+    # Active users, for the pre-auth sign-in selector (C2) — a dev stand-in until real sessions/SSO.
+
     async def get_workspace(self, workspace_id: WorkspaceId) -> Workspace | None: ...
 
     async def resolve_role(self, *, user_id: UserId, workspace_id: WorkspaceId) -> Role | None: ...
@@ -160,6 +164,10 @@ class IdentityStore(Protocol):
 
     # Soft-disable a user (active=False) so the auth boundary rejects them; their audit trail stays.
     # Returns the updated user, or None if unknown.
+
+    async def set_weekly_digest_opt_in(self, user_id: UserId, *, enabled: bool) -> User | None: ...
+
+    # Toggle the user's weekly-digest preference (A7). Returns the updated user, or None if unknown.
 
     async def create_invite(self, invite: Invite) -> Invite: ...
 

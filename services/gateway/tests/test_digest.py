@@ -64,3 +64,56 @@ def test_digest_is_membership_gated(client: TestClient, op: dict[str, str]) -> N
 
     denied = client.get(f"/workspaces/{ada_ws}/digest", headers=_bearer(grace))
     assert denied.status_code == 403
+
+
+def test_weekly_window_is_accepted(client: TestClient, op: dict[str, str]) -> None:
+    """The recurring weekly digest is the same endpoint with ``?window=week`` (trailing 7 days)."""
+    org_id = client.post("/organizations", json={"name": "Acme"}, headers=op).json()["id"]
+    ada = _provision(client, op, org_id, "ada@acme.example")
+    ws = client.get("/workspaces", headers=_bearer(ada)).json()[0]["id"]
+
+    weekly = client.get(f"/workspaces/{ws}/digest?window=week", headers=_bearer(ada))
+    assert weekly.status_code == 200, weekly.text
+    body = weekly.json()
+    assert body["new_contradictions"] == 0
+    assert body["highlights"] == []
+
+
+def test_weekly_digest_opt_in_defaults_on_and_toggles(
+    client: TestClient, op: dict[str, str]
+) -> None:
+    org_id = client.post("/organizations", json={"name": "Acme"}, headers=op).json()["id"]
+    ada = _provision(client, op, org_id, "ada@acme.example")
+
+    # Defaulted on, and reflected on the user record.
+    assert client.get("/users/me/preferences", headers=_bearer(ada)).json() == {
+        "weekly_digest": True
+    }
+    assert client.get("/users/me", headers=_bearer(ada)).json()["weekly_digest_opt_in"] is True
+
+    off = client.patch("/users/me/preferences", json={"weekly_digest": False}, headers=_bearer(ada))
+    assert off.status_code == 200
+    assert off.json() == {"weekly_digest": False}
+    # The toggle persists for the next read.
+    assert client.get("/users/me/preferences", headers=_bearer(ada)).json() == {
+        "weekly_digest": False
+    }
+
+
+def test_accounts_selector_lists_active_accounts_without_auth(
+    client: TestClient, op: dict[str, str]
+) -> None:
+    """The sign-in selector (C2) is pre-auth and never exposes a raw-id field; it lists accounts."""
+    org_id = client.post("/organizations", json={"name": "Acme"}, headers=op).json()["id"]
+    ada = _provision(client, op, org_id, "ada@acme.example")
+
+    accounts = client.get("/accounts")  # no Authorization header — backs the login picker
+    assert accounts.status_code == 200, accounts.text
+    rows = accounts.json()
+    ada_row = next(r for r in rows if r["id"] == ada)
+    assert ada_row == {"id": ada, "display_name": "ada", "email": "ada@acme.example"}
+
+    # An erased (deactivated) account drops out of the selector.
+    client.delete(f"/users/{ada}", headers=op)
+    remaining = client.get("/accounts").json()
+    assert all(r["id"] != ada for r in remaining)

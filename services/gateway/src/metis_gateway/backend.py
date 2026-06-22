@@ -415,6 +415,9 @@ class InMemoryIdentityStore:
     async def get_user_by_email(self, email: str) -> User | None:
         return next((u for u in self._users.values() if u.email == email), None)
 
+    async def list_users(self) -> Sequence[User]:
+        return sorted(self._users.values(), key=lambda u: u.created_at)
+
     async def get_workspace(self, workspace_id: WorkspaceId) -> WorkspaceEntity | None:
         return self._workspaces.get(str(workspace_id))
 
@@ -447,6 +450,14 @@ class InMemoryIdentityStore:
         deactivated = user.model_copy(update={"active": False})
         self._users[str(user_id)] = deactivated
         return deactivated
+
+    async def set_weekly_digest_opt_in(self, user_id: UserId, *, enabled: bool) -> User | None:
+        user = self._users.get(str(user_id))
+        if user is None:
+            return None
+        updated = user.model_copy(update={"weekly_digest_opt_in": enabled})
+        self._users[str(user_id)] = updated
+        return updated
 
     async def create_invite(self, invite: Invite) -> Invite:
         return self._invites.setdefault(invite.token, invite)

@@ -98,6 +98,14 @@ class PostgresIdentityStore:
             row = (await session.scalars(stmt)).first()
         return to_model(row, User) if row is not None else None
 
+    async def list_users(self) -> Sequence[User]:
+        """Every user, oldest first — the pre-auth sign-in selector (C2). Active filtering is the
+        caller's concern (the selector only offers active accounts)."""
+        stmt = select(UserRow).order_by(UserRow.created_at.asc())
+        async with unit_of_work(self._sessionmaker) as session:
+            rows = (await session.scalars(stmt)).all()
+        return [to_model(row, User) for row in rows]
+
     async def get_workspace(self, workspace_id: WorkspaceId) -> Workspace | None:
         async with unit_of_work(self._sessionmaker) as session:
             row = await session.get(WorkspaceRow, str(workspace_id))
@@ -165,6 +173,17 @@ class PostgresIdentityStore:
             if row is None:
                 return None
             user = to_model(row, User).model_copy(update={"active": False})
+            row.body = user.model_dump(mode="json")
+        return user
+
+    async def set_weekly_digest_opt_in(self, user_id: UserId, *, enabled: bool) -> User | None:
+        """Toggle the user's weekly-digest preference (A7). Lives in the body, so rewrite it.
+        Returns the updated user, or None if unknown."""
+        async with unit_of_work(self._sessionmaker) as session:
+            row = await session.get(UserRow, str(user_id))
+            if row is None:
+                return None
+            user = to_model(row, User).model_copy(update={"weekly_digest_opt_in": enabled})
             row.body = user.model_dump(mode="json")
         return user
 

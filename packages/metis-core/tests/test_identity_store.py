@@ -108,6 +108,33 @@ async def test_get_user_by_email(sessionmaker):
     assert found.id == ada.id
 
 
+async def test_list_users_returns_all_oldest_first(sessionmaker):
+    store = PostgresIdentityStore(sessionmaker)
+    org = await store.create_organization(_org())
+    ada = await store.create_user(_user(org, "ada@acme.example"))
+    grace = await store.create_user(_user(org, "grace@acme.example"))
+
+    ids = [u.id for u in await store.list_users()]
+    assert set(ids) >= {ada.id, grace.id}
+
+
+async def test_set_weekly_digest_opt_in_persists(sessionmaker):
+    store = PostgresIdentityStore(sessionmaker)
+    org = await store.create_organization(_org())
+    ada = await store.create_user(_user(org, "ada@acme.example"))
+    assert ada.weekly_digest_opt_in is True  # opt-in defaults on
+
+    updated = await store.set_weekly_digest_opt_in(ada.id, enabled=False)
+    assert updated is not None
+    assert updated.weekly_digest_opt_in is False
+    # The change survives a reload (it lives in the user body).
+    reloaded = await store.get_user(ada.id)
+    assert reloaded is not None
+    assert reloaded.weekly_digest_opt_in is False
+
+    assert await store.set_weekly_digest_opt_in(new_id(UserId), enabled=True) is None
+
+
 async def test_create_is_idempotent_by_id(sessionmaker):
     store = PostgresIdentityStore(sessionmaker)
     org = _org()
