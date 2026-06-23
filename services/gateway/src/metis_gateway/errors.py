@@ -7,9 +7,13 @@ lives in the packages, so the gateway's error vocabulary is small and HTTP-shape
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger("metis_gateway.errors")
 
 
 class ApiError(Exception):
@@ -71,4 +75,17 @@ def install_error_handlers(app: FastAPI) -> None:
     async def _validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(
             status_code=422, content=_error_body("invalid_request", str(exc.errors()))
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled_error(request: Request, exc: Exception) -> JSONResponse:
+        # Defense-in-depth: anything that escaped a router without becoming a typed ApiError or a
+        # validation error would otherwise leak as Starlette's opaque plain-text 500. The more
+        # specific handlers above still take precedence (Starlette only routes genuinely unhandled
+        # exceptions here), so this catches the unexpected ones. Log the traceback with the request
+        # method/path for observability; return the same machine-readable envelope every other
+        # failure uses, with a generic message so internals never reach the client.
+        logger.exception("unhandled error on %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=500, content=_error_body("internal_error", "an unexpected error occurred")
         )
