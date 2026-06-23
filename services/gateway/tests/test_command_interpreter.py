@@ -1,10 +1,11 @@
 """interpret_command turns a free-text request into a typed ProposedAction via the model, and falls
-back to a read-only ANSWER when no model is configured."""
+back to a read-only ANSWER when no model is configured or the model call fails."""
 
 from __future__ import annotations
 
 from typing import Any
 
+from metis_core.llm import ModelError
 from metis_gateway.actions import CommandInterpretation, interpret_command
 from metis_protocol import ActionKind, ActionRisk, ActionStatus, Sensitivity, WorkspaceId, new_id
 
@@ -19,6 +20,13 @@ class _FakeCaller:
     async def call_structured(self, **kwargs: Any) -> CommandInterpretation:
         self.calls.append(kwargs)
         return self._reading
+
+
+class _RaisingCaller:
+    """Stands in for a model that refuses or returns malformed structured output."""
+
+    async def call_structured(self, **_kwargs: Any) -> CommandInterpretation:
+        raise ModelError("malformed structured output")
 
 
 async def test_interprets_via_the_model() -> None:
@@ -56,3 +64,19 @@ async def test_falls_back_to_read_only_answer_without_a_model() -> None:
     assert action.kind is ActionKind.ANSWER
     assert action.risk is ActionRisk.READ_ONLY
     assert action.parameters == {"query": "what did we ship?"}
+
+
+async def test_falls_back_to_read_only_answer_on_model_error() -> None:
+    # A model that refuses or emits malformed structured output must not fail the request (#95):
+    # it degrades to the same safe read-only ANSWER as the no-model path.
+    action = await interpret_command(
+        "what did we ship?",
+        workspace_id=_WS,
+        sensitivity=Sensitivity.INTERNAL,
+        caller=_RaisingCaller(),  # type: ignore[arg-type]
+    )
+
+    assert action.kind is ActionKind.ANSWER
+    assert action.risk is ActionRisk.READ_ONLY
+    assert action.parameters == {"query": "what did we ship?"}
+    assert action.status is ActionStatus.PROPOSED

@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 
 from pydantic import Field, JsonValue
 
-from metis_core.llm import ModelCaller
+from metis_core.llm import ModelCaller, ModelError
 from metis_protocol import (
     ActionId,
     ActionKind,
@@ -38,6 +38,16 @@ class CommandInterpretation(VersionedModel):
     parameters: dict[str, JsonValue] = Field(default_factory=dict)
 
 
+def _read_only_answer(command: str) -> CommandInterpretation:
+    """The safe read-only reading used when no model is wired, or the model call fails."""
+    return CommandInterpretation(
+        kind=ActionKind.ANSWER,
+        risk=ActionRisk.READ_ONLY,
+        summary=f"Answer: {command}",
+        parameters={"query": command},
+    )
+
+
 async def interpret_command(
     command: str,
     *,
@@ -46,22 +56,22 @@ async def interpret_command(
     caller: ModelCaller | None,
 ) -> ProposedAction:
     """Interpret a command into a typed ProposedAction — the model when configured, else a safe
-    read-only ANSWER fallback. The result is persisted and shown before any effectful execution."""
+    read-only ANSWER fallback. A model that refuses or returns malformed structured output degrades
+    to the same read-only answer rather than failing the request. The result is persisted and shown
+    before any effectful execution."""
     if caller is None:
-        reading = CommandInterpretation(
-            kind=ActionKind.ANSWER,
-            risk=ActionRisk.READ_ONLY,
-            summary=f"Answer: {command}",
-            parameters={"query": command},
-        )
+        reading = _read_only_answer(command)
     else:
-        reading = await caller.call_structured(
-            task_class=ModelTaskClass.INTERPRET_COMMAND,
-            workspace_id=workspace_id,
-            user_content=command,
-            output_type=CommandInterpretation,
-            sensitivity=sensitivity,
-        )
+        try:
+            reading = await caller.call_structured(
+                task_class=ModelTaskClass.INTERPRET_COMMAND,
+                workspace_id=workspace_id,
+                user_content=command,
+                output_type=CommandInterpretation,
+                sensitivity=sensitivity,
+            )
+        except ModelError:  # model refused/malformed — fall back to a read-only answer
+            reading = _read_only_answer(command)
     return ProposedAction(
         id=new_id(ActionId),
         workspace_id=workspace_id,
