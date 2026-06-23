@@ -1,3 +1,4 @@
+import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useState } from "react";
 
 import {
@@ -160,14 +161,25 @@ export function TelegramLogin() {
             device where you’re already signed in:
           </p>
           {view?.qr_link && (
-            <a
-              className={styles.qrToken}
-              href={view.qr_link}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {view.qr_link}
-            </a>
+            <>
+              <div className={styles.qrCode}>
+                <QRCodeSVG
+                  value={view.qr_link}
+                  size={208}
+                  level="M"
+                  marginSize={2}
+                  title="Telegram login QR code"
+                />
+              </div>
+              <a
+                className={styles.qrToken}
+                href={view.qr_link}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {view.qr_link}
+              </a>
+            </>
           )}
           <p className={styles.loginStatus} role="status">
             Waiting for you to approve the login…

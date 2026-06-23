@@ -310,6 +310,13 @@
   border-radius: var(--radius-md);
   background: var(--color-sunken);
 }
+.qrCode {
+  align-self: center;
+  padding: var(--space-2);
+  background: #fff;
+  border-radius: var(--radius-md);
+  line-height: 0; /* drop the inline-SVG descender gap so the white frame hugs the code */
+}
 .qrToken {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
