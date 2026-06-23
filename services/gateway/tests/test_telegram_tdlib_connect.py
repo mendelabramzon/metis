@@ -11,10 +11,14 @@ from __future__ import annotations
 from collections import deque
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from metis_core.security.crypto import Cryptobox, generate_key
+from metis_gateway.errors import ConflictError
+from metis_gateway.routers.telegram import _drive
 from metis_gateway.telegram_connect import TDLIB_CONNECTOR, TelegramConnectManager
+from metis_ingestion.connectors import ConnectorError
 from metis_ingestion.security.cred_store import EncryptedCredentialStore
 
 
@@ -145,3 +149,36 @@ def test_submit_without_an_active_login_is_404(client: TestClient, op: dict[str,
 def test_connect_requires_a_known_user(client: TestClient, op: dict[str, str]) -> None:
     _install(client, _FakeTdjson())
     assert client.post("/telegram/tdlib/connect", json={}, headers=op).status_code == 401
+
+
+def test_connect_maps_missing_libtdjson_to_409(client: TestClient, op: dict[str, str]) -> None:
+    # libtdjson is only present under the telegram compose profile; loading it (ctypes) raises
+    # OSError when it isn't mounted. That must be a clear 409, not a bare 500 (#96).
+    _user_id, ada = _user(client, op)
+
+    def _no_libtdjson() -> Any:
+        raise OSError("tdjson: cannot open shared object file: No such file or directory")
+
+    client.app.state.backend.telegram_connect = TelegramConnectManager(
+        client_factory=_no_libtdjson,
+        credentials=EncryptedCredentialStore(Cryptobox(generate_key())),
+        api_id=42,
+        api_hash="apihash",
+        database_root="/tmp/metis-tdlib-test",
+        poll_timeout=0.0,
+    )
+    resp = client.post("/telegram/tdlib/connect", json={"use_qr": True}, headers=ada)
+    assert resp.status_code == 409, resp.text
+    assert "libtdjson" in resp.json()["error"]["message"]
+
+
+async def test_drive_maps_tdlib_connector_error_to_409() -> None:
+    # A TDLib runtime/auth failure (e.g. a bad api id/hash) surfaces as ConnectorError; the connect
+    # endpoints turn it into a 409 carrying the reason, not an opaque 500 (#96).
+    def _boom(*_args: object, **_kwargs: object) -> Any:
+        raise ConnectorError("invalid api id/hash")
+
+    with pytest.raises(ConflictError) as excinfo:
+        await _drive(_boom)
+    assert excinfo.value.status_code == 409
+    assert "invalid api id/hash" in excinfo.value.message

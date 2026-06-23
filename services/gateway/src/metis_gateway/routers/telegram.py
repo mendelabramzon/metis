@@ -7,6 +7,7 @@ id — the selection step before ``POST /sources`` with a ``telegram`` config.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
@@ -26,6 +27,7 @@ from metis_gateway.telegram_connect import (
     NoActiveConnectError,
     TelegramConnectManager,
 )
+from metis_ingestion.connectors import ConnectorError
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
 
@@ -70,14 +72,35 @@ def _view(status: ConnectStatus) -> TelegramConnectView:
     return TelegramConnectView(state=status.state.value, qr_link=status.qr_link)
 
 
+_TDLIB_UNAVAILABLE = (
+    "Telegram login is unavailable: the TDLib native library (libtdjson) could not be loaded. "
+    "Enable the 'telegram' compose profile, or set METIS_GATEWAY_TELEGRAM_TDLIB_LIBRARY to the "
+    "path of a libtdjson build."
+)
+
+
+async def _drive(
+    call: Callable[..., ConnectStatus], *args: object, **kwargs: object
+) -> ConnectStatus:
+    """Run a blocking ``TelegramConnectManager`` call off the event loop, mapping its failures to
+    typed API errors so a misconfigured host doesn't return a bare 500: a missing/unloadable
+    libtdjson (``OSError`` from the ctypes load) and a TDLib runtime/auth failure (a bad api
+    id/hash, ``ConnectorError``) both become a clear 409. ``NoActiveConnectError`` is left to
+    propagate — the polling/submit endpoints map it to 404."""
+    try:
+        return await run_in_threadpool(call, *args, **kwargs)
+    except OSError as exc:  # ctypes could not load libtdjson (not installed / wrong path)
+        raise ConflictError(_TDLIB_UNAVAILABLE) from exc
+    except ConnectorError as exc:  # TDLib rejected the login (bad credentials, auth error, ...)
+        raise ConflictError(f"Telegram login failed: {exc}") from exc
+
+
 @router.post("/tdlib/connect", response_model=TelegramConnectView)
 async def start_tdlib_connect(
     body: TelegramConnectStart, manager: ConnectManagerDep, user: CurrentUserDep
 ) -> TelegramConnectView:
     """Begin this user's TDLib login; returns the next step (a QR link, or a code prompt)."""
-    status = await run_in_threadpool(
-        manager.start, str(user.id), use_qr=body.use_qr, phone=body.phone
-    )
+    status = await _drive(manager.start, str(user.id), use_qr=body.use_qr, phone=body.phone)
     return _view(status)
 
 
@@ -87,7 +110,7 @@ async def tdlib_connect_status(
 ) -> TelegramConnectView:
     """Poll the login (e.g. while waiting for the QR to be scanned on the phone)."""
     try:
-        status = await run_in_threadpool(manager.status, str(user.id))
+        status = await _drive(manager.status, str(user.id))
     except NoActiveConnectError as exc:
         raise NotFoundError("no TDLib login in progress") from exc
     return _view(status)
@@ -99,7 +122,7 @@ async def submit_tdlib_code(
 ) -> TelegramConnectView:
     """Submit the login code Telegram delivered to the account."""
     try:
-        status = await run_in_threadpool(manager.submit_code, str(user.id), body.code)
+        status = await _drive(manager.submit_code, str(user.id), body.code)
     except NoActiveConnectError as exc:
         raise NotFoundError("no TDLib login in progress") from exc
     return _view(status)
@@ -111,7 +134,7 @@ async def submit_tdlib_password(
 ) -> TelegramConnectView:
     """Submit the 2FA (cloud) password when the account has two-step verification enabled."""
     try:
-        status = await run_in_threadpool(manager.submit_password, str(user.id), body.password)
+        status = await _drive(manager.submit_password, str(user.id), body.password)
     except NoActiveConnectError as exc:
         raise NotFoundError("no TDLib login in progress") from exc
     return _view(status)
