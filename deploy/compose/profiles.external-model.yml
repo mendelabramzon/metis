@@ -1,0 +1,34 @@
+# External model endpoint: serve chat + embeddings from a URL (your host's Ollama, or any
+# OpenAI-compatible server). Nothing is pulled into Docker, and no model-runtime container runs.
+#
+# Overlay onto the BASE stack — do NOT also pass profiles.local.yml (that starts the in-Docker
+# model-runtime and pins the endpoints to it):
+#
+#   docker compose -f docker-compose.yml -f compose/profiles.external-model.yml up -d --remove-orphans
+#
+# One knob, set in deploy/.env (defaults to the host's Ollama on the standard port):
+#   METIS_MODEL_ENDPOINT=http://host.docker.internal:11434
+#
+# host.docker.internal resolves to the host on Docker Desktop (macOS/Windows). On Linux, add
+#   extra_hosts: ["host.docker.internal:host-gateway"]
+# to each service below (or use the host's LAN IP).
+name: metis
+
+services:
+  gateway:
+    environment:
+      METIS_MODEL_PROFILE: local
+      # Drives BOTH chat (-> {endpoint}/v1/chat/completions) and embeddings (-> {endpoint}/api/embed)
+      # from the env. Embeddings are env-only (ADR 0014), so the operator-config UI does NOT repoint
+      # them — this is the setting that does.
+      METIS_GATEWAY_MODEL_ENDPOINT: ${METIS_MODEL_ENDPOINT:-http://host.docker.internal:11434}
+
+  runtime-worker:
+    environment:
+      METIS_MODEL_PROFILE: local
+      METIS_LOCAL_MODEL_ENDPOINT: ${METIS_MODEL_ENDPOINT:-http://host.docker.internal:11434}/v1
+
+  maintainer-worker:
+    environment:
+      METIS_MODEL_PROFILE: local
+      METIS_LOCAL_MODEL_ENDPOINT: ${METIS_MODEL_ENDPOINT:-http://host.docker.internal:11434}/v1
