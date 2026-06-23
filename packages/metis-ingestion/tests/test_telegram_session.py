@@ -8,6 +8,7 @@ turns a flood wait into a retryable rate-limit error.
 
 from __future__ import annotations
 
+import base64
 from collections import deque
 from typing import Any
 
@@ -59,7 +60,10 @@ def test_phone_code_ready_flow() -> None:
         session.handle(_auth("authorizationStateWaitTdlibParameters")) is AuthState.WAIT_PARAMETERS
     )
     assert fake.sent[-1]["@type"] == "setTdlibParameters"
-    assert fake.sent[-1]["database_encryption_key"] == "sekret-key"
+    # sent base64-encoded (TDLib decodes the `bytes` field from base64)
+    assert fake.sent[-1]["database_encryption_key"] == base64.b64encode(b"sekret-key").decode(
+        "ascii"
+    )
 
     assert session.handle(_auth("authorizationStateWaitPhoneNumber")) is AuthState.WAIT_CODE
     assert fake.sent[-1] == {

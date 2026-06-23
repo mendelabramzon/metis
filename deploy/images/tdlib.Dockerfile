@@ -7,9 +7,20 @@
 #
 # Built on the same Debian (bookworm) base as the app images (python:3.12-slim) so the .so's
 # OpenSSL/zlib ABI matches the runtime that loads it. Bump TDLIB_REF to move TDLib versions.
+#
+# NOTE: this is a commit SHA, not a tag, on purpose. v1.8.0 (Jan 2022) is TDLib's newest *tag*, but
+# it predates the flattened `setTdlibParameters` the connector uses (TelegramSession sends the api
+# id/hash + database_encryption_key directly, with no separate authorizationStateWaitEncryptionKey
+# step). Building v1.8.0 makes login hang at "connecting" — TDLib rejects the flat params with
+# "Parameters aren't specified". Pin a post-flattening commit so the native ABI matches the code.
 FROM python:3.12-slim AS build
 
-ARG TDLIB_REF=v1.8.0
+ARG TDLIB_REF=a17f87c4cff7b90b278d12b91ba0614383aaee82
+
+# Compile parallelism. TDLib's generated TL sources are memory-hungry (~2GB per g++ at peak), so
+# the default -j$(nproc) OOMs on a typical 8GB Docker VM ("cannot allocate memory"). Cap it low;
+# raise BUILD_JOBS if your builder has plenty of RAM (roughly 2GB per job).
+ARG BUILD_JOBS=2
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git cmake g++ make zlib1g-dev libssl-dev gperf ca-certificates \
@@ -21,7 +32,7 @@ RUN git clone https://github.com/tdlib/td.git \
     && git checkout "${TDLIB_REF}" \
     && mkdir build && cd build \
     && cmake -DCMAKE_BUILD_TYPE=Release .. \
-    && cmake --build . --target tdjson -j"$(nproc)" \
+    && cmake --build . --target tdjson -j"${BUILD_JOBS}" \
     && mkdir -p /opt/td/lib \
     && find . -name 'libtdjson.so*' -exec cp -a {} /opt/td/lib/ \;
 

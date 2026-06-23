@@ -24,6 +24,7 @@ takes an injected HTTP client):
 
 from __future__ import annotations
 
+import base64
 import itertools
 import re
 from collections.abc import Mapping, Sequence
@@ -93,7 +94,12 @@ class TdlibParameters:
             "@type": "setTdlibParameters",
             "use_test_dc": self.use_test_dc,
             "database_directory": self.database_directory,
-            "database_encryption_key": self.database_encryption_key,
+            # TDLib types database_encryption_key as `bytes`, which its JSON interface decodes from
+            # base64. Encode the key string here so an arbitrary secret (e.g. secrets.token_urlsafe,
+            # which is unpadded base64url) is accepted, not rejected as "Wrong padding length".
+            "database_encryption_key": base64.b64encode(
+                self.database_encryption_key.encode("utf-8")
+            ).decode("ascii"),
             "api_id": self.api_id,
             "api_hash": self.api_hash,
             "system_language_code": self.system_language_code,
