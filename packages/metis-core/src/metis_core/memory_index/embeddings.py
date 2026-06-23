@@ -179,6 +179,44 @@ class StubEmbedder:
         return [self._embed_one(text) for text in texts]
 
 
+class EmbeddingError(RuntimeError):
+    """An embedding endpoint returned an error or a response without the expected vectors.
+
+    Raised instead of a bare ``KeyError``/``JSONDecodeError`` so a misconfigured endpoint (model
+    not pulled, wrong URL, server error) surfaces the endpoint's *own* message — an actionable
+    "model not found" rather than a deep stack trace.
+    """
+
+
+def _embedding_response(response: Any, *, name: str, url: str) -> dict[str, Any]:
+    """Validate an embedding HTTP response into a JSON object, or raise :class:`EmbeddingError`.
+
+    Surfaces a non-2xx status, a body's ``error`` field (e.g. Ollama's "model not found", which it
+    returns with a 404), and a non-JSON / non-object body — each with the endpoint and model named.
+    Tolerates a fake response without ``status_code`` (defaults to 200) so tests need no server.
+    """
+    status = int(getattr(response, "status_code", 200) or 200)
+    try:
+        payload = response.json()
+    except Exception as exc:  # non-JSON body: an HTML error page, a proxy response, empty, ...
+        raise EmbeddingError(
+            f"{name} at {url} returned a non-JSON response (HTTP {status})"
+        ) from exc
+    if isinstance(payload, dict) and status < 400 and not payload.get("error"):
+        return payload
+    detail = payload.get("error") if isinstance(payload, dict) else payload
+    raise EmbeddingError(f"{name} at {url} could not embed (HTTP {status}): {detail}")
+
+
+def _check_dims(vectors: Sequence[Sequence[float]], *, name: str, dim: int) -> None:
+    for vector in vectors:
+        if len(vector) != dim:
+            raise ValueError(
+                f"{name} returned dim {len(vector)}, expected {dim} "
+                f"(embedding dimension is locked; see ADR 0014)"
+            )
+
+
 class OllamaEmbedder:
     """A local Ollama embedding endpoint (``POST /api/embed``), behind :class:`Embedder`.
 
@@ -221,17 +259,13 @@ class OllamaEmbedder:
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
-        response = await self._client.post(
-            f"{self._base_url}/api/embed",
-            json={"model": self._model, "input": list(texts)},
-        )
-        vectors = response.json()["embeddings"]
-        for vector in vectors:
-            if len(vector) != self._dim:
-                raise ValueError(
-                    f"{self.name} returned dim {len(vector)}, expected {self._dim} "
-                    f"(embedding dimension is locked; see ADR 0014)"
-                )
+        url = f"{self._base_url}/api/embed"
+        response = await self._client.post(url, json={"model": self._model, "input": list(texts)})
+        payload = _embedding_response(response, name=self.name, url=url)
+        vectors = payload.get("embeddings")
+        if not isinstance(vectors, list):
+            raise EmbeddingError(f"{self.name} at {url} returned no 'embeddings' array: {payload}")
+        _check_dims(vectors, name=self.name, dim=self._dim)
         return [list(vector) for vector in vectors]
 
 
@@ -283,18 +317,19 @@ class OpenAICompatEmbedder:
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
-        response = await self._client.post(
-            f"{self._base_url}/embeddings",
-            json={"model": self._model, "input": list(texts)},
-        )
-        data = response.json()["data"]
-        vectors = [item["embedding"] for item in data]
-        for vector in vectors:
-            if len(vector) != self._dim:
-                raise ValueError(
-                    f"{self.name} returned dim {len(vector)}, expected {self._dim} "
-                    f"(embedding dimension is locked; see ADR 0014)"
-                )
+        url = f"{self._base_url}/embeddings"
+        response = await self._client.post(url, json={"model": self._model, "input": list(texts)})
+        payload = _embedding_response(response, name=self.name, url=url)
+        data = payload.get("data")
+        if not isinstance(data, list):
+            raise EmbeddingError(f"{self.name} at {url} returned no 'data' array: {payload}")
+        try:
+            vectors = [item["embedding"] for item in data]
+        except (KeyError, TypeError) as exc:
+            raise EmbeddingError(
+                f"{self.name} at {url} returned malformed 'data': {payload}"
+            ) from exc
+        _check_dims(vectors, name=self.name, dim=self._dim)
         return [list(vector) for vector in vectors]
 
 
